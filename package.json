@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "data:prepare:2018_2025": "node scripts/prepare_data_2018_2025.mjs",
+    "data:generate:ci": "node scripts/generate_ci_data.mjs",
     "smoke:docker": "node scripts/smoke.mjs",
     "qa:docker": "node scripts/qa.mjs",
     "docker:up": "docker compose up -d app",

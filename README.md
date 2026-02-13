@@ -111,6 +111,7 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 | `npm run start` | Start the production server |
 | `npm run lint` | Run ESLint for code quality checks |
 | `npm run data:prepare:2018_2025` | Generate prepared runtime CSVs for 2018-2025 into `public/data/` |
+| `npm run data:generate:ci` | Generate synthetic runtime CSVs for CI integration tests |
 | `npm run qa:docker` | Run deep QA checks against `SMOKE_BASE_URL` (default: `http://localhost:3010`) |
 | `npm run docker:up` | Start app container on `http://localhost:3010` |
 | `npm run docker:logs` | Tail app container logs (dev profile) |
@@ -121,6 +122,17 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 | `npm run docker:smoke:prod` | Run smoke checks against production container |
 | `npm run docker:qa:prod` | Run deep QA checks against production container |
 | `npm run docker:down` | Stop/remove docker services |
+
+## CI Workflow
+
+GitHub Actions workflow: `.github/workflows/qa-integration.yml`
+
+It runs:
+1. Static checks (`lint`, `tsc --noEmit`, `build`)
+2. Docker dev integration (`smoke` + `qa`)
+3. Docker prod integration (`smoke-prod` + `qa-prod`)
+
+For CI only, synthetic CSV data is generated via `npm run data:generate:ci` so large local datasets are not required in the repository.
 
 ## Docker Workflow (Recommended for stable smoke testing)
 
