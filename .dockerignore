@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+dev_smoke*.log
+README.md
+docs

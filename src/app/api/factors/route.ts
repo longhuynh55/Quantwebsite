@@ -1,0 +1,190 @@
+import { NextResponse } from "next/server";
+import {
+  getDataQualityReport,
+  hasSufficientDataQuality,
+  loadIndexData,
+  loadOHLCVData,
+  loadStockMetadata,
+} from "@/lib/data";
+import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } from "@/lib/dataPolicy";
+import { calculateFactorExposures, rankByFactor, FactorExposure } from "@/lib/quant/factors";
+import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+
+const VALID_FACTORS = ["momentum", "value", "volatility", "size"] as const;
+type ValidFactor = typeof VALID_FACTORS[number];
+
+const DEFAULT_FACTOR: ValidFactor = "momentum";
+const MIN_LIMIT = 1;
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 50;
+const RATE_LIMIT_MAX = 30; // 30 requests per minute (computationally expensive)
+const MIN_FACTOR_DATA_POINTS = 253; // Needed for 12-1 momentum (t-252 vs t-21)
+const MIN_DATA_QUALITY_RATIO = 0.95;
+const PREFERRED_BENCHMARKS = [DEFAULT_BENCHMARK_SYMBOL, "VN100", "VN30"];
+
+function getDataQualityError(dataset: "stockMetadata" | "ohlcv" | "index"): string | null {
+  if (hasSufficientDataQuality(dataset, MIN_DATA_QUALITY_RATIO)) {
+    return null;
+  }
+
+  const report = getDataQualityReport(dataset);
+  if (!report) {
+    return `Data quality check failed for ${dataset}: report unavailable`;
+  }
+
+  return (
+    `Data quality check failed for ${dataset}: accepted ${report.acceptedRows}/${report.totalRows} ` +
+    `(${(report.acceptedRatio * 100).toFixed(2)}%), required >= ${(MIN_DATA_QUALITY_RATIO * 100).toFixed(0)}%`
+  );
+}
+
+export async function GET(request: Request) {
+  // Rate limiting check
+  const clientId = getClientIdentifier(request);
+  const rateLimit = checkRateLimit(createRateLimitKey("api/factors", clientId), RATE_LIMIT_MAX, 60000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const factor = searchParams.get("factor")?.trim().toLowerCase() || DEFAULT_FACTOR;
+  const limitStr = searchParams.get("limit") || String(DEFAULT_LIMIT);
+
+  // Validate factor
+  if (!VALID_FACTORS.includes(factor as ValidFactor)) {
+    return NextResponse.json(
+      { error: `Invalid factor. Valid options: ${VALID_FACTORS.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  // Validate limit
+  const limit = parseInt(limitStr);
+  if (isNaN(limit) || limit < MIN_LIMIT || limit > MAX_LIMIT) {
+    return NextResponse.json(
+      { error: `Limit must be between ${MIN_LIMIT} and ${MAX_LIMIT}` },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const [metadata, ohlcvData, indexData] = await Promise.all([
+      loadStockMetadata(),
+      loadOHLCVData(),
+      loadIndexData(),
+    ]);
+
+    const metadataQualityError = getDataQualityError("stockMetadata");
+    if (metadataQualityError) {
+      return NextResponse.json({ error: metadataQualityError }, { status: 503 });
+    }
+
+    const ohlcvQualityError = getDataQualityError("ohlcv");
+    if (ohlcvQualityError) {
+      return NextResponse.json({ error: ohlcvQualityError }, { status: 503 });
+    }
+
+    const indexQualityError = getDataQualityError("index");
+    if (indexQualityError) {
+      return NextResponse.json({ error: indexQualityError }, { status: 503 });
+    }
+
+    if (metadata.length === 0) {
+      return NextResponse.json({ error: "No stock metadata available" }, { status: 500 });
+    }
+
+    const benchmarkSymbol =
+      PREFERRED_BENCHMARKS.find((symbol) => indexData.some((item) => item.symbol === symbol)) ??
+      indexData[0]?.symbol;
+    if (!benchmarkSymbol) {
+      return NextResponse.json({ error: "No benchmark data available for recency checks" }, { status: 503 });
+    }
+
+    const benchmarkSeries = indexData
+      .filter((item) => item.symbol === benchmarkSymbol)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    if (benchmarkSeries.length === 0) {
+      return NextResponse.json({ error: "Benchmark series is empty" }, { status: 503 });
+    }
+
+    const benchmarkDateIndex = new Map<string, number>();
+    for (let i = 0; i < benchmarkSeries.length; i++) {
+      benchmarkDateIndex.set(toDateKey(benchmarkSeries[i].date), i);
+    }
+    const asOfIndex = benchmarkSeries.length - 1;
+
+    const exposures: FactorExposure[] = [];
+    const sortedUniverse = [...metadata].sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+    let evaluated = 0;
+    let excludedInactiveCount = 0;
+    let excludedInsufficientDataCount = 0;
+    let excludedNotInBenchmarkCalendarCount = 0;
+    let excludedStaleCount = 0;
+
+    for (const stock of sortedUniverse) {
+      if (evaluated >= limit) break;
+
+      if (stock.status.toUpperCase() !== "ACTIVE") {
+        excludedInactiveCount += 1;
+        continue;
+      }
+
+      const data = ohlcvData.get(stock.symbol);
+      if (!data || data.length < MIN_FACTOR_DATA_POINTS) {
+        excludedInsufficientDataCount += 1;
+        continue;
+      }
+
+      const lastDateKey = toDateKey(data[data.length - 1].date);
+      const lastBenchmarkIndex = benchmarkDateIndex.get(lastDateKey);
+      if (lastBenchmarkIndex === undefined) {
+        excludedNotInBenchmarkCalendarCount += 1;
+        continue;
+      }
+
+      const recencyGap = asOfIndex - lastBenchmarkIndex;
+      if (recencyGap > MAX_RECENCY_GAP_TRADING_DAYS) {
+        excludedStaleCount += 1;
+        continue;
+      }
+
+      exposures.push(calculateFactorExposures(stock.symbol, data));
+      evaluated += 1;
+    }
+
+    if (exposures.length === 0) {
+      return NextResponse.json(
+        { error: "No valid factor exposures could be calculated. Try increasing the limit or check data availability." },
+        { status: 404 }
+      );
+    }
+
+    const sorted = rankByFactor(exposures, factor as keyof Omit<FactorExposure, "symbol" | "overall">);
+    const topCount = Math.min(10, Math.floor(sorted.length / 2));
+    const bottomCount = Math.min(10, Math.floor(sorted.length / 2));
+
+    const topStocks = topCount > 0 ? sorted.slice(0, topCount) : [];
+    const bottomStocks = bottomCount > 0 ? sorted.slice(-bottomCount).reverse() : [];
+
+    return NextResponse.json({
+      factor,
+      topStocks,
+      bottomStocks,
+      total: exposures.length,
+      benchmark: benchmarkSymbol,
+      asOfDate: benchmarkSeries[asOfIndex].date,
+      excludedInactiveCount,
+      excludedInsufficientDataCount,
+      excludedNotInBenchmarkCalendarCount,
+      excludedStaleCount,
+    });
+  } catch (error) {
+    console.error("Factors API Error:", error);
+    return NextResponse.json({ error: "Failed to calculate factors" }, { status: 500 });
+  }
+}

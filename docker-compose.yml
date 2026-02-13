@@ -1,0 +1,106 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: sh -c "if [ ! -d node_modules/next ]; then npm ci --legacy-peer-deps; fi && npm run dev -- -p 3000"
+    ports:
+      - "3010:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./:/app
+      - node_modules_cache:/app/node_modules
+      - ./public/data:/app/public/data:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/stocks?limit=1').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  smoke:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    command: ["node", "scripts/smoke.mjs"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      SMOKE_BASE_URL: http://app:3000
+    volumes:
+      - ./:/app:ro
+
+  qa:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    command: ["node", "scripts/qa.mjs"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      SMOKE_BASE_URL: http://app:3000
+    volumes:
+      - ./:/app:ro
+
+  app-prod:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3011:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./public/data:/app/public/data:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/stocks?limit=1').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  smoke-prod:
+    profiles: ["prod"]
+    image: node:20-bookworm-slim
+    working_dir: /app
+    command: ["node", "scripts/smoke.mjs"]
+    depends_on:
+      app-prod:
+        condition: service_healthy
+    environment:
+      SMOKE_BASE_URL: http://app-prod:3000
+    volumes:
+      - ./:/app:ro
+
+  qa-prod:
+    profiles: ["prod"]
+    image: node:20-bookworm-slim
+    working_dir: /app
+    command: ["node", "scripts/qa.mjs"]
+    depends_on:
+      app-prod:
+        condition: service_healthy
+    environment:
+      SMOKE_BASE_URL: http://app-prod:3000
+    volumes:
+      - ./:/app:ro
+
+volumes:
+  node_modules_cache:
