@@ -27,6 +27,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { AiAssistantTrigger } from "@/components/assistant";
 
 interface NavItem {
   href: string;
@@ -96,7 +97,7 @@ export function Navbar() {
     items.some((item) => pathname === item.href);
 
   return (
-    <nav className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shadow-sm">
+    <nav className="bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/80 supports-[backdrop-filter]:backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex justify-between h-16">
           {/* Logo */}
@@ -122,7 +123,7 @@ export function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <button
                     className={cn(
-                      "flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      "flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200",
                       isActiveInGroup(group.items)
                         ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                         : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
@@ -160,7 +161,7 @@ export function Navbar() {
             <Link
               href="/learn"
               className={cn(
-                "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200",
                 pathname === "/learn"
                   ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
@@ -206,6 +207,9 @@ export function Navbar() {
               <Moon className="w-5 h-5 dark:hidden" />
             </Button>
 
+            {/* AI Assistant Trigger */}
+            <AiAssistantTrigger />
+
             <Link href="/screener">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/25">
                 Get Started
@@ -239,7 +243,7 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md">
+        <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:dark:bg-gray-900/85 supports-[backdrop-filter]:backdrop-blur-sm">
           <div className="px-3 py-4">
             {navGroups.map((group) => (
               <div key={group.label} className="mb-4">
@@ -254,7 +258,7 @@ export function Navbar() {
                       key={item.href}
                       href={item.href}
                       className={cn(
-                        "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-all duration-200",
+                        "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors duration-200",
                         isActive
                           ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                           : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -282,7 +286,7 @@ export function Navbar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-all duration-200",
+                      "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors duration-200",
                       isActive
                         ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                         : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"

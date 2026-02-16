@@ -14,9 +14,11 @@ import {
   SkeletonTable,
   NoResultsState,
   ErrorState,
+  PageTransition,
 } from "@/components/ui";
 import { showSuccess, showError } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
+import { useDebounce } from "@/lib/hooks";
 import { Search, Filter, ArrowUpDown, RefreshCw, Download, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface Stock {
@@ -63,6 +65,9 @@ export default function ScreenerPage() {
   const [daysMin, setDaysMin] = useState("");
   const [daysMax, setDaysMax] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
+
+  // Debounce search for performance
+  const debouncedSearch = useDebounce(search, 300);
 
   // Sort and pagination
   const [sortBy, setSortBy] = useState<keyof Stock>("symbol");
@@ -113,7 +118,7 @@ export default function ScreenerPage() {
 
   const filteredStocks = useMemo(() => {
     let result = stocks.filter((s) =>
-      s.symbol.toLowerCase().includes(search.toLowerCase())
+      s.symbol.toLowerCase().includes(debouncedSearch.toLowerCase())
     );
 
     // Status filter
@@ -171,7 +176,7 @@ export default function ScreenerPage() {
         ? (aVal as number) - (bVal as number)
         : (bVal as number) - (aVal as number);
     });
-  }, [stocks, search, statusFilter, phaseFilter, volumeMin, volumeMax, daysMin, daysMax, industryFilter, sortBy, sortDir]);
+  }, [stocks, debouncedSearch, statusFilter, phaseFilter, volumeMin, volumeMax, daysMin, daysMax, industryFilter, sortBy, sortDir]);
 
   // Pagination
   const paginatedStocks = useMemo(() => {
@@ -289,17 +294,18 @@ export default function ScreenerPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Stock Screener
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Filter and sort HOSE stocks by various criteria
-            </p>
+    <PageTransition variant="slideUp">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                Stock Screener
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Filter and sort HOSE stocks by various criteria
+              </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -657,6 +663,7 @@ export default function ScreenerPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PageTransition>
   );
 }

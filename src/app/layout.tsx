@@ -4,6 +4,8 @@ import "./globals.css";
 import { Navbar, Footer } from "@/components/layout";
 import { Toaster } from "@/components/ui/toast";
 import { CommandPalette } from "@/components/CommandPalette";
+import { SkipLink, MainContent } from "@/components/ui";
+import { AiAssistantPanel } from "@/components/assistant";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -50,13 +52,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="scroll-smooth">
+    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
       <body className={`${inter.className} antialiased min-h-screen flex flex-col bg-white text-gray-900`}>
+        <SkipLink />
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <MainContent className="flex-1">{children}</MainContent>
         <Footer />
         <Toaster />
         <CommandPalette />
+        <AiAssistantPanel />
       </body>
     </html>
   );
