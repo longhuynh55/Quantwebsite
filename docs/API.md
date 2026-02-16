@@ -15,8 +15,9 @@ This document provides comprehensive documentation for all QuantVN API endpoints
 5. [Risk Analysis API](#risk-analysis-api)
 6. [Factor Analysis API](#factor-analysis-api)
 7. [Market Overview API](#market-overview-api)
-8. [Error Handling](#error-handling)
-9. [Rate Limiting](#rate-limiting)
+8. [Data Health API](#data-health-api)
+9. [Error Handling](#error-handling)
+10. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -244,6 +245,12 @@ POST /api/backtesting
 | `symbol`   | string | Yes      | -         | Stock symbol (1-10 uppercase letters)                 |
 | `strategy` | string | Yes      | -         | Trading strategy type                                 |
 | `capital`  | number | No       | 100000    | Initial capital (1 - 1e12)                            |
+| `executionModel` | string | No | `next_open` | `next_open` or `same_close`                         |
+| `feeBps` | number | No | `15` | Fee in basis points per side                             |
+| `sellTaxBps` | number | No | `10` | Sell tax in basis points                                 |
+| `slippageBps` | number | No | `5` | Slippage in basis points per side                        |
+| `lotSize` | number | No | `1` | Share lot size used by all-in sizing                     |
+| `shortPeriod` / `longPeriod` / etc. | number | No | strategy defaults | Optional strategy params via query |
 
 #### POST Body
 
@@ -252,7 +259,12 @@ interface BacktestRequest {
   symbol: string;      // Required: Stock symbol (1-10 uppercase letters)
   strategy: string;    // Required: Trading strategy type
   capital?: number;    // Optional: Initial capital (default: 100000)
-  params?: Record<string, number | string | boolean>; // Optional: Strategy-specific parameters
+  params?: Record<string, number>; // Optional: Strategy-specific parameters
+  executionModel?: "next_open" | "same_close";
+  feeBps?: number;
+  sellTaxBps?: number;
+  slippageBps?: number;
+  lotSize?: number;
 }
 ```
 
@@ -273,26 +285,60 @@ interface BacktestResponse {
   symbol: string;
   strategy: string;
   initialCapital: number;
-  finalValue: number;
-  totalReturn: number;
-  annualizedReturn: number;
-  maxDrawdown: number;
-  sharpeRatio: number;
+  metrics: {
+    totalReturn: number; // alias of netReturn for backward compatibility
+    netReturn: number;
+    grossReturn: number;
+    cagr: number;
+    sharpeRatio: number;
+    sortinoRatio: number;
+    maxDrawdown: number;
+    maxDrawdownDuration: number;
+    winRate: number;
+    profitFactor: number;
+    totalTrades: number;
+    avgReturn: number;
+    avgWin: number;
+    avgLoss: number;
+    bestTrade: number;
+    worstTrade: number;
+    turnover: number;
+    exposureRatio: number;
+  };
+  configApplied: {
+    executionModel: "next_open" | "same_close";
+    costs: { feeBps: number; sellTaxBps: number; slippageBps: number };
+    positionSizing: { mode: "all_in"; lotSize: number };
+  };
+  diagnostics: {
+    inputRows: number;
+    usableRows: number;
+    droppedRows: number;
+    coverageRatio: number;
+    largestGapDays: number;
+    warnings: string[];
+  };
   trades: Trade[];
   equityCurve: EquityPoint[];
 }
 
 interface Trade {
-  date: Date;
-  type: 'BUY' | 'SELL';
-  price: number;
+  entryDate: Date;
+  exitDate: Date;
+  entryPrice: number;
+  exitPrice: number;
   shares: number;
-  value: number;
+  pnl: number;
+  pnlPercent: number;
+  grossPnl: number;
+  totalCosts: number;
+  turnover: number;
+  forcedExit?: boolean;
 }
 
 interface EquityPoint {
   date: Date;
-  value: number;
+  equity: number;
 }
 ```
 
@@ -311,6 +357,10 @@ curl -X POST "https://quantvn.example.com/api/backtesting" \
     "symbol": "VNM",
     "strategy": "sma_crossover",
     "capital": 500000,
+    "executionModel": "next_open",
+    "feeBps": 15,
+    "sellTaxBps": 10,
+    "slippageBps": 5,
     "params": {
       "shortPeriod": 10,
       "longPeriod": 30
@@ -325,24 +375,48 @@ curl -X POST "https://quantvn.example.com/api/backtesting" \
   "symbol": "VNM",
   "strategy": "SMA Crossover",
   "initialCapital": 500000,
-  "finalValue": 625000,
-  "totalReturn": 0.25,
-  "annualizedReturn": 0.18,
-  "maxDrawdown": -0.12,
-  "sharpeRatio": 1.35,
+  "metrics": {
+    "totalReturn": 0.21,
+    "netReturn": 0.21,
+    "grossReturn": 0.24,
+    "cagr": 0.16,
+    "sharpeRatio": 1.28,
+    "maxDrawdown": 0.13,
+    "totalTrades": 22,
+    "turnover": 3.45,
+    "exposureRatio": 0.64
+  },
+  "configApplied": {
+    "executionModel": "next_open",
+    "costs": { "feeBps": 15, "sellTaxBps": 10, "slippageBps": 5 },
+    "positionSizing": { "mode": "all_in", "lotSize": 1 }
+  },
+  "diagnostics": {
+    "inputRows": 1800,
+    "usableRows": 1798,
+    "droppedRows": 2,
+    "coverageRatio": 0.69,
+    "largestGapDays": 6,
+    "warnings": []
+  },
   "trades": [
     {
-      "date": "2024-01-20T00:00:00.000Z",
-      "type": "BUY",
-      "price": 85000,
+      "entryDate": "2024-01-20T00:00:00.000Z",
+      "exitDate": "2024-02-15T00:00:00.000Z",
+      "entryPrice": 85000,
+      "exitPrice": 91000,
       "shares": 50,
-      "value": 4250000
+      "pnl": 263000,
+      "pnlPercent": 0.0619,
+      "grossPnl": 300000,
+      "totalCosts": 37000,
+      "turnover": 8800000
     }
   ],
   "equityCurve": [
     {
       "date": "2024-01-15T00:00:00.000Z",
-      "value": 500000
+      "equity": 500000
     }
   ]
 }
@@ -356,8 +430,11 @@ curl -X POST "https://quantvn.example.com/api/backtesting" \
 | 400         | `Strategy is required`                                     | Missing strategy parameter            |
 | 400         | `Invalid symbol format...`                                 | Symbol format validation failed       |
 | 400         | `Invalid strategy. Valid options: ...`                     | Invalid strategy type                 |
+| 400         | `Invalid strategy parameters: ...`                         | Strategy parameter validation failed  |
+| 400         | `Invalid backtest configuration: ...`                      | Execution/cost config validation failed |
 | 400         | `Capital must be between 1 and 1e+12`                      | Capital out of valid range            |
 | 400         | `Insufficient data for backtesting (minimum 30 data points)`| Not enough historical data           |
+| 400         | `Insufficient usable data for backtesting after cleaning...`| Too many invalid/duplicate rows      |
 | 400         | `Invalid JSON body`                                        | Malformed JSON in POST body           |
 | 404         | `Symbol not found`                                         | Requested symbol does not exist       |
 | 415         | `Content-Type must be application/json`                    | Missing/invalid Content-Type header   |
@@ -778,6 +855,116 @@ curl "https://quantvn.example.com/api/market-overview"
 
 ---
 
+## Data Health API
+
+Get runtime data-readiness diagnostics for backend selection, manifest integrity, dataset quality, and fundamentals availability.
+
+### Endpoint
+
+```
+GET /api/health/data
+```
+
+### Request Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `probe` | boolean | No | `false` | Lightweight readiness mode (used by Docker healthcheck). |
+| `refresh` | boolean | No | `false` | Clears data/fundamentals caches before evaluating health. |
+| `includeFundamentals` | boolean | No | `true` | Include fundamentals readiness checks (`false` for faster probe). |
+
+### Response Modes
+
+`probe=true` returns fast checks only:
+
+```typescript
+interface DataHealthProbeResponse {
+  ok: boolean;
+  mode: "probe";
+  timestamp: string;
+  durationMs: number;
+  backend: {
+    ok: true;
+    requested: "auto" | "csv" | "duckdb";
+    active: "csv" | "duckdb";
+    reason: string;
+    dataDir: string;
+    duckdbPath: string;
+  };
+  manifest: { available: boolean; schemaVersion?: number; generatedAt?: string | null; datasets?: unknown };
+  checks: Array<{ name: string; ok: boolean; detail: string | null }>;
+}
+```
+
+`probe=false` returns full dataset/fundamentals checks:
+
+```typescript
+interface DataHealthFullResponse {
+  ok: boolean;
+  mode: "full";
+  timestamp: string;
+  durationMs: number;
+  backend: {
+    ok: true;
+    requested: "auto" | "csv" | "duckdb";
+    active: "csv" | "duckdb";
+    reason: string;
+    dataDir: string;
+    duckdbPath: string;
+  };
+  manifest: { available: boolean; schemaVersion?: number; generatedAt?: string | null; datasets?: unknown };
+  datasets: {
+    stockMetadata: DatasetHealth;
+    ohlcv: DatasetHealth;
+    index: DatasetHealth;
+  };
+  fundamentals: {
+    checked: boolean;
+    ok: boolean;
+    sourceFiles: Record<string, string> | null;
+    error: string | null;
+  };
+}
+
+interface DatasetHealth {
+  ok: boolean;
+  loadedRows: number;
+  totalRows: number;
+  acceptedRows: number;
+  acceptedRatio: number;
+  parseErrorCount: number;
+  rejectionReasons: Record<string, number>;
+  generatedAt: string | null;
+}
+```
+
+### Example Requests
+
+```bash
+# Full health check
+curl "https://quantvn.example.com/api/health/data"
+
+# Fast probe (recommended for liveness/readiness)
+curl "https://quantvn.example.com/api/health/data?probe=true&includeFundamentals=false"
+
+# Force cache refresh before check
+curl "https://quantvn.example.com/api/health/data?refresh=true"
+```
+
+### Error Codes
+
+| Status Code | Message | Description |
+|-------------|---------|-------------|
+| 200 | `ok=true` | Health checks passed |
+| 503 | `ok=false` | Backend/data/manifest/fundamentals checks failed |
+
+### Operational Notes
+
+- Docker `app` / `app-prod` healthcheck uses: `/api/health/data?probe=true&includeFundamentals=false`.
+- Prefer `probe=true` for high-frequency checks, and `probe=false` for deep diagnostics.
+
+---
+
 ## Error Handling
 
 All API endpoints follow a consistent error response format:
@@ -822,6 +1009,7 @@ All API endpoints implement rate limiting to ensure fair usage and system stabil
 | `/api/risk`           | 60 requests/minute      | Moderate computation               |
 | `/api/factors`        | 30 requests/minute      | Computationally expensive          |
 | `/api/market-overview`| 100 requests/minute     | Standard data retrieval            |
+| `/api/health/data`    | No explicit limit       | Internal readiness/diagnostic use  |
 
 ### Rate Limit Headers
 

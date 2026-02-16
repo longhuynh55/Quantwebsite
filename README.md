@@ -16,7 +16,10 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
   - RSI Mean Reversion
   - Bollinger Band Breakout
   - Momentum Strategy
-- **Comprehensive Metrics** - Total return, CAGR, Sharpe ratio, Sortino ratio, max drawdown, win rate, profit factor
+- **Realistic Execution Model** - Default `signal t -> fill t+1 open` to reduce look-ahead bias, with optional `same_close` mode
+- **Cost Modeling** - Configurable fee, sell tax, slippage, and lot size for more realistic net performance
+- **Comprehensive Metrics** - Net/Gross return, CAGR, Sharpe ratio, Sortino ratio, max drawdown, win rate, profit factor, turnover, exposure
+- **Data Diagnostics** - Coverage ratio, largest timeline gap, dropped rows, and warnings when symbol history is sparse
 - **Visual Results** - Equity curves and trade history visualization
 
 ### Portfolio Optimization
@@ -93,6 +96,7 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
      ```bash
      npm run data:prepare:2018_2025
      ```
+   - This command also writes `public/data/data_manifest_2018_2025.json` (and `data_manifest.json`) for runtime integrity checks.
 
 4. **Start the development server**
    ```bash
@@ -110,16 +114,23 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 | `npm run build` | Build the application for production |
 | `npm run start` | Start the production server |
 | `npm run lint` | Run ESLint for code quality checks |
-| `npm run data:prepare:2018_2025` | Generate prepared runtime CSVs for 2018-2025 into `public/data/` |
+| `npm run eval:assistant` | Evaluate assistant hallucination risk on backtesting responses |
+| `npm run eval:assistant:full` | Run comprehensive assistant evaluation (full-data scan + grounding + numeric fidelity) |
+| `npm run data:prepare:2018_2025` | Generate prepared runtime CSVs + manifest for 2018-2025 into `public/data/` |
+| `npm run data:export:duckdb` | Export runtime CSVs in `public/data/` to `public/data/quant_data.duckdb` (Node `duckdb` binding or Docker fallback) |
 | `npm run data:generate:ci` | Generate synthetic runtime CSVs for CI integration tests |
 | `npm run qa:docker` | Run deep QA checks against `SMOKE_BASE_URL` (default: `http://localhost:3010`) |
 | `npm run docker:up` | Start app container on `http://localhost:3010` |
 | `npm run docker:logs` | Tail app container logs (dev profile) |
 | `npm run docker:smoke` | Run smoke checks from isolated container |
+| `npm run docker:eval:assistant` | Run assistant hallucination eval from isolated container (dev profile) |
+| `npm run docker:eval:assistant:full` | Run comprehensive assistant evaluation from isolated container (dev profile) |
 | `npm run docker:qa` | Run deep QA checks from isolated container (dev profile) |
 | `npm run docker:up:prod` | Build/start production container on `http://localhost:3011` |
 | `npm run docker:logs:prod` | Tail production container logs |
 | `npm run docker:smoke:prod` | Run smoke checks against production container |
+| `npm run docker:eval:assistant:prod` | Run assistant hallucination eval against production container |
+| `npm run docker:eval:assistant:full:prod` | Run comprehensive assistant evaluation against production container |
 | `npm run docker:qa:prod` | Run deep QA checks against production container |
 | `npm run docker:down` | Stop/remove docker services |
 
@@ -129,10 +140,41 @@ GitHub Actions workflow: `.github/workflows/qa-integration.yml`
 
 It runs:
 1. Static checks (`lint`, `tsc --noEmit`, `build`)
-2. Docker dev integration (`smoke` + `qa`)
-3. Docker prod integration (`smoke-prod` + `qa-prod`)
+2. Docker dev integration (`smoke` + `qa` + `assistant eval`)
+3. Docker prod integration (`smoke-prod` + `qa-prod` + `assistant eval`)
 
 For CI only, synthetic CSV data is generated via `npm run data:generate:ci` so large local datasets are not required in the repository.
+Set `ASSISTANT_EVAL_STRICT=true` to fail the pipeline when AI provider is unavailable instead of skipping eval.
+See `docs/ASSISTANT_EVAL_CRITERIA.md` for full evaluation criteria and thresholds.
+For faster local runs with real API key, use `ASSISTANT_EVAL_PROFILE=balanced` (stratified top/mid/low symbols, fewer prompts).
+
+### Assistant Provider Priority
+
+Provider order is controlled by `ASSISTANT_PROVIDER_PRIORITY` (default: `openrouter,glm,fallback`).
+`docker-compose.yml` sets this value for both `app` and `app-prod`, so OpenRouter is the primary provider by default.
+Grounding tool calls use `ASSISTANT_TOOL_BASE_URL` (set in `docker-compose.yml` to `http://127.0.0.1:3000`) to avoid untrusted host/origin routing.
+If `ASSISTANT_TOOL_BASE_URL` is not set, `/api/assistant` falls back to request origin before using development fallback.
+
+### Assistant Guardrail Modes
+
+Use `ASSISTANT_POLICY_MODE` to control anti-hallucination enforcement in `/api/assistant`:
+- `shadow` (default): evaluate policy, log shadow blocks, do not hard-block LLM output
+- `enforce_high_risk`: hard-block numeric claims on high-risk pages (`backtesting`, `risk`, `factors`, `charts`, `portfolio`) when grounding requirements fail
+- `enforce_all`: hard-block numeric claims for all intents when grounding requirements fail
+- `ASSISTANT_BASELINE_ONLY` defaults to `false`, enabling valuation/peer/health/sensitivity tools by default.
+- `ASSISTANT_EVAL_AUTH_TOKEN` and `ASSISTANT_EVAL_RATE_LIMIT_MAX` configure a dedicated eval traffic bucket (`x-assistant-eval`) for assistant evaluation scripts.
+
+### Data Runtime Integrity
+
+- `DATA_MANIFEST_STRICT` (default: `true`): enforce row-count checks against `public/data/data_manifest*.json` when manifest is available.
+- `DATA_MANIFEST_ROW_TOLERANCE` (default: `0`): allowed row-count delta for manifest gate.
+- `DATA_BACKEND=auto|csv|duckdb` (default: `auto`): runtime uses DuckDB when `quant_data.duckdb` exists **and** Node binding is available; otherwise it falls back to CSV.
+- `DATA_BACKEND_STRICT=true`: if `DATA_BACKEND=duckdb` but artifact/binding is missing, fail fast instead of fallback.
+- `DATA_DUCKDB_PATH`: override DuckDB artifact path (default: `public/data/quant_data.duckdb`).
+- `DATA_EXPORT_DUCKDB=true`: when running `npm run data:prepare:2018_2025`, auto-export DuckDB artifact after CSV preparation.
+- `INSTALL_DUCKDB_BINDING=true` (Docker compose default): installs Node `duckdb` binding in `app` / `app-prod` containers during build/startup for strict DuckDB mode.
+- `GET /api/health/data`: returns backend mode, manifest info, dataset quality, and fundamentals readiness (`?refresh=true` to clear caches before check).
+- Docker healthcheck uses probe mode: `/api/health/data?probe=true&includeFundamentals=false`.
 
 ## Docker Workflow (Recommended for stable smoke testing)
 
@@ -151,11 +193,15 @@ For full step-by-step testing/debug/production procedures, see `docs/DOCKER_RUNB
    ```bash
    npm run docker:smoke
    ```
-4. Restart app safely (no host-wide node kill):
+4. Check data health (optional):
+   ```bash
+   curl http://localhost:3010/api/health/data
+   ```
+5. Restart app safely (no host-wide node kill):
    ```bash
    docker compose restart app
    ```
-5. Stop services:
+6. Stop services:
    ```bash
    npm run docker:down
    ```
@@ -194,6 +240,10 @@ make down
 - Architecture notes: `docs/ARCHITECTURE.md`
 - API reference: `docs/API.md`
 - Quant library notes: `docs/QUANT_LIBRARY.md`
+- Data reliability contract: `docs/DATA_RELIABILITY_OPERATIONS.md`
+- Data release checklist: `docs/DATA_RELEASE_CHECKLIST.md`
+- Observability + SLO baseline: `docs/OBSERVABILITY_SLO.md`
+- Incident response runbook: `docs/INCIDENT_RESPONSE.md`
 
 ## Project Structure
 

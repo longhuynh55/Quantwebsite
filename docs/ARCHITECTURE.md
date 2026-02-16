@@ -57,8 +57,10 @@ QuantVN is a comprehensive quantitative finance platform designed for the Vietna
 |  |  +-------------+  +-------------+  +--------+  +---------+  |  |
 |  |  |   /stocks   |  |/backtesting|  |/factors|  |/optimize|  |  |
 |  |  +-------------+  +-------------+  +--------+  +---------+  |  |
-|  |  |  /risk      |  |/market-overview|                     |  |  |
-|  |  +-------------+  +-----------------+                     |  |
+|  |  |    /risk    |  |/market-overview| | /fundamentals |   |  |  |
+|  |  +-------------+  +-----------------+ +---------------+   |  |
+|  |  |        /health/data (probe/full data readiness)     |   |  |
+|  |  +------------------------------------------------------+   |  |
 |  +--------------------------+-----------------------------------+  |
 |                             |                                     |
 |  +--------------------------v-----------------------------------+  |
@@ -83,14 +85,14 @@ QuantVN is a comprehensive quantitative finance platform designed for the Vietna
 +------------------------------------------------------------------+
 |                      DATA LAYER                                   |
 |  +------------------------------------------------------------+  |
-|  |                    Static CSV Files                         |  |
-|  |  +------------------------+  +-------------------------+   |  |
-|  |  |HOSE_VERIFIED_2020_2025|  |  ohlcv_enriched.csv    |   |  |
-|  |  |   (Stock Metadata)    |  |  (Price/Volume Data)   |   |  |
-|  |  +------------------------+  +-------------------------+   |  |
-|  |  |Market_Indices_Daily    |                                  |  |
-|  |  |   (Index Data)         |                                  |  |
-|  |  +------------------------+                                  |  |
+|  |        Runtime Data (CSV preferred, DuckDB optional)      |  |
+|  |  +-------------------------------+  +--------------------+ |  |
+|  |  | stock_metadata_2018_2025.csv |  | ohlcv_2018_2025.csv| |  |
+|  |  | (fallback: HOSE_VERIFIED_*)  |  | (fallback: *.csv)  | |  |
+|  |  +-------------------------------+  +--------------------+ |  |
+|  |  | Market_Indices_Daily_2020_2025.csv                     | |  |
+|  |  | quant_data.duckdb (when DATA_BACKEND=duckdb/auto)      | |  |
+|  |  +---------------------------------------------------------+ |  |
 |  +------------------------------------------------------------+  |
 +------------------------------------------------------------------+
 ```
@@ -103,9 +105,14 @@ QuantVN is a comprehensive quantitative finance platform designed for the Vietna
 quant-website/
 +-- public/
 |   +-- data/
-|       +-- HOSE_VERIFIED_2020_2025.csv    # Stock metadata (500+ HOSE stocks)
-|       +-- ohlcv_enriched.csv             # Historical OHLCV data
+|       +-- stock_metadata_2018_2025.csv       # Preferred metadata dataset
+|       +-- ohlcv_2018_2025.csv                # Preferred OHLCV dataset
 |       +-- Market_Indices_Daily_2020_2025.csv  # Market index data
+|       +-- data_manifest_2018_2025.json        # Data quality contract
+|       +-- data_manifest.json                   # Compatibility alias
+|       +-- quant_data.duckdb                    # Optional DuckDB artifact
+|       +-- HOSE_VERIFIED_2020_2025.csv          # Legacy metadata fallback
+|       +-- ohlcv_enriched.csv                   # Legacy OHLCV fallback
 |
 +-- src/
 |   +-- app/                               # Next.js App Router
@@ -120,6 +127,8 @@ quant-website/
 |   |   |   +-- optimize/route.ts          # Portfolio optimization endpoint
 |   |   |   +-- risk/route.ts              # Risk metrics endpoint
 |   |   |   +-- market-overview/route.ts   # Market overview endpoint
+|   |   |   +-- fundamentals/route.ts      # BCT/BCTT/LCTT endpoint
+|   |   |   +-- health/data/route.ts       # Data readiness + quality health
 |   |   |
 |   |   +-- screener/page.tsx              # Stock screener page
 |   |   +-- backtesting/page.tsx           # Strategy backtesting page
@@ -196,31 +205,27 @@ quant-website/
                           |  (data.ts)    |
                           +---------------+
                                   |
-                    +-------------+-------------+
-                    |             |             |
-                    v             v             v
-            +----------+   +----------+   +----------+
-            | Metadata |   |  OHLCV   |   |  Index   |
-            |  Cache   |   |  Cache   |   |  Cache   |
-            +----------+   +----------+   +----------+
-                    |             |             |
-                    +------+------+-------------+
-                           |
-                           v
-                    +---------------+
-                    |  CSV Files    |
-                    |  (Static)     |
-                    +---------------+
+                          +----------------------+
+                          | Backend Router       |
+                          | (auto/csv/duckdb)    |
+                          +----------------------+
+                             |               |
+                             v               v
+                    +----------------+   +----------------+
+                    | Runtime CSVs   |   | quant_data.duckdb |
+                    | + manifest     |   | (DuckDB)       |
+                    +----------------+   +----------------+
 ```
 
 ### Data Loading Process
 
 1. **Client Request**: Page component initiates fetch to API endpoint
 2. **API Handler**: Validates input, checks rate limits, calls data layer
-3. **Data Layer**: Loads CSV data with caching mechanism
-4. **Quant Library**: Processes raw data through calculations
+3. **Data Layer**: Resolves backend (`auto`/`csv`/`duckdb`), applies manifest/parse gates, uses cache
+4. **Quant Library**: Processes normalized data through calculations
 5. **Response**: JSON response returned to client
 6. **UI Update**: Component state updates, triggers re-render
+7. **Ops Monitoring**: `/api/health/data` exposes probe/full readiness for Docker + QA
 
 ---
 
@@ -384,6 +389,8 @@ All API endpoints follow REST conventions with consistent patterns:
 | `/api/optimize` | GET | Portfolio optimization |
 | `/api/risk` | GET | Risk metrics calculation |
 | `/api/market-overview` | GET | Market summary data |
+| `/api/fundamentals` | GET | Quarterly BCT/BCTT/LCTT data by symbol |
+| `/api/health/data` | GET | Backend/manifest/probe/full data health checks |
 
 ### Request/Response Pattern
 
@@ -665,7 +672,9 @@ External Data Source --> ETL Pipeline --> Database --> API
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/lib/data.ts` | ~300 | Data loading and caching |
+| `src/lib/data.ts` | ~700 | Data loading, quality gates, caching |
+| `src/lib/dataBackend.ts` | ~150 | Backend selection (`auto/csv/duckdb`) |
+| `src/lib/dataManifest.ts` | ~140 | Runtime manifest loading/validation |
 | `src/lib/quant/backtest.ts` | ~350 | Backtesting engine |
 | `src/lib/quant/indicators.ts` | ~300 | Technical indicators |
 | `src/lib/quant/risk.ts` | ~250 | Risk calculations |
@@ -673,9 +682,10 @@ External Data Source --> ETL Pipeline --> Database --> API
 | `src/lib/quant/factors.ts` | ~110 | Factor analysis |
 | `src/lib/rateLimit.ts` | ~140 | Rate limiting utility |
 | `src/app/api/backtesting/route.ts` | ~180 | Backtesting API |
+| `src/app/api/health/data/route.ts` | ~320 | Runtime data health API |
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: February 2025*
+*Document Version: 1.1*
+*Last Updated: February 2026*
 *Author: QuantVN Documentation Team*

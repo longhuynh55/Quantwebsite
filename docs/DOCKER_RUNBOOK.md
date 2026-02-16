@@ -19,6 +19,18 @@ Muc tieu la giu moi truong on dinh va tranh thao tac giet process `node` tren ho
 npm run data:prepare:2018_2025
 ```
 
+De dam bao fundamentals (BCT/BCTT/LCTT) doc duoc chinh xac (CSV khong bi lech dong/cot), nen chay them validator:
+
+```bash
+npm run data:validate:fundamentals
+```
+
+Neu ban can checklist day du cho data backend + health + assistant grounding, xem them:
+- `docs/DATA_RELIABILITY_OPERATIONS.md`
+- `docs/DATA_RELEASE_CHECKLIST.md`
+- `docs/OBSERVABILITY_SLO.md`
+- `docs/INCIDENT_RESPONSE.md`
+
 ## 2. Thanh phan Docker hien co
 
 - `app`: Next.js dev server, map ra `http://localhost:3010`
@@ -204,6 +216,7 @@ Chi release khi ca `dev smoke/qa` va `prod smoke/qa` deu pass.
 
 - Chay terminal voi quyen phu hop.
 - Dam bao Docker Desktop dang chay.
+- Neu dang dung Windows, dam bao user nam trong group `docker-users` (sau do logout/login hoac restart may).
 - Kiem tra context:
 
 ```bash
@@ -225,7 +238,41 @@ Kiem tra thu muc:
 - (Optional, fundamentals) `public/data/HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv`
 - (Optional, fundamentals) `public/data/HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv`
 
-### 7.4 Build prod fail do TypeScript
+Neu muon data loader fail-fast khi parse/quality co van de:
+- Mac dinh `DATA_STRICT_READ=true`, `DATA_STRICT_PARSE=true`.
+- Co the dat nguong accepted ratio bang env:
+  - `DATA_MIN_ACCEPTED_RATIO` (global)
+  - `DATA_MIN_ACCEPTED_RATIO_STOCK_METADATA`
+  - `DATA_MIN_ACCEPTED_RATIO_OHLCV`
+  - `DATA_MIN_ACCEPTED_RATIO_INDEX`
+- Loader cung doi chieu voi manifest (`data_manifest_2018_2025.json` / `data_manifest.json`) neu co:
+  - `DATA_MANIFEST_STRICT=true` (mac dinh)
+  - `DATA_MANIFEST_ROW_TOLERANCE=0`
+- Backend config (phase migration):
+  - `DATA_BACKEND=auto|csv|duckdb` (`auto` se dung DuckDB neu co `quant_data.duckdb` va binding hop le, neu khong fallback CSV)
+  - `DATA_DUCKDB_PATH` de override duong dan file DuckDB
+  - `DATA_BACKEND_STRICT=true` de fail-fast neu chon `duckdb` nhung thieu artifact/binding
+  - `DATA_EXPORT_DUCKDB=true` de auto-export DuckDB artifact khi chay `npm run data:prepare:2018_2025`
+  - `npm run data:export:duckdb` uu tien Node `duckdb` binding, neu khong co se fallback sang Docker image `duckdb/duckdb`
+  - `INSTALL_DUCKDB_BINDING=true` (default trong `docker-compose.yml`) de tu dong cai Node `duckdb` binding trong `app` / `app-prod`; dat `false` neu muon bo qua cai binding
+  - API check nhanh:
+    - `curl http://localhost:3010/api/health/data`
+    - `curl "http://localhost:3010/api/health/data?refresh=true"` de clear cache truoc khi check
+  - Docker healthcheck mac dinh dung probe mode (nhanh, khong parse full dataset): `/api/health/data?probe=true&includeFundamentals=false`
+
+Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
+- Dat `DATA_ALLOW_RAW_FALLBACK=true`.
+
+### 7.4 Assistant grounding / eval fail
+
+- Mac dinh trong `docker-compose.yml`: `ASSISTANT_BASELINE_ONLY=false` de bat valuation/peer/health/sensitivity tools.
+- App uu tien `ASSISTANT_TOOL_BASE_URL`; neu khong co se fallback theo request origin (vi du `http://localhost:3010`) roi moi toi dev fallback.
+- Eval scripts gui header `x-assistant-eval=true`; de an toan nen dat cung mot token cho app + smoke:
+  - `ASSISTANT_EVAL_AUTH_TOKEN`
+- Neu eval hay cham `429`, tang bucket rieng cho eval:
+  - `ASSISTANT_EVAL_RATE_LIMIT_MAX` (mac dinh de xuat: `240` req/phut)
+
+### 7.5 Build prod fail do TypeScript
 
 - Day la loi code that, can fix trong source.
 - Sua xong build lai:

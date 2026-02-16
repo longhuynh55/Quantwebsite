@@ -72,6 +72,22 @@ If you have raw files in `../data`, generate the runtime files:
 npm run data:prepare:2018_2025
 ```
 
+This command also writes integrity manifests:
+- `public/data/data_manifest_2018_2025.json`
+- `public/data/data_manifest.json`
+
+Optional DuckDB export (uses Node `duckdb` binding when available, otherwise Docker fallback):
+
+```bash
+npm run data:export:duckdb
+```
+
+If Docker is unavailable locally, install optional binding first:
+
+```bash
+npm install duckdb
+```
+
 ### File 1: Stock Metadata (`stock_metadata_2018_2025.csv`, fallback: `HOSE_VERIFIED_2020_2025.csv`)
 
 This file contains metadata about each stock listed on HOSE.
@@ -202,6 +218,17 @@ PORT=3000
 # Optional: Override data directory (default: ./public/data)
 DATA_DIR=public/data
 
+# Optional: Data integrity gates
+DATA_MANIFEST_STRICT=true
+DATA_MANIFEST_ROW_TOLERANCE=0
+
+# Optional: Backend migration config
+DATA_BACKEND=auto
+DATA_BACKEND_STRICT=false
+DATA_DUCKDB_PATH=public/data/quant_data.duckdb
+DATA_EXPORT_DUCKDB=false
+INSTALL_DUCKDB_BINDING=true
+
 # Optional: Enable development features
 NEXT_PUBLIC_DEV_MODE=true
 ```
@@ -274,6 +301,23 @@ Run ESLint to check code quality:
 npm run lint
 ```
 
+### Data Health Checks (Recommended)
+
+After app startup, verify data backend readiness before testing features:
+
+```bash
+# Fast readiness probe (used by Docker healthcheck)
+curl "http://localhost:3000/api/health/data?probe=true&includeFundamentals=false"
+
+# Full quality check + cache refresh
+curl "http://localhost:3000/api/health/data?refresh=true"
+```
+
+Expected:
+- HTTP `200`
+- `"ok": true`
+- Backend status and manifest snapshot are present in response
+
 ---
 
 ## Development Workflow
@@ -328,6 +372,7 @@ Browser -> Next.js Page -> API Route -> lib/data.ts -> CSV Files
 1. Verify files exist in `public/data/`
 2. Check file names match exactly (case-sensitive)
 3. Ensure CSV files have valid content
+4. Run data health endpoint to see which dataset is failing
 
 ```bash
 # Check files exist
@@ -336,6 +381,10 @@ ls -la public/data/
 # Verify file content
 head -5 public/data/stock_metadata_2018_2025.csv
 head -5 public/data/ohlcv_2018_2025.csv
+
+# Probe + full health report
+curl "http://localhost:3000/api/health/data?probe=true&includeFundamentals=false"
+curl "http://localhost:3000/api/health/data?refresh=true"
 ```
 
 ### Issue: "Module not found" Error
@@ -434,7 +483,8 @@ After setting up the application:
 For more information, refer to:
 - [README.md](../README.md) - Project overview
 - [API Documentation](./API.md) - API endpoint reference
-- [Quant Library Documentation](./QUANT_LIB.md) - Quantitative functions reference
+- [Quant Library Documentation](./QUANT_LIBRARY.md) - Quantitative functions reference
+- [Data Reliability Operations](./DATA_RELIABILITY_OPERATIONS.md) - backend and quality runbook
 
 ---
 

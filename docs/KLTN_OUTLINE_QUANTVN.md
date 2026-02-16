@@ -104,11 +104,13 @@ Ban co the copy/paste outline nay vao Word/Google Docs va dien noi dung.
 
 ### 3.1 Data description
 - Dataset files:
-  - `public/data/HOSE_VERIFIED_2020_2025.csv`
-  - `public/data/ohlcv_enriched.csv`
+  - `public/data/stock_metadata_2018_2025.csv` (preferred)
+  - `public/data/ohlcv_2018_2025.csv` (preferred)
   - `public/data/Market_Indices_Daily_2020_2025.csv`
+  - `public/data/HOSE_VERIFIED_2020_2025.csv` (legacy fallback)
+  - `public/data/ohlcv_enriched.csv` (legacy fallback)
 - Fields (brief)
-- Size (rows, symbols) + coverage (2020-2025)
+- Size (rows, symbols) + coverage (2018-2025 preferred runtime, 2020-2025 legacy fallback)
 
 ### 3.2 Data preprocessing / validation
 - CSV parsing pipeline (schema + row validation)
