@@ -63,6 +63,9 @@ jobs:
       - name: Dev QA
         run: docker compose run --rm qa
 
+      - name: Dev assistant hallucination eval
+        run: docker compose run --rm smoke node scripts/eval-assistant.mjs
+
       - name: Collect docker logs (dev)
         if: always()
         run: docker compose logs --tail=200 app
@@ -96,6 +99,9 @@ jobs:
       - name: Prod QA
         run: docker compose --profile prod run --rm qa-prod
 
+      - name: Prod assistant hallucination eval
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant.mjs
+
       - name: Collect docker logs (prod)
         if: always()
         run: docker compose logs --tail=200 app-prod
@@ -103,4 +109,3 @@ jobs:
       - name: Shutdown containers (prod)
         if: always()
         run: docker compose --profile prod down --remove-orphans
-

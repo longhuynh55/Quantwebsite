@@ -88,6 +88,24 @@ async function run() {
       }
     },
     async () => {
+      const name = "GET /api/health/data";
+      try {
+        const { response, data } = await fetchJson("/api/health/data");
+        ensure(response.ok, `HTTP ${response.status}`);
+        ensure(data?.ok === true, "health ok=false");
+        ensure(data?.backend && typeof data.backend === "object", "backend missing");
+        ensure(typeof data?.backend?.active === "string", "backend.active missing");
+        ensure(data?.datasets && typeof data.datasets === "object", "datasets missing");
+        ensure(data?.datasets?.stockMetadata?.ok === true, "stockMetadata health not ok");
+        ensure(data?.datasets?.ohlcv?.ok === true, "ohlcv health not ok");
+        ensure(data?.datasets?.index?.ok === true, "index health not ok");
+        logPass(name, `backend=${data.backend.active}`);
+      } catch (error) {
+        failures += 1;
+        logFail(name, error instanceof Error ? error.message : String(error));
+      }
+    },
+    async () => {
       const name = "GET /api/fundamentals?symbol=AAA&period=latest&statement=all";
       try {
         const { response, data } = await fetchJson("/api/fundamentals?symbol=AAA&period=latest&statement=all");
@@ -177,7 +195,37 @@ async function run() {
         ensure(data.equityCurve.length > 0, "equityCurve is empty");
         ensure(data?.metrics && typeof data.metrics === "object", "metrics missing");
         ensure(Number.isFinite(data.metrics?.totalReturn), "metrics.totalReturn missing");
+        ensure(Number.isFinite(data.metrics?.netReturn), "metrics.netReturn missing");
+        ensure(Number.isFinite(data.metrics?.grossReturn), "metrics.grossReturn missing");
+        ensure(data?.configApplied && typeof data.configApplied === "object", "configApplied missing");
+        ensure(data?.diagnostics && typeof data.diagnostics === "object", "diagnostics missing");
         logPass(name, `trades=${Array.isArray(data?.trades) ? data.trades.length : 0}`);
+      } catch (error) {
+        failures += 1;
+        logFail(name, error instanceof Error ? error.message : String(error));
+      }
+    },
+    async () => {
+      const name = "POST /api/backtesting advanced config";
+      try {
+        const { response, data } = await fetchJson("/api/backtesting", {
+          method: "POST",
+          body: {
+            symbol: "VNM",
+            strategy: "sma_crossover",
+            capital: 100000,
+            params: { shortPeriod: 10, longPeriod: 30 },
+            executionModel: "next_open",
+            feeBps: 15,
+            sellTaxBps: 10,
+            slippageBps: 5,
+            lotSize: 1,
+          },
+        });
+        ensure(response.ok, `HTTP ${response.status}`);
+        ensure(data?.configApplied?.executionModel === "next_open", "executionModel mismatch");
+        ensure(Number.isFinite(data?.diagnostics?.coverageRatio), "diagnostics.coverageRatio missing");
+        logPass(name);
       } catch (error) {
         failures += 1;
         logFail(name, error instanceof Error ? error.message : String(error));
@@ -192,6 +240,27 @@ async function run() {
         ensure(Array.isArray(data?.bottomStocks), "bottomStocks is not an array");
         ensure(data.topStocks.length > 0, "topStocks is empty");
         logPass(name, `top=${data.topStocks.length}, bottom=${data.bottomStocks.length}`);
+      } catch (error) {
+        failures += 1;
+        logFail(name, error instanceof Error ? error.message : String(error));
+      }
+    },
+    async () => {
+      const name = "POST /api/assistant route contract";
+      try {
+        const { response, data } = await fetchJson("/api/assistant", {
+          method: "POST",
+          body: { message: "", conversationHistory: [] },
+        });
+        ensure(response.status !== 404, "route not found (404)");
+        ensure([200, 400, 429, 500, 502, 504].includes(response.status), `unexpected HTTP ${response.status}`);
+        ensure(typeof data?.success === "boolean", "success flag missing");
+        if (data.success) {
+          ensure(typeof data?.message === "string", "message missing on success response");
+        } else {
+          ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
+        }
+        logPass(name, `HTTP ${response.status}`);
       } catch (error) {
         failures += 1;
         logFail(name, error instanceof Error ? error.message : String(error));

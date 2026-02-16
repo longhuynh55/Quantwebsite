@@ -3,24 +3,39 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     working_dir: /app
-    command: sh -c "if [ ! -d node_modules/next ]; then npm ci --legacy-peer-deps; fi && npm run dev -- -p 3000"
+    command: >
+      sh -c "if [ ! -d node_modules/next ]; then npm ci --legacy-peer-deps; fi
+      && if [ \"${INSTALL_DUCKDB_BINDING:-true}\" = \"true\" ] && [ ! -d node_modules/duckdb ]; then npm install duckdb --no-save --legacy-peer-deps; fi
+      && npm run dev -- -p 3000"
     ports:
       - "3010:3000"
+    env_file:
+      - ./.env.glm
     environment:
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/public/data
+      ASSISTANT_PROVIDER_PRIORITY: openrouter,glm,fallback
+      ASSISTANT_BASELINE_ONLY: "false"
+      ASSISTANT_EVAL_RATE_LIMIT_MAX: "240"
+      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
+      ASSISTANT_TOOL_BASE_URL: http://127.0.0.1:3000
+      INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     volumes:
       - ./:/app
       - node_modules_cache:/app/node_modules
       - ./public/data:/app/public/data:ro
+      - ../data:/workspace-data:ro
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/api/stocks?limit=1').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3000/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -36,8 +51,11 @@ services:
         condition: service_healthy
     environment:
       SMOKE_BASE_URL: http://app:3000
+      DATA_DIR: /app/public/data
+      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
     volumes:
       - ./:/app:ro
+      - ../data:/workspace-data:ro
 
   qa:
     image: node:20-bookworm-slim
@@ -48,28 +66,43 @@ services:
         condition: service_healthy
     environment:
       SMOKE_BASE_URL: http://app:3000
+      DATA_DIR: /app/public/data
     volumes:
       - ./:/app:ro
+      - ../data:/workspace-data:ro
 
   app-prod:
     profiles: ["prod"]
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     ports:
       - "3011:3000"
+    env_file:
+      - ./.env.glm
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/public/data
+      ASSISTANT_PROVIDER_PRIORITY: openrouter,glm,fallback
+      ASSISTANT_BASELINE_ONLY: "false"
+      ASSISTANT_EVAL_RATE_LIMIT_MAX: "240"
+      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
+      ASSISTANT_TOOL_BASE_URL: http://127.0.0.1:3000
+      ASSISTANT_POLICY_MODE: enforce_high_risk
+      INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     volumes:
       - ./public/data:/app/public/data:ro
+      - ../data:/workspace-data:ro
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/api/stocks?limit=1').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3000/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -86,8 +119,11 @@ services:
         condition: service_healthy
     environment:
       SMOKE_BASE_URL: http://app-prod:3000
+      DATA_DIR: /app/public/data
+      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
     volumes:
       - ./:/app:ro
+      - ../data:/workspace-data:ro
 
   qa-prod:
     profiles: ["prod"]
@@ -99,8 +135,10 @@ services:
         condition: service_healthy
     environment:
       SMOKE_BASE_URL: http://app-prod:3000
+      DATA_DIR: /app/public/data
     volumes:
       - ./:/app:ro
+      - ../data:/workspace-data:ro
 
 volumes:
   node_modules_cache:

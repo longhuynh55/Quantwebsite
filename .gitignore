@@ -32,6 +32,11 @@ yarn-error.log*
 
 # local logs
 dev_smoke*.log*
+*.log
+.dev.log
+.tmp-*
+temp_write_test.txt
+nul
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -45,3 +50,10 @@ next-env.d.ts
 
 # large/local datasets (keep out of git; mount into container from host)
 /public/data/**/*.csv
+/public/data/**/*.duckdb
+/public/data/data_manifest*.json
+/public/data/*duckdb_export*.json
+/public/data/*duckdb_export*.sql
+
+# generated reports
+/artifacts/

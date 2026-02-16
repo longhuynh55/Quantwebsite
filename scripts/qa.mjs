@@ -120,7 +120,6 @@ async function run() {
   const checks = [];
 
   let allStocks = [];
-  let metaBySymbol = new Map();
   let primarySymbol = null;
   let fullSymbol = null;
   let partialSymbol = null;
@@ -138,13 +137,6 @@ async function run() {
       ensure(data.stocks.length > 0, "stocks list is empty");
 
       allStocks = data.stocks;
-      metaBySymbol = new Map(
-        allStocks.map((s) => [
-          String(s?.symbol ?? "").trim().toUpperCase(),
-          s,
-        ])
-      );
-
       const active = allStocks
         .filter((s) => String(s?.status ?? "").toUpperCase() === "ACTIVE")
         .filter((s) => Number.isFinite(Number(s?.dataRows)));
@@ -186,6 +178,26 @@ async function run() {
       ensure(data.stocks.length <= 5, "limit not respected");
       ensure(data.total >= data.stocks.length, "total < returned length");
       logPass(name, `returned=${data.stocks.length}, total=${data.total}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "GET /api/health/data";
+    try {
+      const { response, data } = await fetchJson("/api/health/data");
+      ensure(response.ok, `HTTP ${response.status}`);
+      ensure(data?.ok === true, "health ok=false");
+      ensure(data?.backend && typeof data.backend === "object", "backend missing");
+      ensure(typeof data?.backend?.active === "string", "backend.active missing");
+      ensure(data?.datasets && typeof data.datasets === "object", "datasets missing");
+      ensure(data?.datasets?.stockMetadata?.ok === true, "stockMetadata health not ok");
+      ensure(data?.datasets?.ohlcv?.ok === true, "ohlcv health not ok");
+      ensure(data?.datasets?.index?.ok === true, "index health not ok");
+      ensure(data?.fundamentals?.ok === true, "fundamentals health not ok");
+      logPass(name, `backend=${data.backend.active}`);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));
@@ -482,6 +494,10 @@ async function run() {
         ensure(data.equityCurve.length > 0, `strategy=${strategy} equityCurve empty`);
         ensure(data?.metrics && typeof data.metrics === "object", `strategy=${strategy} metrics missing`);
         ensure(Number.isFinite(data.metrics?.totalReturn), `strategy=${strategy} metrics.totalReturn missing`);
+        ensure(Number.isFinite(data.metrics?.netReturn), `strategy=${strategy} metrics.netReturn missing`);
+        ensure(Number.isFinite(data.metrics?.grossReturn), `strategy=${strategy} metrics.grossReturn missing`);
+        ensure(data?.configApplied && typeof data.configApplied === "object", `strategy=${strategy} configApplied missing`);
+        ensure(data?.diagnostics && typeof data.diagnostics === "object", `strategy=${strategy} diagnostics missing`);
       }
       logPass(name, `strategies=5`);
     } catch (error) {
@@ -491,17 +507,64 @@ async function run() {
   });
 
   checks.push(async () => {
-    const name = "POST /api/backtesting (params)";
+    const name = "POST /api/backtesting (advanced params + config)";
     try {
       const sym = String(primarySymbol ?? "");
       ensure(sym, "primarySymbol missing");
       const { response, data } = await fetchJson("/api/backtesting", {
         method: "POST",
-        body: { symbol: sym, strategy: "sma_crossover", capital: 100000, params: { shortPeriod: 10, longPeriod: 30 } },
+        body: {
+          symbol: sym,
+          strategy: "sma_crossover",
+          capital: 100000,
+          params: { shortPeriod: 10, longPeriod: 30 },
+          executionModel: "next_open",
+          feeBps: 15,
+          sellTaxBps: 10,
+          slippageBps: 5,
+          lotSize: 1,
+        },
       });
       ensure(response.ok, `HTTP ${response.status}`);
       ensure(Array.isArray(data?.equityCurve), "equityCurve missing");
       ensure(data.equityCurve.length > 0, "equityCurve empty");
+      ensure(data?.configApplied?.executionModel === "next_open", "configApplied.executionModel mismatch");
+      ensure(Number.isFinite(data?.diagnostics?.coverageRatio), "diagnostics.coverageRatio missing");
+      logPass(name);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "GET /api/backtesting invalid strategy params (400)";
+    try {
+      const sym = String(primarySymbol ?? "");
+      ensure(sym, "primarySymbol missing");
+      const { response, data } = await fetchJson(
+        `/api/backtesting?symbol=${encodeURIComponent(sym)}&strategy=sma_crossover&capital=100000&shortPeriod=40&longPeriod=20`
+      );
+      ensure(response.status === 400, `expected 400, got HTTP ${response.status}`);
+      ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
+      logPass(name);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "POST /api/backtesting invalid config (400)";
+    try {
+      const sym = String(primarySymbol ?? "");
+      ensure(sym, "primarySymbol missing");
+      const { response, data } = await fetchJson("/api/backtesting", {
+        method: "POST",
+        body: { symbol: sym, strategy: "sma_crossover", capital: 100000, feeBps: -1 },
+      });
+      ensure(response.status === 400, `expected 400, got HTTP ${response.status}`);
+      ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
       logPass(name);
     } catch (error) {
       failures += 1;
@@ -551,6 +614,28 @@ async function run() {
       ensure(response.status === 400, `expected 400, got HTTP ${response.status}`);
       ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
       logPass(name);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "POST /api/assistant route contract";
+    try {
+      const { response, data } = await fetchJson("/api/assistant", {
+        method: "POST",
+        body: { message: "", conversationHistory: [] },
+      });
+      ensure(response.status !== 404, "route not found (404)");
+      ensure([200, 400, 429, 500, 502, 504].includes(response.status), `unexpected HTTP ${response.status}`);
+      ensure(typeof data?.success === "boolean", "success flag missing");
+      if (data.success) {
+        ensure(typeof data?.message === "string", "message missing on success response");
+      } else {
+        ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
+      }
+      logPass(name, `HTTP ${response.status}`);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));

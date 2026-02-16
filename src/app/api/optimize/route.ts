@@ -21,8 +21,8 @@ import {
 } from "@/lib/dataPolicy";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 
-// Valid symbol format: 1-10 uppercase letters
-const VALID_SYMBOL_REGEX = /^[A-Z]{1,10}$/;
+// Valid symbol format: 1-10 uppercase letters or digits
+const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const MIN_SYMBOLS = 2;
 const MAX_SYMBOLS = 50;
 

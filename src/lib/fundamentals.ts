@@ -1,7 +1,10 @@
-import fs from "fs";
-import fsPromises from "fs/promises";
+﻿import fsPromises from "fs/promises";
+import { constants as fsConstants } from "fs";
 import path from "path";
 import Papa from "papaparse";
+import { resolveDataDir } from "./dataDir";
+import { ensureDataBackendReady, clearDataBackendCache } from "./dataBackend";
+import { queryDuckDbRows, clearDuckDbModuleCache } from "./duckdbClient";
 
 export type FundamentalsValue = number | string | null;
 
@@ -29,15 +32,19 @@ const FUNDAMENTALS_FILES: Record<FundamentalsStatement, string> = {
   cf: "HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv",
 };
 
+const FUNDAMENTALS_TABLES: Record<FundamentalsStatement, string> = {
+  bs: "fundamentals_bs",
+  is: "fundamentals_is",
+  cf: "fundamentals_cf",
+};
+
 function getDataDir(): string {
-  const configured = process.env.DATA_DIR?.trim();
-  if (configured) return path.resolve(configured);
-  return path.join(process.cwd(), "public", "data");
+  return resolveDataDir().path;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await fsPromises.access(filePath, fs.constants.R_OK);
+    await fsPromises.access(filePath, fsConstants.R_OK);
     return true;
   } catch {
     return false;
@@ -46,9 +53,26 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 function normalizeSymbol(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
-  const symbol = String(raw).trim().toUpperCase();
-  if (!/^[A-Z]{1,10}$/.test(symbol)) return null;
+  const symbol = String(raw).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!/^[A-Z][A-Z0-9]{0,9}$/.test(symbol)) return null;
   return symbol;
+}
+
+function pickSymbolFromRow(row: Record<string, unknown>): string | null {
+  const symbolKeys = [
+    "ticker",
+    "symbol",
+    "ticker_symbol",
+    "stock_code",
+    "stockcode",
+    "code",
+    "ma_ck",
+  ];
+  for (const key of symbolKeys) {
+    const value = normalizeSymbol(row[key]);
+    if (value) return value;
+  }
+  return null;
 }
 
 function normalizeKey(rawHeader: string): string {
@@ -78,8 +102,25 @@ function parseValue(raw: unknown): FundamentalsValue {
 }
 
 function parsePeriodKey(row: Record<string, unknown>): string | null {
-  const yearRaw = row.yearreport ?? row.yearReport;
-  const quarterRaw = row.lengthreport ?? row.lengthReport;
+  const yearRaw =
+    row.yearreport ??
+    row.year_report ??
+    row.report_year ??
+    row.fiscal_year ??
+    row.year;
+  const quarterRaw =
+    row.lengthreport ??
+    row.length_report ??
+    row.report_quarter ??
+    row.quarterreport ??
+    row.quarter ??
+    row.q;
+
+  const literalPeriod = row.period ?? row.report_period;
+  if (literalPeriod !== undefined && literalPeriod !== null) {
+    const match = /^(\d{4})\s*Q([1-4])$/i.exec(String(literalPeriod).trim());
+    if (match) return `${match[1]}Q${match[2]}`;
+  }
 
   const year = Number(String(yearRaw ?? "").trim());
   const quarter = Number(String(quarterRaw ?? "").trim());
@@ -101,34 +142,36 @@ function comparePeriodAsc(a: string, b: string): number {
   return qa - qb;
 }
 
-async function loadStatement(statement: FundamentalsStatement): Promise<StatementCache> {
-  const existing = statement === "bs" ? bsCache : statement === "is" ? isCache : cfCache;
-  if (existing) return existing;
+function setStatementCache(statement: FundamentalsStatement, cache: StatementCache): StatementCache {
+  if (statement === "bs") bsCache = cache;
+  else if (statement === "is") isCache = cache;
+  else cfCache = cache;
+  return cache;
+}
 
-  const dataDir = getDataDir();
-  const fileName = FUNDAMENTALS_FILES[statement];
-  const filePath = path.join(dataDir, fileName);
-
-  if (!(await fileExists(filePath))) {
-    throw new Error(`Fundamentals file not found: ${fileName} (DATA_DIR=${dataDir})`);
-  }
-
-  const content = await fsPromises.readFile(filePath, "utf8");
-  const parsed = Papa.parse<Record<string, unknown>>(content, {
-    header: true,
-    skipEmptyLines: true,
-    dynamicTyping: false,
-    transformHeader: (header) => header.replace(/^\uFEFF/, "").trim().toLowerCase(),
+function normalizeDuckDbFundamentalsRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.map((row) => {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      const normalizedKey = key.replace(/^\uFEFF/, "").trim().toLowerCase();
+      normalized[normalizedKey] = value;
+    }
+    return normalized;
   });
+}
 
-  const headers = parsed.meta.fields ?? [];
+function buildStatementCacheFromRows(
+  statement: FundamentalsStatement,
+  fileName: string,
+  rows: Record<string, unknown>[],
+  headersInput: string[]
+): StatementCache {
+  const headers = headersInput.map((header) => header.replace(/^\uFEFF/, "").trim().toLowerCase());
   const reserved = new Set(["ticker", "symbol", "yearreport", "lengthreport"]);
 
-  // Build normalized key mapping + labels.
   const labels: Record<string, string> = {};
   const headerToKey = new Map<string, string>();
   const usedKeys = new Map<string, number>();
-
   for (const header of headers) {
     const base = normalizeKey(header);
     const n = (usedKeys.get(base) ?? 0) + 1;
@@ -141,12 +184,22 @@ async function loadStatement(statement: FundamentalsStatement): Promise<Statemen
   const bySymbol = new Map<string, Map<string, Record<string, FundamentalsValue>>>();
   let skippedRows = 0;
   let duplicatePeriodRows = 0;
+  const skippedSamples: Array<Record<string, unknown>> = [];
 
-  for (const row of parsed.data) {
-    const symbol = normalizeSymbol(row.symbol ?? row.ticker);
+  for (const row of rows) {
+    const symbol = pickSymbolFromRow(row);
     const periodKey = parsePeriodKey(row);
     if (!symbol || !periodKey) {
       skippedRows += 1;
+      if (skippedSamples.length < 3) {
+        skippedSamples.push({
+          ticker: row.ticker ?? null,
+          symbol: row.symbol ?? null,
+          yearreport: row.yearreport ?? row.year_report ?? row.report_year ?? null,
+          lengthreport: row.lengthreport ?? row.length_report ?? row.report_quarter ?? row.quarter ?? null,
+          period: row.period ?? row.report_period ?? null,
+        });
+      }
       continue;
     }
 
@@ -171,17 +224,76 @@ async function loadStatement(statement: FundamentalsStatement): Promise<Statemen
   }
 
   if (skippedRows > 0 || duplicatePeriodRows > 0) {
+    const sampleNote =
+      skippedSamples.length > 0
+        ? `, skippedSamples=${JSON.stringify(skippedSamples)}`
+        : "";
     console.warn(
-      `[fundamentals:${statement}] rows=${parsed.data.length}, skipped=${skippedRows}, duplicatePeriods=${duplicatePeriodRows}`
+      `[fundamentals:${statement}] rows=${rows.length}, skipped=${skippedRows}, duplicatePeriods=${duplicatePeriodRows}${sampleNote}`
     );
   }
 
-  const cache: StatementCache = { fileName, labels, bySymbol };
-  if (statement === "bs") bsCache = cache;
-  else if (statement === "is") isCache = cache;
-  else cfCache = cache;
+  return {
+    fileName,
+    labels,
+    bySymbol,
+  };
+}
 
-  return cache;
+async function loadStatement(statement: FundamentalsStatement): Promise<StatementCache> {
+  const existing = statement === "bs" ? bsCache : statement === "is" ? isCache : cfCache;
+  if (existing) return existing;
+
+  const backend = await ensureDataBackendReady(`fundamentals:${statement}`);
+  const dataDir = getDataDir();
+  const fileName = FUNDAMENTALS_FILES[statement];
+  const filePath = path.join(dataDir, fileName);
+  const tableName = FUNDAMENTALS_TABLES[statement];
+
+  if (backend.active === "duckdb") {
+    try {
+      const rows = await queryDuckDbRows(backend.duckdbPath, `SELECT * FROM ${tableName}`);
+      const normalizedRows = normalizeDuckDbFundamentalsRows(rows);
+      const headers = normalizedRows.length > 0 ? Object.keys(normalizedRows[0]) : [];
+      if (headers.length > 0) {
+        const cache = buildStatementCacheFromRows(statement, `duckdb:${tableName}`, normalizedRows, headers);
+        return setStatementCache(statement, cache);
+      }
+      console.warn(`[fundamentals:${statement}] DuckDB table ${tableName} is empty; fallback to CSV.`);
+    } catch (error) {
+      console.warn(
+        `[fundamentals:${statement}] DuckDB read failed (${tableName}): ` +
+        `${error instanceof Error ? error.message : String(error)}. Fallback to CSV.`
+      );
+    }
+  }
+
+  if (!(await fileExists(filePath))) {
+    throw new Error(`Fundamentals file not found: ${fileName} (DATA_DIR=${dataDir})`);
+  }
+
+  const content = await fsPromises.readFile(filePath, "utf8");
+  const parsed = Papa.parse<Record<string, unknown>>(content, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    transformHeader: (header) => header.replace(/^\uFEFF/, "").trim().toLowerCase(),
+  });
+
+  if (parsed.errors.length > 0) {
+    const top = parsed.errors
+      .slice(0, 3)
+      .map((e) => `${e.code ?? "unknown"}@row${e.row ?? "?"}`)
+      .join(", ");
+    throw new Error(
+      `Fundamentals CSV parse errors in ${fileName}: errors=${parsed.errors.length} (${top}). ` +
+        `Please regenerate prepared fundamentals in public/data (run npm run data:prepare:2018_2025).`
+    );
+  }
+
+  const headers = parsed.meta.fields ?? [];
+  const cache = buildStatementCacheFromRows(statement, fileName, parsed.data, headers);
+  return setStatementCache(statement, cache);
 }
 
 export async function getAvailablePeriods(symbol: string): Promise<string[]> {
@@ -245,5 +357,8 @@ export function clearFundamentalsCache(): void {
   bsCache = null;
   isCache = null;
   cfCache = null;
+  clearDataBackendCache();
+  clearDuckDbModuleCache();
 }
+
 

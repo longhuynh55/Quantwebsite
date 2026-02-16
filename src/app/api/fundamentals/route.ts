@@ -9,16 +9,50 @@ import {
 } from "@/lib/fundamentals";
 
 const RATE_LIMIT_MAX = 60;
-const VALID_SYMBOL_REGEX = /^[A-Z]{1,10}$/;
+const VALID_SYMBOL_REGEX = /^[A-Z][A-Z0-9]{0,9}$/;
 const VALID_PERIOD_REGEX = /^\d{4}Q[1-4]$/;
 
 type StatementParam = "all" | FundamentalsStatement;
+type DataConfidence = "high" | "medium" | "low";
+type StatementAvailability = Record<FundamentalsStatement, boolean>;
 
-function parseStatement(raw: string | null): StatementParam {
+function parseStatement(raw: string | null): StatementParam | null {
   const normalized = (raw ?? "").trim().toLowerCase();
   if (normalized === "bs" || normalized === "is" || normalized === "cf") return normalized;
   if (normalized === "all" || normalized === "") return "all";
-  return "all";
+  return null;
+}
+
+function parsePeriod(raw: string | null): string | null {
+  const period = (raw ?? "latest").trim();
+  if (period.toLowerCase() === "latest") return "latest";
+  const normalized = period.toUpperCase();
+  if (!VALID_PERIOD_REGEX.test(normalized)) return null;
+  return normalized;
+}
+
+function getRequestedStatements(statement: StatementParam): FundamentalsStatement[] {
+  if (statement === "all") return ["bs", "is", "cf"];
+  return [statement];
+}
+
+function deriveConfidence(
+  coverageRatio: number,
+  availablePeriodsCount: number,
+  warningCount: number
+): DataConfidence {
+  let score = 0;
+  if (coverageRatio >= 1) score += 2;
+  else if (coverageRatio >= 0.5) score += 1;
+
+  if (availablePeriodsCount >= 6) score += 1;
+  else if (availablePeriodsCount <= 1) score -= 1;
+
+  if (warningCount >= 2) score -= 1;
+
+  if (score >= 3) return "high";
+  if (score >= 1) return "medium";
+  return "low";
 }
 
 export async function GET(request: Request) {
@@ -34,15 +68,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol")?.trim().toUpperCase();
   const statement = parseStatement(searchParams.get("statement"));
-  const periodRaw = (searchParams.get("period") ?? "latest").trim();
+  const period = parsePeriod(searchParams.get("period"));
 
   if (!symbol) {
     return NextResponse.json({ error: "symbol is required" }, { status: 400 });
   }
   if (!VALID_SYMBOL_REGEX.test(symbol)) {
-    return NextResponse.json({ error: "Invalid symbol format. Must be 1-10 uppercase letters." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid symbol format. Must be 1-10 uppercase letters or digits." }, { status: 400 });
   }
-  if (periodRaw.toLowerCase() !== "latest" && !VALID_PERIOD_REGEX.test(periodRaw)) {
+  if (!statement) {
+    return NextResponse.json({ error: 'Invalid statement. Use "all", "bs", "is", or "cf".' }, { status: 400 });
+  }
+  if (!period) {
     return NextResponse.json({ error: 'Invalid period. Use "latest" or "YYYYQn" (e.g., 2025Q4).' }, { status: 400 });
   }
 
@@ -52,20 +89,45 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No fundamentals available for this symbol" }, { status: 404 });
     }
 
-    const resolvedPeriod =
-      periodRaw.toLowerCase() === "latest"
-        ? await resolveLatestPeriod(symbol, statement)
-        : periodRaw;
+    const resolvedPeriod = period === "latest" ? await resolveLatestPeriod(symbol, statement) : period;
     if (!resolvedPeriod) {
       return NextResponse.json({ error: "No fundamentals period available for this request" }, { status: 404 });
     }
 
-    const [sourceFiles, balanceSheet, incomeStatement, cashFlow] = await Promise.all([
+    const [sourceFiles, bsSnapshot, isSnapshot, cfSnapshot] = await Promise.all([
       getFundamentalsSourceFiles(),
-      statement === "all" || statement === "bs" ? getStatementSnapshot(symbol, "bs", resolvedPeriod) : Promise.resolve(null),
-      statement === "all" || statement === "is" ? getStatementSnapshot(symbol, "is", resolvedPeriod) : Promise.resolve(null),
-      statement === "all" || statement === "cf" ? getStatementSnapshot(symbol, "cf", resolvedPeriod) : Promise.resolve(null),
+      getStatementSnapshot(symbol, "bs", resolvedPeriod),
+      getStatementSnapshot(symbol, "is", resolvedPeriod),
+      getStatementSnapshot(symbol, "cf", resolvedPeriod),
     ]);
+
+    const statementAvailability: StatementAvailability = {
+      bs: Boolean(bsSnapshot),
+      is: Boolean(isSnapshot),
+      cf: Boolean(cfSnapshot),
+    };
+    const requestedStatements = getRequestedStatements(statement);
+    const missingRequestedStatements = requestedStatements.filter((item) => !statementAvailability[item]);
+    const coverageRatio =
+      requestedStatements.length > 0
+        ? (requestedStatements.length - missingRequestedStatements.length) / requestedStatements.length
+        : 1;
+
+    const warnings: string[] = [];
+    if (missingRequestedStatements.length > 0) {
+      warnings.push(
+        `Missing requested statements for ${resolvedPeriod}: ${missingRequestedStatements.join(", ")}.`
+      );
+    }
+    if (availablePeriods.length < 4) {
+      warnings.push(`Only ${availablePeriods.length} fundamentals period(s) available for this symbol.`);
+    }
+
+    const confidence = deriveConfidence(coverageRatio, availablePeriods.length, warnings.length);
+
+    const balanceSheet = statement === "all" || statement === "bs" ? bsSnapshot : null;
+    const incomeStatement = statement === "all" || statement === "is" ? isSnapshot : null;
+    const cashFlow = statement === "all" || statement === "cf" ? cfSnapshot : null;
 
     return NextResponse.json({
       symbol,
@@ -74,6 +136,15 @@ export async function GET(request: Request) {
       balanceSheet,
       incomeStatement,
       cashFlow,
+      coverage: {
+        requestedStatements,
+        missingRequestedStatements,
+        statementAvailability,
+        availablePeriodsCount: availablePeriods.length,
+        coverageRatio,
+      },
+      confidence,
+      warnings,
       meta: {
         sourceFiles,
         fieldNotes: "Keys are normalized from CSV headers; values are number|null|string.",

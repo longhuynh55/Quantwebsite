@@ -3,8 +3,8 @@ import { getDataQualityReport, hasSufficientDataQuality, loadOHLCVForSymbol, loa
 import { calculateRiskMetrics, calculateDrawdown, calculateRollingVolatility } from "@/lib/quant/risk";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 
-// Valid symbol format: 1-10 uppercase letters
-const VALID_SYMBOL_REGEX = /^[A-Z]{1,10}$/;
+// Valid symbol format: 1-10 uppercase letters or digits
+const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const VALID_BENCHMARKS = ["VNINDEX", "VN100", "VN30"];
 const DEFAULT_BENCHMARK = "VNINDEX";
 const RATE_LIMIT_MAX = 60; // 60 requests per minute
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
   if (!VALID_SYMBOL_REGEX.test(symbol)) {
-    return NextResponse.json({ error: "Invalid symbol format. Must be 1-10 uppercase letters." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid symbol format. Must be 1-10 uppercase letters or digits." }, { status: 400 });
   }
 
   // Validate benchmark

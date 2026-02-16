@@ -16,7 +16,9 @@
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
+import { spawn } from "child_process";
 import Papa from "papaparse";
+import { repairFundamentalsCsvFile } from "./repair_fundamentals_csv.mjs";
 
 function usage() {
   return [
@@ -91,7 +93,7 @@ function parseArgs(argv) {
 function normalizeSymbol(raw) {
   if (!raw) return null;
   const sym = String(raw).trim().toUpperCase();
-  if (!/^[A-Z]{1,10}$/.test(sym)) return null;
+  if (!/^[A-Z0-9]{1,10}$/.test(sym)) return null;
   return sym;
 }
 
@@ -103,6 +105,14 @@ function parseFiniteNumber(raw) {
   if (raw === undefined || raw === null) return null;
   const n = Number(String(raw).trim());
   return Number.isFinite(n) ? n : null;
+}
+
+function isValidOhlcBounds(open, high, low, close) {
+  if (open <= 0 || high <= 0 || low <= 0 || close <= 0) return false;
+  if (high < low) return false;
+  if (high < open || high < close) return false;
+  if (low > open || low > close) return false;
+  return true;
 }
 
 function csvEscape(value) {
@@ -148,13 +158,84 @@ async function readBaseMetadataMap(filePath) {
   }
 }
 
-async function copyIfExists(srcPath, destPath) {
-  try {
-    await fsPromises.copyFile(srcPath, destPath);
-    return true;
-  } catch {
-    return false;
+async function countAcceptedIndexRows(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { totalRows: null, acceptedRows: null };
   }
+
+  const content = await fsPromises.readFile(filePath, "utf8");
+  const parsed = Papa.parse(content, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    transformHeader: (header) => header.replace(/^\uFEFF/, "").trim().toLowerCase(),
+  });
+
+  let totalRows = 0;
+  let acceptedRows = 0;
+
+  for (const row of parsed.data) {
+    totalRows += 1;
+    const symbol = normalizeSymbol(row?.symbol);
+    if (!symbol) continue;
+
+    const rawDate = row?.time ?? row?.date;
+    if (!rawDate || Number.isNaN(Date.parse(String(rawDate).trim()))) continue;
+
+    const open = parseFiniteNumber(row?.open);
+    const high = parseFiniteNumber(row?.high);
+    const low = parseFiniteNumber(row?.low);
+    const close = parseFiniteNumber(row?.close);
+    const volume = parseFiniteNumber(row?.volume);
+    if (open === null || high === null || low === null || close === null || volume === null) continue;
+    if (volume < 0) continue;
+    if (!isValidOhlcBounds(open, high, low, close)) continue;
+
+    acceptedRows += 1;
+  }
+
+  return { totalRows, acceptedRows };
+}
+
+function parseBooleanEnv(raw, fallback = false) {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+async function maybeExportDuckDb(outDir) {
+  const enabled = parseBooleanEnv(process.env.DATA_EXPORT_DUCKDB, false);
+  if (!enabled) return { attempted: false, success: false, outFile: null };
+
+  const scriptPath = path.join(process.cwd(), "scripts", "export_duckdb_from_runtime.mjs");
+  if (!fs.existsSync(scriptPath)) {
+    console.warn("[prepare] skip DuckDB export: script not found.");
+    return { attempted: true, success: false, outFile: null };
+  }
+
+  const outFile = path.join(outDir, "quant_data.duckdb");
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [scriptPath, "--data-dir", outDir, "--out-file", outFile],
+      {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      }
+    );
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`duckdb export exited with code ${code}`));
+    });
+  });
+
+  return { attempted: true, success: true, outFile };
 }
 
 async function main() {
@@ -167,12 +248,16 @@ async function main() {
   const outOhlcvPath = path.join(args.outDir, "ohlcv_2018_2025.csv");
   const outIndustryPath = path.join(args.outDir, "industry_by_symbol_2018_2025.csv");
   const outMetaPath = path.join(args.outDir, "stock_metadata_2018_2025.csv");
+  const outManifestPath = path.join(args.outDir, "data_manifest_2018_2025.json");
+  const outManifestAliasPath = path.join(args.outDir, "data_manifest.json");
 
   const ohlcvWriter = fs.createWriteStream(outOhlcvPath, { encoding: "utf8" });
   ohlcvWriter.write("symbol,date,open,high,low,close,volume\n");
 
   const industryBySymbol = new Map();
   const statsBySymbol = new Map();
+  const copiedFundamentals = [];
+  const fundamentalsRepairReports = [];
 
   let totalRows = 0;
   let acceptedRows = 0;
@@ -228,6 +313,14 @@ async function main() {
       const volume = parseFiniteNumber(row?.volume);
       if (open === null || high === null || low === null || close === null || volume === null) {
         recordRejection("invalid_ohlcv");
+        return;
+      }
+      if (volume < 0) {
+        recordRejection("negative_volume");
+        return;
+      }
+      if (!isValidOhlcBounds(open, high, low, close)) {
+        recordRejection("invalid_ohlc_bounds");
         return;
       }
 
@@ -392,14 +485,22 @@ async function main() {
       "HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv",
     ];
 
-    let copied = 0;
     for (const name of files) {
       const src = path.join(args.fundamentalsDir, name);
       const dest = path.join(args.outDir, name);
-      if (await copyIfExists(src, dest)) copied += 1;
+      if (!fs.existsSync(src)) continue;
+
+      const reportPath = path.join(
+        process.cwd(),
+        "artifacts",
+        `fundamentals_repair_${name.replace(/\\.csv$/i, "")}.json`
+      );
+      await repairFundamentalsCsvFile({ srcPath: src, destPath: dest, reportPath });
+      copiedFundamentals.push(name);
+      fundamentalsRepairReports.push(path.relative(process.cwd(), reportPath));
     }
 
-    if (copied === 0) {
+    if (copiedFundamentals.length === 0) {
       console.warn("[prepare] fundamentals CSVs not copied (files not found in fundamentals-dir).");
     }
   }
@@ -409,12 +510,62 @@ async function main() {
     .slice(0, 10)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
+  const indexCsvPath = path.join(args.outDir, "Market_Indices_Daily_2020_2025.csv");
+  const indexCounts = await countAcceptedIndexRows(indexCsvPath);
+  const duckdbExport = await maybeExportDuckDb(args.outDir);
+
+  const manifest = {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    source: {
+      inputOhlcv: path.resolve(args.inputOhlcv),
+      baseMetadata: args.baseMetadata ? path.resolve(args.baseMetadata) : null,
+      fundamentalsDir: args.fundamentalsDir ? path.resolve(args.fundamentalsDir) : null,
+    },
+    datasets: {
+      stockMetadata: {
+        fileName: path.basename(outMetaPath),
+        acceptedRows: statsBySymbol.size,
+        uniqueSymbols: statsBySymbol.size,
+      },
+      ohlcv: {
+        fileName: path.basename(outOhlcvPath),
+        totalRows,
+        acceptedRows,
+        uniqueSymbols: statsBySymbol.size,
+      },
+      index: {
+        fileName: path.basename(indexCsvPath),
+        totalRows: indexCounts.totalRows,
+        acceptedRows: indexCounts.acceptedRows,
+      },
+    },
+    fundamentals: {
+      copiedFiles: copiedFundamentals,
+      repairedReports: fundamentalsRepairReports,
+    },
+    duckdb: {
+      attempted: duckdbExport.attempted,
+      success: duckdbExport.success,
+      fileName: duckdbExport.outFile ? path.basename(duckdbExport.outFile) : null,
+    },
+    quality: {
+      rejectedRows,
+      rejectionReasons: Object.fromEntries(rejectionReasons.entries()),
+      industryMismatchRows: industryMismatch,
+    },
+  };
+  const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;
+  await fsPromises.writeFile(outManifestPath, manifestJson, "utf8");
+  await fsPromises.writeFile(outManifestAliasPath, manifestJson, "utf8");
 
   console.log(
     `[prepare] done. input=${args.inputOhlcv}\n` +
       `  outDir=${args.outDir}\n` +
       `  rows: accepted=${acceptedRows}/${totalRows}, rejected=${rejectedRows}\n` +
       `  industryMismatchRows=${industryMismatch}\n` +
+      `  duckdbExport=${duckdbExport.attempted ? (duckdbExport.success ? "ok" : "failed") : "skipped"}\n` +
+      `  manifest=${outManifestPath}\n` +
       (reasons ? `  topRejections=[${reasons}]\n` : "")
   );
 }

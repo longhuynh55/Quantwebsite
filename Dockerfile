@@ -3,7 +3,9 @@ FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+ARG INSTALL_DUCKDB_BINDING=false
+RUN npm ci --legacy-peer-deps \
+  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then npm install duckdb --no-save --legacy-peer-deps; fi
 
 FROM node:20-bookworm-slim AS builder
 
@@ -24,7 +26,9 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --legacy-peer-deps
+ARG INSTALL_DUCKDB_BINDING=false
+RUN npm ci --omit=dev --legacy-peer-deps \
+  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then npm install duckdb --no-save --legacy-peer-deps; fi
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
