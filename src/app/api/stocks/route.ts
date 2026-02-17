@@ -213,7 +213,7 @@ export async function GET(request: Request) {
         exchange,
         icbLevel,
         icbFilter: icb || undefined,
-        limit: limitAll ? 100 : (limit ?? undefined),
+        limit: limitAll ? 0 : (limit ?? undefined),
       });
       return NextResponse.json({
         groupBy: "icb",

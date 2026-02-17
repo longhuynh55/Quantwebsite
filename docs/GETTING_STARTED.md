@@ -233,6 +233,12 @@ INSTALL_DUCKDB_BINDING=true
 NEXT_PUBLIC_DEV_MODE=true
 ```
 
+When using Docker (`docker compose`), the project also expects a `.env.glm` file (ignored by git) for LLM provider keys. Create it from the example:
+
+```bash
+cp env.glm.example .env.glm
+```
+
 ### Next.js Configuration
 
 The `next.config.ts` file contains framework configuration:

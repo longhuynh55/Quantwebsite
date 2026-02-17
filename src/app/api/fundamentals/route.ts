@@ -90,6 +90,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No fundamentals available for this symbol" }, { status: 404 });
     }
 
+    if (period !== "latest" && !availablePeriods.includes(period)) {
+      return NextResponse.json(
+        {
+          error: `No fundamentals available for requested period ${period}.`,
+          symbol,
+          period,
+          availablePeriods,
+        },
+        { status: 404 }
+      );
+    }
+
     const resolvedPeriod = period === "latest" ? await resolveLatestPeriod(symbol, statement) : period;
     if (!resolvedPeriod) {
       return NextResponse.json({ error: "No fundamentals period available for this request" }, { status: 404 });
@@ -135,6 +147,26 @@ export async function GET(request: Request) {
     }
 
     const confidence = deriveConfidence(coverageRatio, availablePeriods.length, warnings.length);
+
+    if (missingRequestedStatements.length === requestedStatements.length) {
+      return NextResponse.json(
+        {
+          error: `No requested fundamentals statements available for ${resolvedPeriod}.`,
+          symbol,
+          period: resolvedPeriod,
+          availablePeriods,
+          coverage: {
+            requestedStatements,
+            missingRequestedStatements,
+            statementAvailability,
+            availablePeriodsCount: availablePeriods.length,
+            coverageRatio,
+          },
+          warnings,
+        },
+        { status: 404 }
+      );
+    }
 
     const balanceSheet = statement === "all" || statement === "bs" ? bsSnapshot : null;
     const incomeStatement = statement === "all" || statement === "is" ? isSnapshot : null;

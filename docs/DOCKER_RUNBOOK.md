@@ -12,6 +12,13 @@ Muc tieu la giu moi truong on dinh va tranh thao tac giet process `node` tren ho
 - Dung `docker compose` lam entrypoint chinh.
 - Khong dung `Stop-Process node -Force` tren host.
 - Chi restart/stop bang service trong compose.
+- Docker compose can co file `.env.glm` (chua API keys). Tao nhanh tu file mau `env.glm.example`:
+
+```powershell
+Copy-Item .\\env.glm.example .\\.env.glm
+```
+
+- Dien `OPENROUTER_API_KEY=...` (khuyen nghi) trong `.env.glm`. Khong commit file `.env.glm`.
 - Data CSV duoc mount tu `./public/data` vao container.
 - Neu ban cap nhat raw data (2018-2025) o thu muc `../data`, hay chay prepare de tao file runtime truoc khi run Docker:
 
@@ -30,6 +37,9 @@ Neu ban can checklist day du cho data backend + health + assistant grounding, xe
 - `docs/DATA_RELEASE_CHECKLIST.md`
 - `docs/OBSERVABILITY_SLO.md`
 - `docs/INCIDENT_RESPONSE.md`
+
+Luu y tren Windows:
+- Compose mount `../data:/workspace-data:ro`. Neu Docker Desktop chua share drive/folder chua workspace, ban can enable File Sharing (Settings -> Resources -> File Sharing) de bind mount hoat dong.
 
 ## 2. Thanh phan Docker hien co
 

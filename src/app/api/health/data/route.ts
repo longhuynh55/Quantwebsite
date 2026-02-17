@@ -15,7 +15,7 @@ import {
 import { getDataBackendStatus, type DataBackendStatus } from "@/lib/dataBackend";
 import { resolveDataDir } from "@/lib/dataDir";
 import { loadRuntimeDataManifest } from "@/lib/dataManifest";
-import { clearFundamentalsCache, getFundamentalsSourceFiles } from "@/lib/fundamentals";
+import { getFundamentalsSourceFiles } from "@/lib/fundamentals";
 import { queryDuckDbRows } from "@/lib/duckdbClient";
 
 const MIN_DATA_QUALITY_RATIO = 0.95;
@@ -23,6 +23,11 @@ const FUNDAMENTALS_CSV_FILES = [
   "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
   "HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv",
   "HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv",
+] as const;
+const FUNDAMENTALS_DUCKDB_TABLES = [
+  "fundamentals_bs",
+  "fundamentals_is",
+  "fundamentals_cf",
 ] as const;
 
 interface ProbeCheck {
@@ -166,16 +171,42 @@ async function runProbeChecks(
   }
 
   if (includeFundamentals) {
-    for (const fileName of FUNDAMENTALS_CSV_FILES) {
+    for (let idx = 0; idx < FUNDAMENTALS_CSV_FILES.length; idx += 1) {
+      const fileName = FUNDAMENTALS_CSV_FILES[idx];
       const filePath = path.join(backendStatus.dataDir, fileName);
+
+      if (backendStatus.active === "duckdb") {
+        const tableName = FUNDAMENTALS_DUCKDB_TABLES[idx];
+        const tableCheck = await probeDuckDbTable(backendStatus, tableName, true);
+        if (tableCheck.ok) {
+          checks.push(buildProbeCheck(`fundamentals:${fileName}`, true, `duckdb:${tableName}:rows_available`));
+          continue;
+        }
+
+        const readable = await isReadable(filePath);
+        if (readable) {
+          checks.push(
+            buildProbeCheck(
+              `fundamentals:${fileName}`,
+              true,
+              `duckdb_issue=${tableCheck.detail ?? "unavailable"}; fallback=csv_readable`
+            )
+          );
+        } else {
+          checks.push(
+            buildProbeCheck(
+              `fundamentals:${fileName}`,
+              false,
+              `duckdb_issue=${tableCheck.detail ?? "unavailable"}; missing fundamentals csv`
+            )
+          );
+        }
+
+        continue;
+      }
+
       const readable = await isReadable(filePath);
-      checks.push(
-        buildProbeCheck(
-          `fundamentals:${fileName}`,
-          readable,
-          readable ? "readable" : "missing fundamentals csv"
-        )
-      );
+      checks.push(buildProbeCheck(`fundamentals:${fileName}`, readable, readable ? "readable" : "missing fundamentals csv"));
     }
   }
 
@@ -232,7 +263,6 @@ export async function GET(request: Request) {
 
   if (refresh) {
     clearCache();
-    clearFundamentalsCache();
   }
 
   const dataDir = resolveDataDir();

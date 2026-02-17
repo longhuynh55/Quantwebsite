@@ -7,6 +7,7 @@ import { resolveDataDir } from "./dataDir";
 import { ensureDataBackendReady, clearDataBackendCache } from "./dataBackend";
 import { getManifestDataset, clearManifestCache } from "./dataManifest";
 import { queryDuckDbRows, clearDuckDbModuleCache } from "./duckdbClient";
+import { clearFundamentalsCache } from "./fundamentals";
 
 export interface StockMetadata {
   symbol: string;
@@ -115,6 +116,11 @@ const MANIFEST_FILE_CANDIDATES = [
 ];
 const INDEX_FILE_NAME = "Market_Indices_Daily_2020_2025.csv";
 const DUCKDB_FILE_NAME = "quant_data.duckdb";
+const FUNDAMENTALS_FILE_NAMES = [
+  "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
+  "HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv",
+  "HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv",
+] as const;
 
 let dataSourceFingerprintCache: string | null = null;
 let lastDataSourceFingerprintCheckAt = 0;
@@ -571,6 +577,7 @@ async function computeDataSourceFingerprint(): Promise<string> {
   ]);
   const indexPath = path.join(dataDir, INDEX_FILE_NAME);
   const duckdbPath = path.join(dataDir, DUCKDB_FILE_NAME);
+  const fundamentalsPaths = FUNDAMENTALS_FILE_NAMES.map((fileName) => path.join(dataDir, fileName));
 
   const [
     stockMetadataMtimeMs,
@@ -578,12 +585,18 @@ async function computeDataSourceFingerprint(): Promise<string> {
     indexMtimeMs,
     manifestMtimeMs,
     duckdbMtimeMs,
+    fundamentalsBsMtimeMs,
+    fundamentalsIsMtimeMs,
+    fundamentalsCfMtimeMs,
   ] = await Promise.all([
     resolveFileMtimeMs(stockMetadataPath),
     resolveFileMtimeMs(ohlcvPath),
     resolveFileMtimeMs(indexPath),
     resolveFileMtimeMs(manifestPath),
     resolveFileMtimeMs(duckdbPath),
+    resolveFileMtimeMs(fundamentalsPaths[0] ?? null),
+    resolveFileMtimeMs(fundamentalsPaths[1] ?? null),
+    resolveFileMtimeMs(fundamentalsPaths[2] ?? null),
   ]);
 
   return JSON.stringify({
@@ -599,6 +612,10 @@ async function computeDataSourceFingerprint(): Promise<string> {
     manifestPath,
     manifestMtimeMs,
     duckdbMtimeMs,
+    fundamentalsPaths,
+    fundamentalsBsMtimeMs,
+    fundamentalsIsMtimeMs,
+    fundamentalsCfMtimeMs,
   });
 }
 
@@ -963,6 +980,7 @@ export function clearCache(): void {
   clearDataBackendCache();
   clearDuckDbModuleCache();
   clearManifestCache();
+  clearFundamentalsCache();
 }
 
 

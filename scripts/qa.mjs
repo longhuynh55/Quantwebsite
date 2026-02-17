@@ -19,9 +19,10 @@ function logFail(name, detail = "") {
   console.error(`FAIL ${name}${detail ? ` - ${detail}` : ""}`);
 }
 
-async function fetchJson(path, { method = "GET", body, headers } = {}) {
+async function fetchJson(path, { method = "GET", body, headers, timeoutMs } = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), defaultTimeoutMs);
+  const effectiveTimeoutMs = Number.isFinite(timeoutMs) ? timeoutMs : defaultTimeoutMs;
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       method,
@@ -114,8 +115,34 @@ function validateOhlcvSeriesPoints(points) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForReadiness({ timeoutMs = 60000, intervalMs = 1000 } = {}) {
+  const startedAt = Date.now();
+  const probePath = "/api/health/data?probe=true&includeFundamentals=true";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const { response, data } = await fetchJson(probePath, { timeoutMs: 8000 });
+      if (response.ok && data?.ok === true) {
+        return;
+      }
+    } catch {
+      // ignore and retry
+    }
+
+    await sleep(intervalMs);
+  }
+
+  throw new Error(`Readiness check timed out after ${timeoutMs}ms: ${probePath}`);
+}
+
 async function run() {
   let failures = 0;
+
+  await waitForReadiness();
 
   const checks = [];
 

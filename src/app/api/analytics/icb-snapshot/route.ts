@@ -37,7 +37,9 @@ export async function GET(request: Request) {
   const dateRaw = searchParams.get("date")?.trim() ?? "";
   const exchange = parseExchange(searchParams.get("exchange"));
   const icbLevel = parseIcbLevel(searchParams.get("icbLevel"));
-  const limit = parsePositiveLimit(searchParams.get("limit"));
+  const limitRaw = searchParams.get("limit");
+  const limitAll = String(limitRaw ?? "").trim().toLowerCase() === "all";
+  const limit = limitAll ? 0 : parsePositiveLimit(limitRaw);
   const icbFilter = searchParams.get("icb")?.trim() ?? "";
   const parsedDate = dateRaw ? parseFlexibleDate(dateRaw) : null;
 
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid icbLevel. Use "2", "3", or "4".' }, { status: 400 });
   }
   if (limit === null) {
-    return NextResponse.json({ error: 'Invalid limit. Use a positive integer or omit it.' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid limit. Use a positive integer, "all", or omit it.' }, { status: 400 });
   }
   if (dateRaw && !parsedDate) {
     return NextResponse.json({ error: 'Invalid date. Use "YYYY-MM-DD" or "DD/MM/YYYY".' }, { status: 400 });

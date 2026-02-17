@@ -490,6 +490,7 @@ function normalizeExchange(raw: string | undefined): string {
 }
 
 function normalizeLimit(raw: number | undefined): number {
+  if (raw === 0) return Number.MAX_SAFE_INTEGER;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_LIMIT;
   return Math.max(1, Math.min(MAX_LIMIT, Math.trunc(raw)));
 }
