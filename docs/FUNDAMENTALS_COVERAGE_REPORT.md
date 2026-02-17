@@ -7,6 +7,22 @@ This report summarizes fundamentals-statement coverage for the active symbol uni
 - `artifacts/fundamentals_coverage_summary.json`
 - `artifacts/fundamentals_missing_by_symbol.csv`
 
+## How to generate artifacts (Docker)
+
+From `quant-website/` (Docker-only; no local Node execution):
+
+1) Ensure the dev app container exists (installs dependencies into the Docker volume):
+
+```bash
+docker compose up -d app
+```
+
+2) Run the generator script inside the container:
+
+```bash
+docker compose exec app node scripts/fundamentals_coverage_report.mjs
+```
+
 ## Data Sources
 - Active symbol universe from coverage summary artifact (`total_active_symbols`).
 - Statement-level availability from coverage summary artifact:

@@ -60,6 +60,7 @@ export interface AssistantResponse {
 }
 
 export type AssistantToolName =
+  | 'dataHealth'
   | 'stockSnapshot'
   | 'fundamentalSnapshot'
   | 'fundamentalAnalysis'
@@ -70,7 +71,9 @@ export type AssistantToolName =
   | 'riskSnapshot'
   | 'backtestSummary'
   | 'factorSnapshot'
-  | 'marketSnapshot';
+  | 'marketSnapshot'
+  | 'icbSnapshot'
+  | 'valuationRanking';
 
 export type AssistantMessageBlock =
   | {
@@ -105,6 +108,7 @@ export interface AssistantToolUsage {
   evidenceCount?: number;
   warningCount?: number;
   error?: string;
+  requestParams?: Record<string, string | number | boolean | null>;
 }
 
 export interface AssistantResponseMeta {

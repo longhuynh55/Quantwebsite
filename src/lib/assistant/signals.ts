@@ -16,6 +16,18 @@ const BANNED_SYMBOLS = new Set([
   "VNINDEX",
   "VN30",
   "VN100",
+  "ICB",
+  "PE",
+  "PB",
+  "DCF",
+  "EV",
+  "EBITDA",
+  "TOP",
+  "BCTC",
+  "BCTN",
+  "LCTT",
+  "BCDKT",
+  "KQKD",
 ]);
 
 const FUNDAMENTALS_KEYWORDS = [
@@ -32,6 +44,18 @@ const FUNDAMENTALS_KEYWORDS = [
   "balance sheet",
   "cash flow",
   "bctc",
+  "bctn",
+  "kqkd",
+  "bao cao ket qua kinh doanh",
+  "income statement",
+  "bcdkt",
+  "bang can doi ke toan",
+  "can doi ke toan",
+  "lctt",
+  "bao cao luu chuyen tien te",
+  "luu chuyen tien te",
+  "tong tai san",
+  "tong no",
 ];
 
 const BACKTEST_KEYWORDS = [
@@ -65,11 +89,50 @@ const FACTOR_KEYWORDS = [
 ];
 
 const MARKET_KEYWORDS = ["market", "thi truong", "vnindex", "gainer", "loser", "overview"];
+const HOSE_KEYWORDS = ["hose", "ho chi minh", "co phieu hose", "san hose"];
+const ICB_KEYWORDS = ["icb", "industry", "sector", "nhom nganh", "phan nhom"];
+const RANKING_KEYWORDS = ["top", "ranking", "xep hang", "cao nhat", "thap nhat", "lon nhat", "nho nhat"];
+const DATA_DEBUG_KEYWORDS = [
+  "missing data",
+  "no data",
+  "dataset unavailable",
+  "data unavailable",
+  "data backend",
+  "data manifest",
+  "manifest",
+  "data dir",
+  "file not found",
+  "khong co du lieu",
+  "ko co du lieu",
+  "thieu du lieu",
+  "loi du lieu",
+  "khong truy cap",
+  "khong doc duoc",
+  "khong tim thay",
+  "cannot access",
+  "cant access",
+  "can't access",
+];
 
 const VALUATION_KEYWORDS = ["valuation", "dcf", "fair value", "intrinsic value", "wacc", "terminal growth"];
 const SENSITIVITY_KEYWORDS = ["sensitivity", "scenario", "bull", "bear", "base case"];
 const HEALTH_KEYWORDS = ["health score", "financial health", "red flag", "quality of earnings"];
 const PEER_KEYWORDS = ["peer", "comparable", "multiple", "p/e", "p/b"];
+const VALUATION_RANKING_KEYWORDS = [
+  "top pe",
+  "top p/e",
+  "top pb",
+  "top p/b",
+  "ev/ebitda",
+  "ev ebitda",
+  "p/e",
+  "p/b",
+  "pe",
+  "pb",
+  "dinh gia cao",
+  "dinh gia thap",
+  "dinh gia",
+];
 
 export function collectRequiredSignals(input: {
   message: string;
@@ -77,13 +140,45 @@ export function collectRequiredSignals(input: {
   baselineOnlyMode: boolean;
 }): RequiredSignal[] {
   const messageLower = normalizeForKeywordMatch(input.message);
+  const filters = isRecord(input.contextSnapshot?.filters) ? input.contextSnapshot.filters : undefined;
+  const hasDateFilter = hasFilterValue(filters, ["date", "asOfDate", "as_of_date", "day", "from", "to"]);
+  const hasIcbFilter = hasFilterValue(filters, ["icb", "industry", "sector", "icbLevel", "icb_level"]);
+  const hasHoseFilter = hasFilterKeyword(filters, ["exchange", "market", "san"], ["hose", "ho chi minh"]);
+  const hasRankingFilter =
+    hasFilterValue(filters, ["top", "limit", "n", "size"])
+    || hasFilterKeyword(filters, ["sort", "order", "direction"], ["asc", "desc", "top", "bottom"]);
+  const hasStatementFilter = hasFilterKeyword(
+    filters,
+    ["statement", "baoCao", "reportType", "statementType"],
+    ["all", "bs", "is", "cf", "bctc", "bctn", "kqkd", "lctt", "bcdkt"]
+  );
+  const hasValuationMetricFilter = hasFilterKeyword(
+    filters,
+    ["metric", "ratio", "valuationMetric", "valuation"],
+    ["pe", "p/e", "pb", "p/b", "ev/ebitda", "ev_ebitda"]
+  );
   const hasCandidateSymbol = hasResolvableSymbol(input.message, input.contextSnapshot);
+  const asksIcb = hasAnyKeyword(messageLower, ICB_KEYWORDS);
+  const asksHoseUniverse = hasAnyKeyword(messageLower, HOSE_KEYWORDS);
+  const asksRanking = hasAnyKeyword(messageLower, RANKING_KEYWORDS);
+  const asksDataDebug = hasAnyKeyword(messageLower, DATA_DEBUG_KEYWORDS);
+  const asksFundamentals = hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS);
+  const asksValuationSignal =
+    hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
+    || hasAnyKeyword(messageLower, PEER_KEYWORDS)
+    || hasAnyKeyword(messageLower, VALUATION_RANKING_KEYWORDS)
+    || hasValuationMetricFilter;
+  const asksUniverseFilters = hasDateFilter || hasIcbFilter || hasHoseFilter;
   const signals: RequiredSignal[] = [];
 
   const pushUnique = (tool: AssistantToolName, endpoint: string) => {
     if (signals.some((item) => item.tool === tool && item.endpoint === endpoint)) return;
     signals.push({ tool, endpoint });
   };
+
+  if (asksDataDebug) {
+    pushUnique("dataHealth", "/api/health/data");
+  }
 
   if (
     (input.contextSnapshot?.page === "backtesting" && hasCandidateSymbol)
@@ -108,30 +203,41 @@ export function collectRequiredSignals(input: {
 
   if (
     (input.contextSnapshot?.page === "charts" && hasCandidateSymbol)
-    || hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS)
+    || ((asksFundamentals || hasStatementFilter) && hasCandidateSymbol)
   ) {
     pushUnique("fundamentalSnapshot", "/api/fundamentals");
   }
 
   if (!input.baselineOnlyMode) {
     if (
+      hasCandidateSymbol
+      && (
       hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
       || hasAnyKeyword(messageLower, SENSITIVITY_KEYWORDS)
+      )
     ) {
       pushUnique("valuationDcf", "/api/finance-analysis");
     }
 
-    if (hasAnyKeyword(messageLower, HEALTH_KEYWORDS)) {
+    if (hasCandidateSymbol && hasAnyKeyword(messageLower, HEALTH_KEYWORDS)) {
       pushUnique("financialHealthScore", "/api/finance-analysis");
     }
 
-    if (hasAnyKeyword(messageLower, PEER_KEYWORDS)) {
+    if (hasCandidateSymbol && hasAnyKeyword(messageLower, PEER_KEYWORDS)) {
       pushUnique("peerMultiples", "/api/finance-analysis");
     }
 
-    if (hasAnyKeyword(messageLower, SENSITIVITY_KEYWORDS)) {
+    if (hasCandidateSymbol && hasAnyKeyword(messageLower, SENSITIVITY_KEYWORDS)) {
       pushUnique("scenarioSensitivity", "/api/finance-analysis");
     }
+
+    if (asksValuationSignal && (asksRanking || asksIcb || asksHoseUniverse || hasRankingFilter || asksUniverseFilters)) {
+      pushUnique("valuationRanking", "/api/analytics/valuation-rankings");
+    }
+  }
+
+  if (asksIcb || hasIcbFilter || (asksHoseUniverse && (asksRanking || hasRankingFilter || hasDateFilter)) || (hasHoseFilter && asksValuationSignal)) {
+    pushUnique("icbSnapshot", "/api/analytics/icb-snapshot");
   }
 
   if (
@@ -158,6 +264,13 @@ export function getCandidateSymbols(message: string, contextSnapshot?: Assistant
       symbols.push(normalizeSymbol(symbol));
     }
   }
+  if (isRecord(contextSnapshot?.filters)) {
+    const filter = contextSnapshot.filters;
+    const candidates = [filter.symbol, filter.ticker, filter.stock, filter.code, filter.ma];
+    for (const candidate of candidates) {
+      symbols.push(normalizeSymbol(candidate));
+    }
+  }
 
   const matches = message.match(/\b[A-Z0-9]{3,5}\b/g) ?? [];
   for (const symbol of matches) {
@@ -166,6 +279,7 @@ export function getCandidateSymbols(message: string, contextSnapshot?: Assistant
 
   const unique = Array.from(new Set(symbols))
     .filter((symbol) => symbol.length >= 3 && symbol.length <= 5)
+    .filter((symbol) => /[A-Z]/.test(symbol))
     .filter((symbol) => !BANNED_SYMBOLS.has(symbol));
 
   return unique.slice(0, 3);
@@ -188,4 +302,38 @@ export function normalizeForKeywordMatch(value: string): string {
 function normalizeSymbol(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim().toUpperCase();
+}
+
+function hasFilterValue(
+  filters: Record<string, unknown> | undefined,
+  keys: string[]
+): boolean {
+  if (!filters) return false;
+  return keys.some((key) => {
+    const value = filters[key];
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    if (typeof value === "number") return Number.isFinite(value);
+    if (typeof value === "boolean") return value;
+    return false;
+  });
+}
+
+function hasFilterKeyword(
+  filters: Record<string, unknown> | undefined,
+  keys: string[],
+  keywords: string[]
+): boolean {
+  if (!filters) return false;
+  const values = keys
+    .map((key) => filters[key])
+    .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+    .map((value) => normalizeForKeywordMatch(String(value)));
+
+  if (values.length === 0) return false;
+  return values.some((value) => keywords.some((keyword) => value.includes(normalizeForKeywordMatch(keyword))));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

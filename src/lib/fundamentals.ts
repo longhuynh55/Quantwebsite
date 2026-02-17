@@ -20,6 +20,22 @@ interface StatementCache {
   fileName: string;
   labels: Record<string, string>;
   bySymbol: Map<string, Map<string, Record<string, FundamentalsValue>>>;
+  diagnostics: {
+    totalRows: number;
+    skippedRows: number;
+    duplicatePeriodRows: number;
+    skippedSamples: Array<Record<string, unknown>>;
+  };
+}
+
+export interface FundamentalsLoadDiagnostics {
+  statement: FundamentalsStatement;
+  source: string;
+  totalRows: number;
+  skippedRows: number;
+  duplicatePeriodRows: number;
+  skippedSamples: Array<Record<string, unknown>>;
+  generatedAt: string;
 }
 
 let bsCache: StatementCache | null = null;
@@ -237,6 +253,12 @@ function buildStatementCacheFromRows(
     fileName,
     labels,
     bySymbol,
+    diagnostics: {
+      totalRows: rows.length,
+      skippedRows,
+      duplicatePeriodRows,
+      skippedSamples,
+    },
   };
 }
 
@@ -351,6 +373,40 @@ export async function getFundamentalsSourceFiles(): Promise<Record<FundamentalsS
   // Ensure caches are loaded to validate file existence and return actual file names.
   const [bs, is, cf] = await Promise.all([loadStatement("bs"), loadStatement("is"), loadStatement("cf")]);
   return { bs: bs.fileName, is: is.fileName, cf: cf.fileName };
+}
+
+export async function getFundamentalsLoadDiagnostics(): Promise<Record<FundamentalsStatement, FundamentalsLoadDiagnostics>> {
+  const [bs, is, cf] = await Promise.all([loadStatement("bs"), loadStatement("is"), loadStatement("cf")]);
+  const now = new Date().toISOString();
+  return {
+    bs: {
+      statement: "bs",
+      source: bs.fileName,
+      totalRows: bs.diagnostics.totalRows,
+      skippedRows: bs.diagnostics.skippedRows,
+      duplicatePeriodRows: bs.diagnostics.duplicatePeriodRows,
+      skippedSamples: bs.diagnostics.skippedSamples,
+      generatedAt: now,
+    },
+    is: {
+      statement: "is",
+      source: is.fileName,
+      totalRows: is.diagnostics.totalRows,
+      skippedRows: is.diagnostics.skippedRows,
+      duplicatePeriodRows: is.diagnostics.duplicatePeriodRows,
+      skippedSamples: is.diagnostics.skippedSamples,
+      generatedAt: now,
+    },
+    cf: {
+      statement: "cf",
+      source: cf.fileName,
+      totalRows: cf.diagnostics.totalRows,
+      skippedRows: cf.diagnostics.skippedRows,
+      duplicatePeriodRows: cf.diagnostics.duplicatePeriodRows,
+      skippedSamples: cf.diagnostics.skippedSamples,
+      generatedAt: now,
+    },
+  };
 }
 
 export function clearFundamentalsCache(): void {

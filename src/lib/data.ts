@@ -62,6 +62,16 @@ export interface DataQualityReport {
   generatedAt: Date;
 }
 
+export interface DatasetLoadStatus {
+  dataset: DatasetName;
+  status: "unknown" | "ok" | "error";
+  reason?: string;
+  message?: string;
+  backend?: "csv" | "duckdb";
+  source?: string;
+  updatedAt: Date;
+}
+
 let stockMetadataCache: StockMetadata[] | null = null;
 let ohlcvCache: Map<string, OHLCV[]> | null = null;
 let indexCache: IndexData[] | null = null;
@@ -71,6 +81,43 @@ const dataQualityCache: Record<DatasetName, DataQualityReport | null> = {
   ohlcv: null,
   index: null,
 };
+
+const datasetStatusCache: Record<DatasetName, DatasetLoadStatus> = {
+  stockMetadata: {
+    dataset: "stockMetadata",
+    status: "unknown",
+    updatedAt: new Date(0),
+  },
+  ohlcv: {
+    dataset: "ohlcv",
+    status: "unknown",
+    updatedAt: new Date(0),
+  },
+  index: {
+    dataset: "index",
+    status: "unknown",
+    updatedAt: new Date(0),
+  },
+};
+
+const STOCK_METADATA_FILE_CANDIDATES = [
+  "stock_metadata_2018_2025.csv",
+  "HOSE_VERIFIED_2020_2025.csv",
+];
+const OHLCV_FILE_CANDIDATES = [
+  "HOSE_VERIFIED_OHLCV_INDUSTRY_2018_2025.csv",
+  "ohlcv_2018_2025.csv",
+  "ohlcv_enriched.csv",
+];
+const MANIFEST_FILE_CANDIDATES = [
+  "data_manifest_2018_2025.json",
+  "data_manifest.json",
+];
+const INDEX_FILE_NAME = "Market_Indices_Daily_2020_2025.csv";
+const DUCKDB_FILE_NAME = "quant_data.duckdb";
+
+let dataSourceFingerprintCache: string | null = null;
+let lastDataSourceFingerprintCheckAt = 0;
 
 function success<T>(value: T): ValidationResult<T> {
   return { ok: true, value };
@@ -133,7 +180,48 @@ function buildQualityReport<T>(
   return report;
 }
 
-function emitLoadFailureReport(dataset: DatasetName, reason: string): DataQualityReport {
+function setDatasetStatusSuccess(
+  dataset: DatasetName,
+  backend: "csv" | "duckdb",
+  source: string
+): void {
+  datasetStatusCache[dataset] = {
+    dataset,
+    status: "ok",
+    backend,
+    source,
+    updatedAt: new Date(),
+  };
+}
+
+function setDatasetStatusFailure(
+  dataset: DatasetName,
+  reason: string,
+  backend: "csv" | "duckdb",
+  source: string,
+  message?: string
+): void {
+  datasetStatusCache[dataset] = {
+    dataset,
+    status: "error",
+    reason,
+    message,
+    backend,
+    source,
+    updatedAt: new Date(),
+  };
+}
+
+function emitLoadFailureReport(
+  dataset: DatasetName,
+  reason: string,
+  options: {
+    backend: "csv" | "duckdb";
+    source: string;
+    message?: string;
+  }
+): DataQualityReport {
+  setDatasetStatusFailure(dataset, reason, options.backend, options.source, options.message);
   const report = buildQualityReport(dataset, {
     totalRows: 0,
     acceptedRows: 0,
@@ -464,6 +552,77 @@ async function resolveFirstExistingFile(dataDir: string, candidates: string[]): 
   return null;
 }
 
+async function resolveFileMtimeMs(filePath: string | null): Promise<number> {
+  if (!filePath) return 0;
+  try {
+    const stats = await fsPromises.stat(filePath);
+    return Number.isFinite(stats.mtimeMs) ? Math.trunc(stats.mtimeMs) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function computeDataSourceFingerprint(): Promise<string> {
+  const dataDir = getDataDir();
+  const [stockMetadataPath, ohlcvPath, manifestPath] = await Promise.all([
+    resolveFirstExistingFile(dataDir, STOCK_METADATA_FILE_CANDIDATES),
+    resolveFirstExistingFile(dataDir, OHLCV_FILE_CANDIDATES),
+    resolveFirstExistingFile(dataDir, MANIFEST_FILE_CANDIDATES),
+  ]);
+  const indexPath = path.join(dataDir, INDEX_FILE_NAME);
+  const duckdbPath = path.join(dataDir, DUCKDB_FILE_NAME);
+
+  const [
+    stockMetadataMtimeMs,
+    ohlcvMtimeMs,
+    indexMtimeMs,
+    manifestMtimeMs,
+    duckdbMtimeMs,
+  ] = await Promise.all([
+    resolveFileMtimeMs(stockMetadataPath),
+    resolveFileMtimeMs(ohlcvPath),
+    resolveFileMtimeMs(indexPath),
+    resolveFileMtimeMs(manifestPath),
+    resolveFileMtimeMs(duckdbPath),
+  ]);
+
+  return JSON.stringify({
+    dataDir,
+    dataBackend: String(process.env.DATA_BACKEND ?? "auto").trim().toLowerCase(),
+    duckdbPath: String(process.env.DATA_DUCKDB_PATH ?? "").trim().toLowerCase(),
+    stockMetadataPath,
+    stockMetadataMtimeMs,
+    ohlcvPath,
+    ohlcvMtimeMs,
+    indexPath,
+    indexMtimeMs,
+    manifestPath,
+    manifestMtimeMs,
+    duckdbMtimeMs,
+  });
+}
+
+async function ensureRuntimeDataFreshness(): Promise<void> {
+  const now = Date.now();
+  const checkIntervalMs = Math.max(1000, parseIntegerEnv(process.env.DATA_CACHE_REFRESH_CHECK_MS, 5000));
+  if (now - lastDataSourceFingerprintCheckAt < checkIntervalMs) return;
+
+  lastDataSourceFingerprintCheckAt = now;
+  const fingerprint = await computeDataSourceFingerprint();
+
+  if (dataSourceFingerprintCache === null) {
+    dataSourceFingerprintCache = fingerprint;
+    return;
+  }
+
+  if (dataSourceFingerprintCache !== fingerprint) {
+    console.info("[data-cache] Detected runtime data source change. Clearing in-memory caches.");
+    clearCache();
+    dataSourceFingerprintCache = fingerprint;
+    lastDataSourceFingerprintCheckAt = now;
+  }
+}
+
 async function loadStockMetadataFromDuckDb(duckdbPath: string): Promise<StockMetadata[]> {
   const rows = await queryDuckDbRows(
     duckdbPath,
@@ -474,6 +633,7 @@ async function loadStockMetadataFromDuckDb(duckdbPath: string): Promise<StockMet
   await enforceManifestRowsGate("stockMetadata", parseResult.acceptedRows);
   const report = buildQualityReport("stockMetadata", parseResult);
   logQualityReport(report);
+  setDatasetStatusSuccess("stockMetadata", "duckdb", `duckdb:${duckdbPath}:stock_metadata`);
   return parseResult.rows;
 }
 
@@ -499,6 +659,7 @@ async function loadOHLCVDataFromDuckDb(duckdbPath: string): Promise<Map<string, 
 
   const report = buildQualityReport("ohlcv", parseResult);
   logQualityReport(report);
+  setDatasetStatusSuccess("ohlcv", "duckdb", `duckdb:${duckdbPath}:ohlcv`);
   return dataMap;
 }
 
@@ -539,18 +700,17 @@ async function loadIndexDataFromDuckDb(duckdbPath: string): Promise<IndexData[]>
   const sorted = [...parseResult.rows].sort((a, b) => a.date.getTime() - b.date.getTime());
   const report = buildQualityReport("index", parseResult);
   logQualityReport(report);
+  setDatasetStatusSuccess("index", "duckdb", `duckdb:${duckdbPath}:market_index`);
   return sorted;
 }
 
 export async function loadStockMetadata(): Promise<StockMetadata[]> {
+  await ensureRuntimeDataFreshness();
   if (stockMetadataCache) return stockMetadataCache;
 
   const backend = await ensureDataBackendReady("loadStockMetadata");
   const dataDir = getDataDir();
-  const filePath = await resolveFirstExistingFile(dataDir, [
-    "stock_metadata_2018_2025.csv",
-    "HOSE_VERIFIED_2020_2025.csv",
-  ]);
+  const filePath = await resolveFirstExistingFile(dataDir, STOCK_METADATA_FILE_CANDIDATES);
 
   try {
     if (backend.active === "duckdb") {
@@ -560,14 +720,22 @@ export async function loadStockMetadata(): Promise<StockMetadata[]> {
 
     if (!filePath) {
       console.error("Stock metadata file not found in:", dataDir);
-      emitLoadFailureReport("stockMetadata", "missing_file");
+      emitLoadFailureReport("stockMetadata", "missing_file", {
+        backend: backend.active,
+        source: `csv:${dataDir}`,
+        message: "Stock metadata file not found",
+      });
       return [];
     }
 
     const content = await fsPromises.readFile(filePath, "utf-8");
     if (!content || content.trim() === "") {
       console.error("Stock metadata file is empty");
-      emitLoadFailureReport("stockMetadata", "empty_file");
+      emitLoadFailureReport("stockMetadata", "empty_file", {
+        backend: backend.active,
+        source: `csv:${filePath}`,
+        message: "Stock metadata CSV is empty",
+      });
       return [];
     }
 
@@ -578,25 +746,27 @@ export async function loadStockMetadata(): Promise<StockMetadata[]> {
 
     const report = buildQualityReport("stockMetadata", parseResult);
     logQualityReport(report);
+    setDatasetStatusSuccess("stockMetadata", "csv", `csv:${filePath}`);
 
     return stockMetadataCache;
   } catch (error) {
     console.error("Failed to load stock metadata:", error instanceof Error ? error.message : "Unknown error");
-    emitLoadFailureReport("stockMetadata", getFailureReason(error));
+    emitLoadFailureReport("stockMetadata", getFailureReason(error), {
+      backend: backend.active,
+      source: filePath ? `csv:${filePath}` : `csv:${dataDir}`,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 }
 
 export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
+  await ensureRuntimeDataFreshness();
   if (ohlcvCache) return ohlcvCache;
 
   const backend = await ensureDataBackendReady("loadOHLCVData");
   const dataDir = getDataDir();
-  const filePath = await resolveFirstExistingFile(dataDir, [
-    "HOSE_VERIFIED_OHLCV_INDUSTRY_2018_2025.csv",
-    "ohlcv_2018_2025.csv",
-    "ohlcv_enriched.csv",
-  ]);
+  const filePath = await resolveFirstExistingFile(dataDir, OHLCV_FILE_CANDIDATES);
 
   try {
     if (backend.active === "duckdb") {
@@ -606,14 +776,22 @@ export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
 
     if (!filePath) {
       console.error("OHLCV data file not found in:", dataDir);
-      emitLoadFailureReport("ohlcv", "missing_file");
+      emitLoadFailureReport("ohlcv", "missing_file", {
+        backend: backend.active,
+        source: `csv:${dataDir}`,
+        message: "OHLCV file not found",
+      });
       return new Map();
     }
 
     const content = await fsPromises.readFile(filePath, "utf-8");
     if (!content || content.trim() === "") {
       console.error("OHLCV data file is empty");
-      emitLoadFailureReport("ohlcv", "empty_file");
+      emitLoadFailureReport("ohlcv", "empty_file", {
+        backend: backend.active,
+        source: `csv:${filePath}`,
+        message: "OHLCV CSV is empty",
+      });
       return new Map();
     }
 
@@ -637,11 +815,16 @@ export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
 
     const report = buildQualityReport("ohlcv", parseResult);
     logQualityReport(report);
+    setDatasetStatusSuccess("ohlcv", "csv", `csv:${filePath}`);
 
     return ohlcvCache;
   } catch (error) {
     console.error("Failed to load OHLCV data:", error instanceof Error ? error.message : "Unknown error");
-    emitLoadFailureReport("ohlcv", getFailureReason(error));
+    emitLoadFailureReport("ohlcv", getFailureReason(error), {
+      backend: backend.active,
+      source: filePath ? `csv:${filePath}` : `csv:${dataDir}`,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return new Map();
   }
 }
@@ -650,12 +833,18 @@ export async function loadOHLCVForSymbol(symbol: string): Promise<OHLCV[]> {
   if (!symbol || typeof symbol !== "string") {
     return [];
   }
+  await ensureRuntimeDataFreshness();
   const backend = await ensureDataBackendReady("loadOHLCVForSymbol");
   if (backend.active === "duckdb") {
     try {
       return await loadOHLCVForSymbolFromDuckDb(backend.duckdbPath, symbol);
     } catch (error) {
       console.error("Failed to load OHLCV symbol from DuckDB:", error instanceof Error ? error.message : "Unknown error");
+      emitLoadFailureReport("ohlcv", getFailureReason(error), {
+        backend: backend.active,
+        source: `duckdb:${backend.duckdbPath}:ohlcv`,
+        message: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -664,11 +853,12 @@ export async function loadOHLCVForSymbol(symbol: string): Promise<OHLCV[]> {
 }
 
 export async function loadIndexData(): Promise<IndexData[]> {
+  await ensureRuntimeDataFreshness();
   if (indexCache) return indexCache;
 
   const backend = await ensureDataBackendReady("loadIndexData");
   const dataDir = getDataDir();
-  const filePath = path.join(dataDir, "Market_Indices_Daily_2020_2025.csv");
+  const filePath = path.join(dataDir, INDEX_FILE_NAME);
 
   try {
     if (backend.active === "duckdb") {
@@ -678,14 +868,22 @@ export async function loadIndexData(): Promise<IndexData[]> {
 
     if (!(await fileExists(filePath))) {
       console.error("Index data file not found:", filePath);
-      emitLoadFailureReport("index", "missing_file");
+      emitLoadFailureReport("index", "missing_file", {
+        backend: backend.active,
+        source: `csv:${filePath}`,
+        message: "Market index CSV file not found",
+      });
       return [];
     }
 
     const content = await fsPromises.readFile(filePath, "utf-8");
     if (!content || content.trim() === "") {
       console.error("Index data file is empty");
-      emitLoadFailureReport("index", "empty_file");
+      emitLoadFailureReport("index", "empty_file", {
+        backend: backend.active,
+        source: `csv:${filePath}`,
+        message: "Market index CSV is empty",
+      });
       return [];
     }
 
@@ -697,11 +895,16 @@ export async function loadIndexData(): Promise<IndexData[]> {
 
     const report = buildQualityReport("index", parseResult);
     logQualityReport(report);
+    setDatasetStatusSuccess("index", "csv", `csv:${filePath}`);
 
     return indexCache;
   } catch (error) {
     console.error("Failed to load index data:", error instanceof Error ? error.message : "Unknown error");
-    emitLoadFailureReport("index", getFailureReason(error));
+    emitLoadFailureReport("index", getFailureReason(error), {
+      backend: backend.active,
+      source: `csv:${filePath}`,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 }
@@ -712,6 +915,14 @@ export function getDataQualityReport(dataset: DatasetName): DataQualityReport | 
   return {
     ...report,
     rejectionReasons: { ...report.rejectionReasons },
+  };
+}
+
+export function getDatasetLoadStatus(dataset: DatasetName): DatasetLoadStatus {
+  const status = datasetStatusCache[dataset];
+  return {
+    ...status,
+    updatedAt: new Date(status.updatedAt.getTime()),
   };
 }
 
@@ -732,6 +943,23 @@ export function clearCache(): void {
   dataQualityCache.stockMetadata = null;
   dataQualityCache.ohlcv = null;
   dataQualityCache.index = null;
+  dataSourceFingerprintCache = null;
+  lastDataSourceFingerprintCheckAt = 0;
+  datasetStatusCache.stockMetadata = {
+    dataset: "stockMetadata",
+    status: "unknown",
+    updatedAt: new Date(),
+  };
+  datasetStatusCache.ohlcv = {
+    dataset: "ohlcv",
+    status: "unknown",
+    updatedAt: new Date(),
+  };
+  datasetStatusCache.index = {
+    dataset: "index",
+    status: "unknown",
+    updatedAt: new Date(),
+  };
   clearDataBackendCache();
   clearDuckDbModuleCache();
   clearManifestCache();

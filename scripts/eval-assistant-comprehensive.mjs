@@ -304,8 +304,11 @@ async function requestGroundedCaseWithRetry(item, maxAttempts = 3) {
     const response = await requestAssistantWithRetry(item.message, item.context);
     const toolOk = hasToolStatus(response.usedTools, item.tool, "success");
     const citeOk = hasCitationForEndpoint(response.citations, item.endpoint);
-    if (toolOk && citeOk) {
-      return { response, toolOk, citeOk, attempts: attempt };
+    const extraCitationOk = item.endpointContains
+      ? hasCitationForEndpoint(response.citations, item.endpointContains)
+      : true;
+    if (toolOk && citeOk && extraCitationOk) {
+      return { response, toolOk, citeOk, extraCitationOk, attempts: attempt };
     }
 
     if (attempt < maxAttempts) {
@@ -316,7 +319,7 @@ async function requestGroundedCaseWithRetry(item, maxAttempts = 3) {
       await sleep(waitMs);
       continue;
     }
-    return { response, toolOk, citeOk, attempts: attempt };
+    return { response, toolOk, citeOk, extraCitationOk, attempts: attempt };
   }
 
   throw new Error("grounding retry exhausted");
@@ -846,10 +849,11 @@ async function run() {
         },
         {
           name: "fundamentals",
-          message: `Provide latest fundamentals for ${primarySymbol} (revenue, net income, total assets).`,
+          message: `Provide latest BCTN for ${primarySymbol} (revenue, net income).`,
           context: { page: "charts", symbol: primarySymbol },
           tool: "fundamentalSnapshot",
           endpoint: "/api/fundamentals",
+          endpointContains: "statement=is",
         },
         {
           name: "valuation",
@@ -879,6 +883,22 @@ async function run() {
           tool: "marketSnapshot",
           endpoint: "/api/market-overview",
         },
+        {
+          name: "icb_snapshot",
+          message: "Trong HOSE, lọc ngày 31/12/2025 và group theo ICB level 3, lấy top 5 nhóm theo thanh khoản.",
+          context: { page: "home" },
+          tool: "icbSnapshot",
+          endpoint: "/api/analytics/icb-snapshot",
+          endpointContains: "icbLevel=3",
+        },
+        {
+          name: "valuation_ranking",
+          message: "Trong nhóm ngân hàng HOSE ngày 31/12/2025, liệt kê top 5 cổ phiếu có P/E cao nhất.",
+          context: { page: "home" },
+          tool: "valuationRanking",
+          endpoint: "/api/analytics/valuation-rankings",
+          endpointContains: "metric=pe",
+        },
       ];
 
       const failedCases = [];
@@ -886,9 +906,10 @@ async function run() {
         const verdict = await requestGroundedCaseWithRetry(item, 3);
         const toolOk = verdict.toolOk;
         const citeOk = verdict.citeOk;
+        const extraCitationOk = verdict.extraCitationOk;
 
         counters.groundingTotal += 1;
-        if (toolOk && citeOk) {
+        if (toolOk && citeOk && extraCitationOk) {
           counters.groundingPassed += 1;
         } else {
           failedCases.push(item.name);

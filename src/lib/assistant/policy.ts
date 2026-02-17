@@ -42,6 +42,8 @@ const HIGH_RISK_TOOLS = new Set<AssistantToolName>([
   "financialHealthScore",
   "valuationDcf",
   "peerMultiples",
+  "valuationRanking",
+  "icbSnapshot",
   "scenarioSensitivity",
   "riskSnapshot",
   "backtestSummary",
@@ -76,6 +78,19 @@ const NUMERIC_KEYWORDS = [
   "health score",
   "p/e",
   "p/b",
+  "ev/ebitda",
+  "bctc",
+  "bctn",
+  "kqkd",
+  "bcdkt",
+  "lctt",
+  "bao cao tai chinh",
+  "bao cao ket qua kinh doanh",
+  "bang can doi ke toan",
+  "bao cao luu chuyen tien te",
+  "doanh thu",
+  "loi nhuan",
+  "tong tai san",
   "so lieu",
   "ti le",
   "phan tram",
@@ -164,6 +179,7 @@ function isNumericIntent(
   requiredSignals: RequiredSignal[]
 ): boolean {
   if (requiredSignals.length > 0) return true;
+  if (hasNumericFilterHints(contextSnapshot?.filters)) return true;
   if (NUMERIC_KEYWORDS.some((keyword) => messageLower.includes(keyword))) return true;
   if (/%|\b\d+(\.\d+)?\b/.test(messageLower) && HIGH_RISK_PAGES.has(contextSnapshot?.page ?? "home")) return true;
   return false;
@@ -278,6 +294,52 @@ function normalizeForKeywordMatch(value: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d");
+}
+
+function hasNumericFilterHints(filters: unknown): boolean {
+  if (!isRecord(filters)) return false;
+  const values = [
+    filters.metric,
+    filters.valuationMetric,
+    filters.statement,
+    filters.statementType,
+    filters.reportType,
+    filters.top,
+    filters.limit,
+    filters.date,
+    filters.asOfDate,
+    filters.as_of_date,
+    filters.icb,
+    filters.icbLevel,
+    filters.icb_level,
+    filters.exchange,
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => normalizeForKeywordMatch(String(value)));
+
+  if (values.length === 0) return false;
+  return values.some((value) =>
+    [
+      "pe",
+      "p/e",
+      "pb",
+      "p/b",
+      "ev/ebitda",
+      "ev_ebitda",
+      "bctc",
+      "bctn",
+      "kqkd",
+      "bcdkt",
+      "lctt",
+      "top",
+      "icb",
+      "hose",
+    ].some((keyword) => value.includes(keyword))
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): string {

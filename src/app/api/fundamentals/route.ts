@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import {
   getAvailablePeriods,
+  getFundamentalsLoadDiagnostics,
   getFundamentalsSourceFiles,
   getStatementSnapshot,
   resolveLatestPeriod,
@@ -94,8 +95,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No fundamentals period available for this request" }, { status: 404 });
     }
 
-    const [sourceFiles, bsSnapshot, isSnapshot, cfSnapshot] = await Promise.all([
+    const [sourceFiles, diagnostics, bsSnapshot, isSnapshot, cfSnapshot] = await Promise.all([
       getFundamentalsSourceFiles(),
+      getFundamentalsLoadDiagnostics(),
       getStatementSnapshot(symbol, "bs", resolvedPeriod),
       getStatementSnapshot(symbol, "is", resolvedPeriod),
       getStatementSnapshot(symbol, "cf", resolvedPeriod),
@@ -122,6 +124,15 @@ export async function GET(request: Request) {
     if (availablePeriods.length < 4) {
       warnings.push(`Only ${availablePeriods.length} fundamentals period(s) available for this symbol.`);
     }
+    for (const requested of requestedStatements) {
+      const detail = diagnostics[requested];
+      if (!detail) continue;
+      if (detail.skippedRows > 0 || detail.duplicatePeriodRows > 0) {
+        warnings.push(
+          `Data quality notice (${requested}): skipped=${detail.skippedRows}, duplicate_periods=${detail.duplicatePeriodRows}.`
+        );
+      }
+    }
 
     const confidence = deriveConfidence(coverageRatio, availablePeriods.length, warnings.length);
 
@@ -147,6 +158,7 @@ export async function GET(request: Request) {
       warnings,
       meta: {
         sourceFiles,
+        diagnostics,
         fieldNotes: "Keys are normalized from CSV headers; values are number|null|string.",
       },
     });

@@ -13,6 +13,24 @@ It focuses on four integrity checks:
 
 ## How to run
 
+### Option A (Recommended): Run via Docker (no local Python)
+
+From the workspace root (`D:\\KLTN\\Quant wwebsite`):
+
+```powershell
+docker run --rm `
+  -v "${PWD}\\data:/workspace-data:ro" `
+  -v "${PWD}\\quant-website:/app" `
+  -w /app `
+  python:3.11-slim `
+  python scripts/audit_financial_csvs.py `
+    --data-dir /workspace-data `
+    --symbols-csv /workspace-data/HOSE_VERIFIED_2020_2025.csv `
+    --artifacts-dir /app/artifacts
+```
+
+### Option B: Run via local venv (fallback)
+
 From the workspace root (`D:\\KLTN\\Quant wwebsite`):
 
 ```powershell
@@ -37,4 +55,3 @@ Each run writes timestamped artifacts under `quant-website/artifacts/`:
 
 - A high count of **malformed rows** often indicates rows that omit trailing empty columns (common when different issuer types have different field sets). The distribution file helps distinguish this from true delimiter/quoting problems.
 - Duplicate keys are evaluated on the first three columns (`ticker/yearReport/lengthReport`) because these files include both `ticker` and `symbol`, and malformed rows can shift later columns.
-

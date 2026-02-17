@@ -152,6 +152,11 @@ For faster local runs with real API key, use `ASSISTANT_EVAL_PROFILE=balanced` (
 
 Provider order is controlled by `ASSISTANT_PROVIDER_PRIORITY` (default: `openrouter,glm,fallback`).
 `docker-compose.yml` sets this value for both `app` and `app-prod`, so OpenRouter is the primary provider by default.
+Default OpenRouter model chain:
+- Primary: `OPENROUTER_MODEL=openai/gpt-oss-120b:free`
+- Secondary: `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-20b:free`
+- Tertiary (testing): `OPENROUTER_TERTIARY_MODEL=stepfun/step-3.5-flash:free`
+`docker-compose.yml` sets `ASSISTANT_OPENROUTER_ONLY=true`, so assistant calls are restricted to OpenRouter chain by default.
 Grounding tool calls use `ASSISTANT_TOOL_BASE_URL` (set in `docker-compose.yml` to `http://127.0.0.1:3000`) to avoid untrusted host/origin routing.
 If `ASSISTANT_TOOL_BASE_URL` is not set, `/api/assistant` falls back to request origin before using development fallback.
 
@@ -163,6 +168,11 @@ Use `ASSISTANT_POLICY_MODE` to control anti-hallucination enforcement in `/api/a
 - `enforce_all`: hard-block numeric claims for all intents when grounding requirements fail
 - `ASSISTANT_BASELINE_ONLY` defaults to `false`, enabling valuation/peer/health/sensitivity tools by default.
 - `ASSISTANT_EVAL_AUTH_TOKEN` and `ASSISTANT_EVAL_RATE_LIMIT_MAX` configure a dedicated eval traffic bucket (`x-assistant-eval`) for assistant evaluation scripts.
+- Model request timeout can be increased via:
+  - `GLM_REQUEST_TIMEOUT_MS` (GLM primary)
+  - `OPENROUTER_TIMEOUT_MS` (OpenRouter provider)
+  - `GLM_FALLBACK_TIMEOUT_MS` (fallback provider)
+  - Current Docker default is `90000` ms (90s) for `app` and `app-prod`.
 
 ### Data Runtime Integrity
 

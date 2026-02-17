@@ -16,6 +16,7 @@ import { evaluateAssistantPolicy } from '@/lib/assistant/policy';
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_RESPONSE_CITATIONS = 12;
+const DEFAULT_DEV_TOOL_BASE_URL = 'http://127.0.0.1:3000';
 const TRUSTED_TOOL_BASE_URL_ENV_KEYS = [
   'ASSISTANT_TOOL_BASE_URL',
   'INTERNAL_API_BASE_URL',
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const toolBaseResolution = resolveTrustedToolBaseUrl(request);
+    const toolBaseResolution = resolveTrustedToolBaseUrl();
     const metaBase = {
       requestId: '',
       groundingMode: toolBaseResolution.baseUrl ? ('enabled' as const) : ('disabled' as const),
@@ -328,7 +329,17 @@ function buildStylePrompt(preferences: AssistantPreferences): string {
 
 function buildGroundingPrompt(facts: string[], usedTools: AssistantToolUsage[]): string {
   const toolSummary = usedTools
-    .map((tool) => `${tool.name}:${tool.status}${tool.error ? `(${tool.error})` : ''}`)
+    .map((tool) => {
+      const params = tool.requestParams
+        ? Object.entries(tool.requestParams)
+            .filter(([, value]) => value !== undefined && value !== null && String(value).trim().length > 0)
+            .slice(0, 5)
+            .map(([key, value]) => `${key}=${String(value)}`)
+            .join(",")
+        : "";
+      const paramSuffix = params ? `{${params}}` : "";
+      return `${tool.name}:${tool.status}${paramSuffix}${tool.error ? `(${tool.error})` : ''}`;
+    })
     .join(', ');
 
   return [
@@ -431,7 +442,7 @@ function isAllowedPage(value: string): value is AssistantContextSnapshot['page']
   );
 }
 
-function resolveTrustedToolBaseUrl(request: NextRequest): { baseUrl?: string; source: string } {
+function resolveTrustedToolBaseUrl(): { baseUrl?: string; source: string } {
   for (const key of TRUSTED_TOOL_BASE_URL_ENV_KEYS) {
     const value = process.env[key]?.trim();
     if (!value) continue;
@@ -446,20 +457,14 @@ function resolveTrustedToolBaseUrl(request: NextRequest): { baseUrl?: string; so
     console.warn('Ignoring invalid assistant tool base URL from env', { envKey: key });
   }
 
-  const requestOrigin = normalizeBaseUrl(getRequestOrigin(request));
-  if (requestOrigin) {
+  if (process.env.NODE_ENV !== 'production') {
+    const localhostDevBaseUrl = resolveDevLocalhostBaseUrl();
     return {
-      baseUrl: requestOrigin,
-      source: 'request-origin',
+      baseUrl: localhostDevBaseUrl,
+      source: 'dev-localhost',
     };
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    return {
-      baseUrl: 'http://127.0.0.1:3000',
-      source: 'dev-fallback',
-    };
-  }
   return {
     source: 'none',
   };
@@ -472,20 +477,49 @@ function normalizeBaseUrl(value: string | undefined): string | undefined {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
     if (parsed.username || parsed.password) return undefined;
     if (parsed.search || parsed.hash) return undefined;
-    const normalizedPath = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/g, '');
+    const normalizedPath = normalizeBasePath(parsed.pathname);
+    if (normalizedPath === undefined) return undefined;
     return `${parsed.origin}${normalizedPath}`;
   } catch {
     return undefined;
   }
 }
 
-function getRequestOrigin(request: NextRequest): string | undefined {
-  try {
-    const url = new URL(request.url);
-    return `${url.origin}${url.pathname.startsWith('/') ? '' : '/'}${url.pathname}`.replace(/\/api\/assistant\/?$/i, '');
-  } catch {
+function normalizeBasePath(pathname: string): string | undefined {
+  if (!pathname || pathname === '/') return '';
+  if (!pathname.startsWith('/')) return undefined;
+
+  const normalizedPath = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/g, '');
+  if (!normalizedPath || normalizedPath === '/') return '';
+
+  const segments = normalizedPath.split('/').slice(1);
+  for (const segment of segments) {
+    if (!segment) continue;
+    try {
+      const decodedSegment = decodeURIComponent(segment);
+      if (decodedSegment === '.' || decodedSegment === '..') return undefined;
+      if (decodedSegment.includes('/') || decodedSegment.includes('\\')) return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return normalizedPath;
+}
+
+function resolveDevLocalhostBaseUrl(): string {
+  const port = normalizePort(process.env.PORT);
+  if (!port) return DEFAULT_DEV_TOOL_BASE_URL;
+  return `http://127.0.0.1:${port}`;
+}
+
+function normalizePort(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) {
     return undefined;
   }
+  return String(parsed);
 }
 
 function isAuthorizedEvalRequest(request: NextRequest): boolean {

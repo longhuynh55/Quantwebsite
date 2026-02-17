@@ -120,18 +120,77 @@ function getProviderChain(): ProviderConfig[] {
 
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
   if (openRouterKey) {
+    const openRouterBaseUrl = process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1';
+    const openRouterPrimaryName = process.env.OPENROUTER_PROVIDER_NAME?.trim() || 'openrouter';
+    const openRouterPrimaryModel = process.env.OPENROUTER_MODEL?.trim() || 'openai/gpt-oss-120b:free';
+    const openRouterPrimaryTimeout = parsePositiveInt(process.env.OPENROUTER_TIMEOUT_MS, timeoutMs);
+    const openRouterPrimaryRetries = parsePositiveInt(process.env.OPENROUTER_MAX_RETRIES, Math.max(1, maxRetries - 1));
+    const openRouterPrimaryMaxTokens = parsePositiveInt(process.env.OPENROUTER_MAX_TOKENS, maxTokens);
+    const openRouterPrimaryRetryBaseDelay = parsePositiveInt(
+      process.env.OPENROUTER_RETRY_BASE_DELAY_MS,
+      retryBaseDelayMs
+    );
+
     providers.push({
       source: 'openrouter',
-      name: process.env.OPENROUTER_PROVIDER_NAME?.trim() || 'openrouter',
-      baseUrl: process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1',
-      model: process.env.OPENROUTER_MODEL?.trim() || 'openai/gpt-oss-120b:free',
+      name: openRouterPrimaryName,
+      baseUrl: openRouterBaseUrl,
+      model: openRouterPrimaryModel,
       apiKey: openRouterKey,
       extraHeaders: buildOpenRouterHeaders(),
-      timeoutMs: parsePositiveInt(process.env.OPENROUTER_TIMEOUT_MS, timeoutMs),
-      maxRetries: parsePositiveInt(process.env.OPENROUTER_MAX_RETRIES, Math.max(1, maxRetries - 1)),
-      maxTokens: parsePositiveInt(process.env.OPENROUTER_MAX_TOKENS, maxTokens),
-      retryBaseDelayMs: parsePositiveInt(process.env.OPENROUTER_RETRY_BASE_DELAY_MS, retryBaseDelayMs),
+      timeoutMs: openRouterPrimaryTimeout,
+      maxRetries: openRouterPrimaryRetries,
+      maxTokens: openRouterPrimaryMaxTokens,
+      retryBaseDelayMs: openRouterPrimaryRetryBaseDelay,
     });
+
+    const openRouterSecondaryModel = process.env.OPENROUTER_SECONDARY_MODEL?.trim() || 'openai/gpt-oss-20b:free';
+    if (openRouterSecondaryModel && openRouterSecondaryModel !== openRouterPrimaryModel) {
+      providers.push({
+        source: 'openrouter',
+        name: process.env.OPENROUTER_SECONDARY_PROVIDER_NAME?.trim() || `${openRouterPrimaryName}-secondary`,
+        baseUrl: openRouterBaseUrl,
+        model: openRouterSecondaryModel,
+        apiKey: openRouterKey,
+        extraHeaders: buildOpenRouterHeaders(),
+        timeoutMs: parsePositiveInt(process.env.OPENROUTER_SECONDARY_TIMEOUT_MS, openRouterPrimaryTimeout),
+        maxRetries: parsePositiveInt(process.env.OPENROUTER_SECONDARY_MAX_RETRIES, openRouterPrimaryRetries),
+        maxTokens: parsePositiveInt(process.env.OPENROUTER_SECONDARY_MAX_TOKENS, openRouterPrimaryMaxTokens),
+        retryBaseDelayMs: parsePositiveInt(
+          process.env.OPENROUTER_SECONDARY_RETRY_BASE_DELAY_MS,
+          openRouterPrimaryRetryBaseDelay
+        ),
+      });
+    }
+
+    const openRouterTertiaryModel =
+      process.env.OPENROUTER_TERTIARY_MODEL?.trim() || 'stepfun/step-3.5-flash:free';
+    if (
+      openRouterTertiaryModel &&
+      openRouterTertiaryModel !== openRouterPrimaryModel &&
+      openRouterTertiaryModel !== openRouterSecondaryModel
+    ) {
+      providers.push({
+        source: 'openrouter',
+        name: process.env.OPENROUTER_TERTIARY_PROVIDER_NAME?.trim() || `${openRouterPrimaryName}-tertiary`,
+        baseUrl: openRouterBaseUrl,
+        model: openRouterTertiaryModel,
+        apiKey: openRouterKey,
+        extraHeaders: buildOpenRouterHeaders(),
+        timeoutMs: parsePositiveInt(process.env.OPENROUTER_TERTIARY_TIMEOUT_MS, openRouterPrimaryTimeout),
+        maxRetries: parsePositiveInt(process.env.OPENROUTER_TERTIARY_MAX_RETRIES, openRouterPrimaryRetries),
+        maxTokens: parsePositiveInt(process.env.OPENROUTER_TERTIARY_MAX_TOKENS, openRouterPrimaryMaxTokens),
+        retryBaseDelayMs: parsePositiveInt(
+          process.env.OPENROUTER_TERTIARY_RETRY_BASE_DELAY_MS,
+          openRouterPrimaryRetryBaseDelay
+        ),
+      });
+    }
+  }
+
+  const forceOpenRouterOnly = String(process.env.ASSISTANT_OPENROUTER_ONLY ?? '').trim().toLowerCase();
+  if (forceOpenRouterOnly === '1' || forceOpenRouterOnly === 'true' || forceOpenRouterOnly === 'yes') {
+    return sortProvidersByPriority(providers);
   }
 
   const primaryKey = process.env.GLM_API_KEY?.trim();

@@ -484,7 +484,10 @@ For more information, refer to:
 - [README.md](../README.md) - Project overview
 - [API Documentation](./API.md) - API endpoint reference
 - [Quant Library Documentation](./QUANT_LIBRARY.md) - Quantitative functions reference
+- [Assistant Tools](./ASSISTANT_TOOLS.md) - deterministic tool grounding inventory
 - [Data Reliability Operations](./DATA_RELIABILITY_OPERATIONS.md) - backend and quality runbook
+- [Docker Runbook](./DOCKER_RUNBOOK.md) - Docker-first workflows and troubleshooting
+- [Finance Chatbot QA Plan](./FINANCE_CHATBOT_TEST_PLAN.md) - query checklists + evaluation gates
 
 ---
 

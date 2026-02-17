@@ -3,6 +3,7 @@ import fsPromises from "fs/promises";
 import { constants as fsConstants } from "fs";
 import path from "path";
 import {
+  getDatasetLoadStatus,
   getDataQualityReport,
   hasSufficientDataQuality,
   loadIndexData,
@@ -39,6 +40,14 @@ interface DatasetHealth {
   parseErrorCount: number;
   rejectionReasons: Record<string, number>;
   generatedAt: string | null;
+  loadStatus: {
+    status: "unknown" | "ok" | "error";
+    reason?: string;
+    message?: string;
+    backend?: "csv" | "duckdb";
+    source?: string;
+    updatedAt: string | null;
+  };
 }
 
 function parseBoolean(rawValue: string | null, fallback: boolean): boolean {
@@ -175,6 +184,18 @@ async function runProbeChecks(
 
 function buildDatasetHealth(dataset: DatasetName, loadedRows: number): DatasetHealth {
   const report = getDataQualityReport(dataset);
+  const loadStatus = getDatasetLoadStatus(dataset);
+  const serializedLoadStatus = {
+    status: loadStatus.status,
+    reason: loadStatus.reason,
+    message: loadStatus.message,
+    backend: loadStatus.backend,
+    source: loadStatus.source,
+    updatedAt:
+      loadStatus.updatedAt instanceof Date && !Number.isNaN(loadStatus.updatedAt.getTime())
+        ? loadStatus.updatedAt.toISOString()
+        : null,
+  };
   if (!report) {
     return {
       ok: false,
@@ -185,6 +206,7 @@ function buildDatasetHealth(dataset: DatasetName, loadedRows: number): DatasetHe
       parseErrorCount: 1,
       rejectionReasons: { report_unavailable: 1 },
       generatedAt: null,
+      loadStatus: serializedLoadStatus,
     };
   }
 
@@ -197,6 +219,7 @@ function buildDatasetHealth(dataset: DatasetName, loadedRows: number): DatasetHe
     parseErrorCount: report.parseErrorCount,
     rejectionReasons: { ...report.rejectionReasons },
     generatedAt: report.generatedAt.toISOString(),
+    loadStatus: serializedLoadStatus,
   };
 }
 

@@ -95,6 +95,15 @@ function hasBacktestCitation(citations) {
   );
 }
 
+function hasCitationForEndpoint(citations, endpointFragment) {
+  if (!Array.isArray(citations)) return false;
+  return citations.some(
+    (item) =>
+      typeof item?.endpoint === "string" &&
+      item.endpoint.includes(endpointFragment)
+  );
+}
+
 function hasToolStatus(usedTools, toolName, status) {
   if (!Array.isArray(usedTools)) return false;
   return usedTools.some((item) => item?.name === toolName && item?.status === status);
@@ -286,6 +295,57 @@ async function run() {
         );
 
         logPass(name, `symbol=${missingSymbol}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+          throw error;
+        }
+        failures += 1;
+        logFail(name, message);
+      }
+    },
+    async () => {
+      const name = "Assistant should ground valuation ranking by analytics endpoint";
+      try {
+        const prompt = "Trong nhóm ngân hàng HOSE ngày 31/12/2025, liệt kê top 5 cổ phiếu có P/E cao nhất.";
+        const assistant = await askAssistant(prompt, { page: "home" });
+        ensure(
+          hasToolStatus(assistant.usedTools, "valuationRanking", "success"),
+          "valuationRanking tool did not succeed"
+        );
+        ensure(
+          hasCitationForEndpoint(assistant.citations, "/api/analytics/valuation-rankings"),
+          "valuation ranking citation missing"
+        );
+        logPass(name);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+          throw error;
+        }
+        failures += 1;
+        logFail(name, message);
+      }
+    },
+    async () => {
+      const name = "Assistant should map BCTN shorthand to fundamentals statement";
+      try {
+        const symbol = await pickPrimarySymbol();
+        const prompt = `Cho BCTN mới nhất của ${symbol}, chỉ trả doanh thu và lợi nhuận sau thuế.`;
+        const assistant = await askAssistant(prompt, { page: "charts", symbol });
+        ensure(
+          hasToolStatus(assistant.usedTools, "fundamentalSnapshot", "success"),
+          "fundamentalSnapshot tool did not succeed"
+        );
+        ensure(
+          hasCitationForEndpoint(assistant.citations, "/api/fundamentals"),
+          "fundamentals citation missing"
+        );
+        ensure(
+          hasCitationForEndpoint(assistant.citations, "statement=is"),
+          "fundamentals statement=is citation missing"
+        );
+        logPass(name, `symbol=${symbol}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {

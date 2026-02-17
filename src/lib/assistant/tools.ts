@@ -33,6 +33,7 @@ interface ToolRunOutput {
   messageBlocks?: AssistantMessageBlock[];
   evidenceCount?: number;
   warningCount?: number;
+  requestParams?: Record<string, string | number | boolean | null>;
 }
 
 interface ToolTask {
@@ -88,6 +89,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         latencyMs: item.latencyMs,
         evidenceCount: output.evidenceCount ?? 0,
         warningCount: output.warningCount ?? 0,
+        requestParams: output.requestParams,
       });
       continue;
     }
@@ -177,6 +179,15 @@ function buildToolTasks(
   const needsBacktest = requiredToolSet.has("backtestSummary");
   const needsFactor = requiredToolSet.has("factorSnapshot");
   const needsMarket = requiredToolSet.has("marketSnapshot");
+  const needsIcbSnapshot = requiredToolSet.has("icbSnapshot");
+  const needsValuationRanking = requiredToolSet.has("valuationRanking");
+  const needsSymbolScopedSignals = needsFundamentals
+    || needsHealthScore
+    || needsValuation
+    || needsPeer
+    || needsRisk
+    || needsBacktest
+    || requiredToolSet.has("stockSnapshot");
   const needsSensitivity = requiredToolSet.has("scenarioSensitivity") || hasAnyKeyword(messageLower, [
     "sensitivity",
     "scenario",
@@ -193,14 +204,18 @@ function buildToolTasks(
   };
 
   const addTaskByName = (name: AssistantToolName) => {
+    if (name === "dataHealth") {
+      addTask(name, () => fetchDataHealth(baseUrl));
+      return;
+    }
     if (name === "stockSnapshot") {
       if (!primarySymbol) return;
-      addTask(name, () => fetchStockSnapshot(baseUrl, primarySymbol, contextSnapshot?.timeframe));
+      addTask(name, () => fetchStockSnapshot(baseUrl, primarySymbol, contextSnapshot?.timeframe, message, contextSnapshot));
       return;
     }
     if (name === "fundamentalSnapshot") {
       if (!primarySymbol) return;
-      addTask(name, () => fetchFundamentalSnapshot(baseUrl, primarySymbol));
+      addTask(name, () => fetchFundamentalSnapshot(baseUrl, primarySymbol, message, contextSnapshot));
       return;
     }
     if (name === "fundamentalAnalysis") {
@@ -244,15 +259,59 @@ function buildToolTasks(
     }
     if (name === "marketSnapshot") {
       addTask(name, () => fetchMarketSnapshot(baseUrl));
+      return;
+    }
+    if (name === "icbSnapshot") {
+      addTask(name, () => fetchIcbSnapshot(baseUrl, message, contextSnapshot));
+      return;
+    }
+    if (name === "valuationRanking") {
+      if (BASELINE_ONLY_MODE) return;
+      addTask(name, () => fetchValuationRanking(baseUrl, message, contextSnapshot));
     }
   };
 
-  if (primarySymbol) {
+  const shouldPrefetchStockSnapshot = Boolean(
+    primarySymbol
+    && (
+      needsSymbolScopedSignals
+      || (requiredSignals.length === 0 && !needsIcbSnapshot && !needsValuationRanking)
+      || contextSnapshot?.page === "charts"
+      || contextSnapshot?.page === "risk"
+      || contextSnapshot?.page === "backtesting"
+    )
+  );
+
+  if (shouldPrefetchStockSnapshot) {
     addTaskByName("stockSnapshot");
   }
 
+  const requiredPriority: AssistantToolName[] = [
+    "dataHealth",
+    "fundamentalSnapshot",
+    "valuationRanking",
+    "icbSnapshot",
+    "valuationDcf",
+    "peerMultiples",
+    "financialHealthScore",
+    "scenarioSensitivity",
+    "riskSnapshot",
+    "backtestSummary",
+    "factorSnapshot",
+    "marketSnapshot",
+    "stockSnapshot",
+    "fundamentalAnalysis",
+  ];
+  const requiredPrioritySet = new Set(requiredPriority);
+  for (const toolName of requiredPriority) {
+    if (requiredToolSet.has(toolName)) {
+      addTaskByName(toolName);
+    }
+  }
   for (const signal of requiredSignals) {
-    addTaskByName(signal.tool);
+    if (!requiredPrioritySet.has(signal.tool)) {
+      addTaskByName(signal.tool);
+    }
   }
 
   if (primarySymbol && (needsFundamentals || needsHealthScore)) {
@@ -278,15 +337,85 @@ function buildToolTasks(
   if (!primarySymbol || needsMarket) {
     addTaskByName("marketSnapshot");
   }
+  if (needsIcbSnapshot) {
+    addTaskByName("icbSnapshot");
+  }
+  if (needsValuationRanking) {
+    addTaskByName("valuationRanking");
+  }
 
   return tasks;
 }
 
-async function fetchStockSnapshot(baseUrl: string, symbol: string, timeframe?: string): Promise<ToolRunOutput> {
+async function fetchDataHealth(baseUrl: string): Promise<ToolRunOutput> {
+  const endpoint = "/api/health/data?probe=true&includeFundamentals=true";
+  const payload = await fetchJson<{
+    ok?: boolean;
+    backend?: { ok?: boolean; requested?: string; active?: string; reason?: string; dataDir?: string; duckdbPath?: string };
+    dataDir?: { path?: string; source?: string };
+    manifest?: { available?: boolean; schemaVersion?: number; generatedAt?: string | null };
+    checks?: Array<{ name?: string; ok?: boolean; detail?: string | null }>;
+  }>(baseUrl, endpoint);
+
+  const checks = Array.isArray(payload.checks) ? payload.checks : [];
+  const failing = checks.filter((check) => check && check.ok === false);
+  const manifestAvailable = payload.manifest?.available === true;
+
+  const facts: string[] = [
+    `Data readiness probe: ok=${payload.ok === true ? "true" : "false"}, backend=${String(payload.backend?.active ?? "n/a")} (requested=${String(payload.backend?.requested ?? "n/a")}, reason=${String(payload.backend?.reason ?? "n/a")}), data_dir=${String(payload.dataDir?.path ?? "n/a")} (source=${String(payload.dataDir?.source ?? "n/a")}), manifest_available=${manifestAvailable ? "true" : "false"}, checks_total=${checks.length}, checks_failed=${failing.length}.`,
+  ];
+  if (failing.length > 0) {
+    const summary = failing
+      .slice(0, 6)
+      .map((item) => `${String(item.name ?? "check")}: ${String(item.detail ?? "failed")}`)
+      .join(" | ");
+    facts.push(`Data readiness failures: ${summary}.`);
+  }
+
+  const messageBlocks: AssistantMessageBlock[] = [];
+  if (checks.length > 0) {
+    messageBlocks.push({
+      type: "table",
+      title: "Data Readiness Probe",
+      columns: ["Check", "OK", "Detail"],
+      rows: checks.slice(0, 12).map((check) => [
+        String(check?.name ?? "n/a"),
+        check?.ok === true ? "true" : "false",
+        String(check?.detail ?? ""),
+      ]),
+    });
+  }
+
+  return {
+    facts,
+    citations: [buildCitation("data-health", "Data readiness probe", endpoint)],
+    messageBlocks,
+    evidenceCount: checks.length,
+    warningCount: failing.length,
+    requestParams: {
+      probe: true,
+      includeFundamentals: true,
+    },
+  };
+}
+
+async function fetchStockSnapshot(
+  baseUrl: string,
+  symbol: string,
+  timeframe?: string,
+  message?: string,
+  contextSnapshot?: AssistantContextSnapshot
+): Promise<ToolRunOutput> {
   const limit = timeframe && /^\d+$/.test(timeframe) ? timeframe : '60';
-  const endpoint = `/api/stocks?symbol=${encodeURIComponent(symbol)}&limit=${encodeURIComponent(limit)}`;
+  const requestedDate = extractRequestedDate(message ?? "", contextSnapshot);
+  const endpoint = requestedDate
+    ? `/api/stocks?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(requestedDate)}&limit=1`
+    : `/api/stocks?symbol=${encodeURIComponent(symbol)}&limit=${encodeURIComponent(limit)}`;
   const payload = await fetchJson<{
     data?: Array<{ date?: string; close?: number; volume?: number }>;
+    requestedDate?: string;
+    asOfDate?: string;
+    exactDateMatch?: boolean;
   }>(baseUrl, endpoint);
   const series = Array.isArray(payload.data) ? payload.data : [];
   if (series.length === 0) {
@@ -295,6 +424,11 @@ async function fetchStockSnapshot(baseUrl: string, symbol: string, timeframe?: s
       citations: [buildCitation(`stock-${symbol}`, `OHLCV snapshot for ${symbol}`, endpoint, symbol)],
       evidenceCount: 0,
       warningCount: 1,
+      requestParams: {
+        symbol,
+        timeframe: limit,
+        requestedDate,
+      },
     };
   }
 
@@ -309,18 +443,29 @@ async function fetchStockSnapshot(baseUrl: string, symbol: string, timeframe?: s
       : null;
 
   const facts = [
-    `Stock snapshot ${symbol}: latest_close=${formatMaybeNumber(latestClose)}, day_change_pct=${formatMaybePercent(dayChangePct)}, latest_volume=${formatMaybeNumber(latestVolume)}, latest_date=${String(latest.date ?? 'unknown')}.`,
+    `Stock snapshot ${symbol}: latest_close=${formatMaybeNumber(latestClose)}, day_change_pct=${formatMaybePercent(dayChangePct)}, latest_volume=${formatMaybeNumber(latestVolume)}, latest_date=${String(latest.date ?? 'unknown')}${requestedDate ? `, requested_date=${payload.requestedDate ?? requestedDate}, as_of_date=${payload.asOfDate ?? String(latest.date ?? "unknown")}, exact_date_match=${payload.exactDateMatch === true ? "true" : "false"}` : ""}.`,
   ];
 
   return {
     facts,
     citations: [buildCitation(`stock-${symbol}`, `OHLCV snapshot for ${symbol}`, endpoint, symbol)],
     evidenceCount: countNumericEvidence([latestClose, dayChangePct, latestVolume]),
+    requestParams: {
+      symbol,
+      timeframe: limit,
+      requestedDate,
+    },
   };
 }
 
-async function fetchFundamentalSnapshot(baseUrl: string, symbol: string): Promise<ToolRunOutput> {
-  const endpoint = `/api/fundamentals?symbol=${encodeURIComponent(symbol)}&period=latest&statement=all`;
+async function fetchFundamentalSnapshot(
+  baseUrl: string,
+  symbol: string,
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): Promise<ToolRunOutput> {
+  const statement = extractFundamentalStatement(message, contextSnapshot);
+  const endpoint = `/api/fundamentals?symbol=${encodeURIComponent(symbol)}&period=latest&statement=${encodeURIComponent(statement)}`;
   const payload = await fetchJson<{
     period?: string;
     incomeStatement?: unknown;
@@ -332,7 +477,7 @@ async function fetchFundamentalSnapshot(baseUrl: string, symbol: string): Promis
       missingRequestedStatements?: string[];
       coverageRatio?: number;
     };
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 45_000));
 
   const incomeFields = extractStatementFields(payload.incomeStatement);
   const balanceFields = extractStatementFields(payload.balanceSheet);
@@ -346,7 +491,7 @@ async function fetchFundamentalSnapshot(baseUrl: string, symbol: string): Promis
   const warnings = normalizeWarnings(payload.warnings);
 
   const facts = [
-    `Fundamentals ${symbol}: period=${payload.period ?? 'latest'}, confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}, revenue=${formatMaybeNumber(revenue)}, net_income=${formatMaybeNumber(netIncome)}, total_assets=${formatMaybeNumber(totalAssets)}, operating_cash_flow=${formatMaybeNumber(opCashFlow)}.`,
+    `Fundamentals ${symbol}: statement=${statement}, period=${payload.period ?? 'latest'}, confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}, revenue=${formatMaybeNumber(revenue)}, net_income=${formatMaybeNumber(netIncome)}, total_assets=${formatMaybeNumber(totalAssets)}, operating_cash_flow=${formatMaybeNumber(opCashFlow)}.`,
   ];
   if (warnings.length > 0) {
     facts.push(`Fundamentals warnings ${symbol}: ${warnings.join(" | ")}`);
@@ -367,6 +512,11 @@ async function fetchFundamentalSnapshot(baseUrl: string, symbol: string): Promis
     messageBlocks,
     evidenceCount,
     warningCount: warnings.length,
+    requestParams: {
+      symbol,
+      statement,
+      period: payload.period ?? "latest",
+    },
   };
 }
 
@@ -468,6 +618,244 @@ async function fetchMarketSnapshot(baseUrl: string): Promise<ToolRunOutput> {
       toNumber(topGainer?.change),
       toNumber(topLoser?.change),
     ]),
+  };
+}
+
+async function fetchIcbSnapshot(
+  baseUrl: string,
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): Promise<ToolRunOutput> {
+  const requestedDate = extractRequestedDate(message, contextSnapshot);
+  const icbLevel = extractIcbLevel(message, contextSnapshot);
+  const limit = extractTopLimit(message, contextSnapshot, 12);
+  const icbFilter = extractIcbFilter(message, contextSnapshot);
+  const params = new URLSearchParams();
+  if (requestedDate) params.set("date", requestedDate);
+  if (icbLevel) params.set("icbLevel", icbLevel);
+  if (limit !== null) params.set("limit", String(limit));
+  if (icbFilter) params.set("icb", icbFilter);
+
+  const endpoint = `/api/analytics/icb-snapshot${params.size > 0 ? `?${params.toString()}` : ""}`;
+  const payload = await fetchJson<{
+    asOfDate?: string;
+    requestedDate?: string;
+    exchange?: string;
+    icbLevel?: string;
+    groups?: Array<{
+      rank?: number;
+      icbCode?: string | null;
+      icbName?: string;
+      symbolCount?: number;
+      pricedSymbolCount?: number;
+      exactDateMatchCount?: number;
+      avgClose?: number | null;
+      avgDayChangePct?: number | null;
+      totalVolume?: number;
+      totalTradedValueApprox?: number | null;
+      topSymbolsByValue?: string[];
+    }>;
+    totalSymbols?: number;
+    pricedSymbols?: number;
+    exactDateMatchCount?: number;
+    warnings?: string[];
+  }>(baseUrl, endpoint);
+
+  const groups = Array.isArray(payload.groups) ? payload.groups : [];
+  const warnings = normalizeWarnings(payload.warnings);
+  const topGroup = groups[0];
+  const topSymbols =
+    topGroup && Array.isArray(topGroup.topSymbolsByValue)
+      ? topGroup.topSymbolsByValue.slice(0, 5).join(", ")
+      : "n/a";
+
+  const facts: string[] = [
+    `ICB snapshot: exchange=${payload.exchange ?? "HOSE"}, icb_level=${payload.icbLevel ?? icbLevel ?? "3"}, as_of_date=${payload.asOfDate ?? "n/a"}, requested_date=${payload.requestedDate ?? requestedDate ?? "latest"}, total_symbols=${formatMaybeNumber(toNumber(payload.totalSymbols))}, priced_symbols=${formatMaybeNumber(toNumber(payload.pricedSymbols))}, group_count=${groups.length}.`,
+  ];
+  if (topGroup) {
+    facts.push(
+      `Top ICB group: name=${String(topGroup.icbName ?? "n/a")}, symbol_count=${formatMaybeNumber(toNumber(topGroup.symbolCount))}, avg_day_change=${formatMaybePercent(toNumber(topGroup.avgDayChangePct))}, top_symbols_by_value=${topSymbols}.`
+    );
+  }
+  const rankedGroupSummary = groups
+    .slice(0, 5)
+    .map((group) => {
+      const rank = formatMaybeNumber(toNumber(group.rank));
+      const groupName = String(group.icbName ?? "n/a");
+      const tradedValue = formatMaybeNumber(toNumber(group.totalTradedValueApprox));
+      const valueSymbols = Array.isArray(group.topSymbolsByValue) ? group.topSymbolsByValue.slice(0, 3).join("/") : "n/a";
+      return `#${rank} ${groupName} traded_value=${tradedValue} top_symbols=${valueSymbols}`;
+    })
+    .join("; ");
+  if (rankedGroupSummary) {
+    facts.push(`ICB top groups by traded value: ${rankedGroupSummary}.`);
+  }
+  if (warnings.length > 0) {
+    facts.push(`ICB warnings: ${warnings.join(" | ")}`);
+  }
+
+  const rows = groups.slice(0, 10).map((group) => [
+    toNumber(group.rank),
+    String(group.icbName ?? "n/a"),
+    toNumber(group.symbolCount),
+    toNumber(group.pricedSymbolCount),
+    toNumber(group.exactDateMatchCount),
+    toNumber(group.avgDayChangePct),
+    toNumber(group.totalTradedValueApprox),
+  ] as Array<string | number | null>);
+
+  const messageBlocks: AssistantMessageBlock[] = [];
+  if (rows.length > 0) {
+    messageBlocks.push({
+      type: "table",
+      title: "ICB Snapshot (HOSE)",
+      columns: [
+        "Rank",
+        "ICB Group",
+        "Symbols",
+        "Priced",
+        "Exact Date",
+        "Avg Day Change",
+        "Total Traded Value (Approx)",
+      ],
+      rows,
+    });
+  }
+  if (warnings.length > 0) {
+    messageBlocks.push({
+      type: "text",
+      title: "ICB Data Notice",
+      content: warnings.join("\n"),
+    });
+  }
+
+  return {
+    facts,
+    citations: [buildCitation("icb-snapshot", "HOSE ICB snapshot", endpoint)],
+    messageBlocks,
+    evidenceCount: rows.length,
+    warningCount: warnings.length,
+    requestParams: {
+      requestedDate,
+      icbLevel,
+      icbFilter,
+      limit,
+    },
+  };
+}
+
+async function fetchValuationRanking(
+  baseUrl: string,
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): Promise<ToolRunOutput> {
+  const requestedDate = extractRequestedDate(message, contextSnapshot);
+  const icbLevel = extractIcbLevel(message, contextSnapshot);
+  const icbFilter = extractIcbFilter(message, contextSnapshot);
+  const limit = extractTopLimit(message, contextSnapshot, 10);
+  const metric = extractValuationMetric(message, contextSnapshot);
+  const order = extractRankingOrder(message, contextSnapshot);
+  const params = new URLSearchParams();
+  if (requestedDate) params.set("date", requestedDate);
+  if (icbLevel) params.set("icbLevel", icbLevel);
+  if (icbFilter) params.set("icb", icbFilter);
+  if (limit !== null) params.set("limit", String(limit));
+  params.set("metric", metric);
+  params.set("order", order);
+
+  const endpoint = `/api/analytics/valuation-rankings?${params.toString()}`;
+  const payload = await fetchJson<{
+    asOfDate?: string;
+    requestedDate?: string;
+    metric?: string;
+    order?: string;
+    rows?: Array<{
+      rank?: number;
+      symbol?: string;
+      metricValue?: number;
+      pe?: number | null;
+      pb?: number | null;
+      evEbitda?: number | null;
+      price?: number;
+      priceDate?: string;
+      exactDateMatch?: boolean;
+      fundamentalPeriod?: string | null;
+    }>;
+    eligibleRanked?: number;
+    warnings?: string[];
+  }>(baseUrl, endpoint);
+
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const warnings = normalizeWarnings(payload.warnings);
+  const top = rows[0];
+
+  const facts: string[] = [
+    `Valuation ranking: metric=${payload.metric ?? metric}, order=${payload.order ?? order}, as_of_date=${payload.asOfDate ?? "n/a"}, requested_date=${payload.requestedDate ?? requestedDate ?? "latest"}, eligible_ranked=${formatMaybeNumber(toNumber(payload.eligibleRanked))}, returned_rows=${rows.length}.`,
+  ];
+  if (top) {
+    facts.push(
+      `Top valuation candidate: symbol=${String(top.symbol ?? "n/a")}, metric_value=${formatMaybeNumber(toNumber(top.metricValue))}, pe=${formatMaybeNumber(toNumber(top.pe))}, pb=${formatMaybeNumber(toNumber(top.pb))}, ev_ebitda=${formatMaybeNumber(toNumber(top.evEbitda))}, price_date=${String(top.priceDate ?? "n/a")}.`
+    );
+  }
+  const rankedRowSummary = rows
+    .slice(0, 5)
+    .map((row) => {
+      const rank = formatMaybeNumber(toNumber(row.rank));
+      const symbol = String(row.symbol ?? "n/a");
+      const metricValue = formatMaybeNumber(toNumber(row.metricValue));
+      const priceDate = String(row.priceDate ?? "n/a");
+      return `#${rank} ${symbol} metric=${metricValue} price_date=${priceDate}`;
+    })
+    .join("; ");
+  if (rankedRowSummary) {
+    facts.push(`Valuation ranked rows: ${rankedRowSummary}.`);
+  }
+  if (warnings.length > 0) {
+    facts.push(`Valuation ranking warnings: ${warnings.join(" | ")}`);
+  }
+
+  const tableRows = rows.slice(0, 10).map((row) => [
+    toNumber(row.rank),
+    String(row.symbol ?? "n/a"),
+    toNumber(row.metricValue),
+    toNumber(row.pe),
+    toNumber(row.pb),
+    toNumber(row.evEbitda),
+    toNumber(row.price),
+    String(row.priceDate ?? "n/a"),
+  ] as Array<string | number | null>);
+
+  const messageBlocks: AssistantMessageBlock[] = [];
+  if (tableRows.length > 0) {
+    messageBlocks.push({
+      type: "table",
+      title: "Valuation Ranking (HOSE)",
+      columns: ["Rank", "Symbol", "Metric", "P/E", "P/B", "EV/EBITDA", "Price", "Price Date"],
+      rows: tableRows,
+    });
+  }
+  if (warnings.length > 0) {
+    messageBlocks.push({
+      type: "text",
+      title: "Valuation Data Notice",
+      content: warnings.join("\n"),
+    });
+  }
+
+  return {
+    facts,
+    citations: [buildCitation("valuation-ranking", "HOSE valuation ranking", endpoint)],
+    messageBlocks,
+    evidenceCount: tableRows.length,
+    warningCount: warnings.length,
+    requestParams: {
+      requestedDate,
+      icbLevel,
+      icbFilter,
+      metric,
+      order,
+      limit,
+    },
   };
 }
 
@@ -747,9 +1135,9 @@ function normalizeCitations(
   }));
 }
 
-async function fetchJson<T>(baseUrl: string, endpoint: string): Promise<T> {
+async function fetchJson<T>(baseUrl: string, endpoint: string, timeoutMs: number = TOOL_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${trimTrailingSlash(baseUrl)}${endpoint}`, {
       method: 'GET',
@@ -857,6 +1245,164 @@ function normalizeWarnings(input: unknown): string[] {
   );
 }
 
+function extractRequestedDate(message: string, contextSnapshot?: AssistantContextSnapshot): string | null {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const filterDate =
+    normalizeDateLike(filters?.date)
+    || normalizeDateLike(filters?.asOfDate)
+    || normalizeDateLike(filters?.as_of_date)
+    || normalizeDateLike(filters?.day);
+  if (filterDate) return filterDate;
+
+  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/);
+  if (!match) return null;
+  return normalizeDateLike(match[1]);
+}
+
+function extractIcbLevel(message: string, contextSnapshot?: AssistantContextSnapshot): string | null {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const rawFilter = String(filters?.icbLevel ?? filters?.icb_level ?? "").trim();
+  if (rawFilter === "2" || rawFilter === "3" || rawFilter === "4") return rawFilter;
+
+  const match = message.toLowerCase().match(/\bicb\s*([234])\b/);
+  if (match) return match[1];
+  return "3";
+}
+
+function extractIcbFilter(message: string, contextSnapshot?: AssistantContextSnapshot): string | null {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const value = String(filters?.icb ?? filters?.industry ?? filters?.sector ?? "").trim();
+  if (value) return value.slice(0, 80);
+
+  const normalized = normalizeForKeywordMatch(message);
+  const sectorHints: Array<{ keywords: string[]; value: string }> = [
+    { keywords: ["ngan hang", "bank"], value: "ngan hang" },
+    { keywords: ["bat dong san", "real estate", "property"], value: "bat dong san" },
+    { keywords: ["chung khoan", "securities"], value: "chung khoan" },
+    { keywords: ["dau khi", "oil", "gas"], value: "dau khi" },
+    { keywords: ["ban le", "retail"], value: "ban le" },
+  ];
+  for (const hint of sectorHints) {
+    if (hint.keywords.some((keyword) => normalized.includes(keyword))) {
+      return hint.value;
+    }
+  }
+
+  return null;
+}
+
+function extractTopLimit(message: string, contextSnapshot: AssistantContextSnapshot | undefined, fallback: number): number | null {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const filterLimit = parsePositiveInt(filters?.limit, 1, 50);
+  if (filterLimit !== null) return filterLimit;
+
+  const topMatch = message.toLowerCase().match(/\btop\s*(\d{1,2})\b/);
+  if (topMatch) {
+    const parsed = Number.parseInt(topMatch[1], 10);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(50, parsed);
+  }
+  return fallback;
+}
+
+function extractFundamentalStatement(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): "all" | "bs" | "is" | "cf" {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const filterValue = normalizeForKeywordMatch(
+    String(
+      filters?.statement
+      ?? filters?.statementType
+      ?? filters?.reportType
+      ?? filters?.baoCao
+      ?? ""
+    )
+  );
+  if (["all", "bctc"].includes(filterValue)) return "all";
+  if (["bs", "bcdkt", "bang can doi ke toan", "can doi ke toan"].includes(filterValue)) return "bs";
+  if (["is", "bctn", "kqkd", "bao cao ket qua kinh doanh", "income statement"].includes(filterValue)) return "is";
+  if (["cf", "lctt", "bao cao luu chuyen tien te", "cash flow"].includes(filterValue)) return "cf";
+
+  const normalized = normalizeForKeywordMatch(message);
+  if (
+    normalized.includes("bcdkt")
+    || normalized.includes("bang can doi ke toan")
+    || normalized.includes("can doi ke toan")
+    || normalized.includes("balance sheet")
+  ) {
+    return "bs";
+  }
+  if (
+    normalized.includes("bctn")
+    || normalized.includes("kqkd")
+    || normalized.includes("bao cao ket qua kinh doanh")
+    || normalized.includes("income statement")
+  ) {
+    return "is";
+  }
+  if (
+    normalized.includes("lctt")
+    || normalized.includes("bao cao luu chuyen tien te")
+    || normalized.includes("luu chuyen tien te")
+    || normalized.includes("cash flow")
+  ) {
+    return "cf";
+  }
+  return "all";
+}
+
+function extractValuationMetric(message: string, contextSnapshot?: AssistantContextSnapshot): "pe" | "pb" | "ev_ebitda" {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const filterMetric = normalizeForKeywordMatch(String(filters?.metric ?? filters?.ratio ?? filters?.valuationMetric ?? ""));
+  if (filterMetric.includes("ev/ebitda") || filterMetric.includes("ev_ebitda") || filterMetric.includes("ev ebitda")) {
+    return "ev_ebitda";
+  }
+  if (filterMetric === "pb" || filterMetric === "p/b") return "pb";
+  if (filterMetric === "pe" || filterMetric === "p/e") return "pe";
+
+  const normalized = normalizeForKeywordMatch(message);
+  if (normalized.includes("ev/ebitda") || normalized.includes("ev ebitda")) return "ev_ebitda";
+  if (normalized.includes("p/b") || /\bpb\b/.test(normalized)) return "pb";
+  return "pe";
+}
+
+function extractRankingOrder(message: string, contextSnapshot?: AssistantContextSnapshot): "asc" | "desc" {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const filterOrder = normalizeForKeywordMatch(String(filters?.order ?? filters?.sort ?? filters?.direction ?? ""));
+  if (["asc", "ascending", "bottom", "lowest", "thap nhat"].some((key) => filterOrder.includes(key))) {
+    return "asc";
+  }
+  if (["desc", "descending", "top", "highest", "cao nhat"].some((key) => filterOrder.includes(key))) {
+    return "desc";
+  }
+
+  const normalized = normalizeForKeywordMatch(message);
+  if (
+    normalized.includes("thap nhat")
+    || normalized.includes("lowest")
+    || normalized.includes("smallest")
+    || normalized.includes("bottom")
+  ) {
+    return "asc";
+  }
+  return "desc";
+}
+
+function normalizeDateLike(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
+  return null;
+}
+
+function parsePositiveInt(value: unknown, min: number, max: number): number | null {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < min) return null;
+  return Math.min(max, parsed);
+}
+
 function countNumericEvidence(values: Array<number | null>): number {
   let count = 0;
   for (const value of values) {
@@ -905,10 +1451,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function resolveToolTimeoutMs(): number {
-  const fallback = 12_000;
+  const fallback = 15_000;
   const raw = String(process.env.ASSISTANT_TOOL_TIMEOUT_MS ?? "").trim();
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.max(3_000, Math.min(parsed, 30_000));
+  return Math.max(3_000, Math.min(parsed, 60_000));
 }

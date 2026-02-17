@@ -252,6 +252,7 @@ Neu muon data loader fail-fast khi parse/quality co van de:
   - `DATA_BACKEND=auto|csv|duckdb` (`auto` se dung DuckDB neu co `quant_data.duckdb` va binding hop le, neu khong fallback CSV)
   - `DATA_DUCKDB_PATH` de override duong dan file DuckDB
   - `DATA_BACKEND_STRICT=true` de fail-fast neu chon `duckdb` nhung thieu artifact/binding
+  - Luu y: profile `prod` trong `docker-compose.yml` hien default `DATA_BACKEND=duckdb` + `DATA_BACKEND_STRICT=true` (can co `public/data/quant_data.duckdb` + Node `duckdb` binding)
   - `DATA_EXPORT_DUCKDB=true` de auto-export DuckDB artifact khi chay `npm run data:prepare:2018_2025`
   - `npm run data:export:duckdb` uu tien Node `duckdb` binding, neu khong co se fallback sang Docker image `duckdb/duckdb`
   - `INSTALL_DUCKDB_BINDING=true` (default trong `docker-compose.yml`) de tu dong cai Node `duckdb` binding trong `app` / `app-prod`; dat `false` neu muon bo qua cai binding
@@ -267,6 +268,16 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 
 - Mac dinh trong `docker-compose.yml`: `ASSISTANT_BASELINE_ONLY=false` de bat valuation/peer/health/sensitivity tools.
 - App uu tien `ASSISTANT_TOOL_BASE_URL`; neu khong co se fallback theo request origin (vi du `http://localhost:3010`) roi moi toi dev fallback.
+- Cau hinh model OpenRouter mac dinh:
+  - `OPENROUTER_MODEL=openai/gpt-oss-120b:free` (primary)
+  - `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-20b:free` (secondary)
+  - `ASSISTANT_OPENROUTER_ONLY=true` (dang bat mac dinh trong compose) de chi dung chain OpenRouter.
+- Neu model bi timeout som, tang timeout request:
+  - `GLM_REQUEST_TIMEOUT_MS` (GLM primary)
+  - `OPENROUTER_TIMEOUT_MS` (OpenRouter)
+  - `GLM_FALLBACK_TIMEOUT_MS` (fallback provider)
+  - (Tool grounding) `ASSISTANT_TOOL_TIMEOUT_MS` (timeout khi goi cac API local nhu `/api/analytics/*`, `/api/fundamentals`, ...)
+  - Gia tri compose mac dinh hien tai: `90000` ms.
 - Eval scripts gui header `x-assistant-eval=true`; de an toan nen dat cung mot token cho app + smoke:
   - `ASSISTANT_EVAL_AUTH_TOKEN`
 - Neu eval hay cham `429`, tang bucket rieng cho eval:
