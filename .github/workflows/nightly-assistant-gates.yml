@@ -39,9 +39,46 @@ jobs:
       - name: Start app container
         run: docker compose up -d --build app
 
-      - name: Health probe fail-fast
+      - name: Health probe warmup and retry
+        env:
+          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&includeFundamentals=false
+          HEALTH_LABEL: nightly
+          HEALTH_WARMUP_SECONDS: "5"
+          HEALTH_MAX_ATTEMPTS: "30"
+          HEALTH_RETRY_INTERVAL_SECONDS: "2"
         run: |
-          node -e "fetch('http://localhost:3010/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('nightly_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
+          sleep "${HEALTH_WARMUP_SECONDS}"
+          node <<'EOF'
+          const url = process.env.HEALTH_URL;
+          const label = process.env.HEALTH_LABEL || "health";
+          const maxAttempts = Number(process.env.HEALTH_MAX_ATTEMPTS || 30);
+          const retryIntervalMs = Number(process.env.HEALTH_RETRY_INTERVAL_SECONDS || 2) * 1000;
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          (async () => {
+            for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+              try {
+                const response = await fetch(url);
+                const body = await response.json().catch(() => null);
+                if (response.ok && body?.ok) {
+                  console.log(JSON.stringify({ probe: label, status: "ok", attempt }));
+                  process.exit(0);
+                }
+                console.error(JSON.stringify({ probe: label, status: "retry", attempt, httpStatus: response.status, body }));
+              } catch (error) {
+                console.error(JSON.stringify({ probe: label, status: "retry", attempt, error: String(error) }));
+              }
+
+              if (attempt < maxAttempts) {
+                await sleep(retryIntervalMs);
+              }
+            }
+
+            console.error(JSON.stringify({ probe: label, status: "failed", attempts: maxAttempts }));
+            process.exit(1);
+          })();
+          EOF
 
       - name: Assistant routing matrix stability gate
         run: pnpm run eval:assistant:routing:stable

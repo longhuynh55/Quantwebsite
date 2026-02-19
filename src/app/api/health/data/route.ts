@@ -17,8 +17,11 @@ import { resolveDataDir } from "@/lib/dataDir";
 import { loadRuntimeDataManifest } from "@/lib/dataManifest";
 import { getFundamentalsSourceFiles } from "@/lib/fundamentals";
 import { queryDuckDbRows } from "@/lib/duckdbClient";
+import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 
 const MIN_DATA_QUALITY_RATIO = 0.95;
+const RATE_LIMIT_MAX = 20;
+const REFRESH_AUTH_HEADER = "x-health-refresh-token";
 const FUNDAMENTALS_CSV_FILES = [
   "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
   "HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv",
@@ -61,6 +64,13 @@ function parseBoolean(rawValue: string | null, fallback: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return fallback;
+}
+
+function hasAuthorizedRefreshToken(request: Request): boolean {
+  const expectedToken = String(process.env.HEALTH_DATA_ADMIN_TOKEN ?? "").trim();
+  if (!expectedToken) return false;
+  const providedToken = String(request.headers.get(REFRESH_AUTH_HEADER) ?? "").trim();
+  return providedToken.length > 0 && providedToken === expectedToken;
 }
 
 async function isReadable(filePath: string): Promise<boolean> {
@@ -260,6 +270,31 @@ export async function GET(request: Request) {
   const probe = parseBoolean(searchParams.get("probe"), false);
   const refresh = parseBoolean(searchParams.get("refresh"), false);
   const includeFundamentals = parseBoolean(searchParams.get("includeFundamentals"), true);
+  const clientId = getClientIdentifier(request);
+  const hasRefreshAuth = hasAuthorizedRefreshToken(request);
+  const skipRateLimit = hasRefreshAuth;
+  const rateLimit = skipRateLimit
+    ? { allowed: true, remaining: Infinity, resetTime: Date.now() }
+    : checkRateLimit(createRateLimitKey("api/health/data", clientId), RATE_LIMIT_MAX, 60000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
+    );
+  }
+
+  if (refresh && !hasRefreshAuth) {
+    const hasConfiguredToken = String(process.env.HEALTH_DATA_ADMIN_TOKEN ?? "").trim().length > 0;
+    return NextResponse.json(
+      {
+        ok: false,
+        error: hasConfiguredToken
+          ? `Unauthorized refresh request. Provide ${REFRESH_AUTH_HEADER} header.`
+          : "Refresh is disabled. Set HEALTH_DATA_ADMIN_TOKEN to enable cache refresh.",
+      },
+      { status: hasConfiguredToken ? 403 : 503 }
+    );
+  }
 
   if (refresh) {
     clearCache();

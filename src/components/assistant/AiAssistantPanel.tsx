@@ -139,7 +139,8 @@ export function AiAssistantPanel() {
   }, [experienceLevel]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) return;
 
     setError(null);
     const requestId =
@@ -148,15 +149,23 @@ export function AiAssistantPanel() {
         : `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const startedAt = Date.now();
     const contextSnapshot = buildContextSnapshot();
+    const storeMessages = useAssistantStore.getState().messages;
+    const conversationHistory = [
+      ...storeMessages.slice(-9).map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+      { role: 'user' as const, content: trimmedContent },
+    ];
     logUiEvent('info', 'assistant.request.started', {
       requestId,
       page: contextSnapshot.page,
-      messageChars: content.length,
+      messageChars: trimmedContent.length,
       uiMode,
     });
 
     // Add user message
-    addMessage({ role: 'user', content });
+    addMessage({ role: 'user', content: trimmedContent });
 
     // Set loading state
     setLoading(true);
@@ -169,8 +178,8 @@ export function AiAssistantPanel() {
           'x-trace-id': requestId,
         },
         body: JSON.stringify({
-          message: content,
-          conversationHistory: messages.slice(-10),
+          message: trimmedContent,
+          conversationHistory,
           contextSnapshot,
           preferences: buildPreferences(),
           uiMode,
@@ -233,7 +242,7 @@ export function AiAssistantPanel() {
     } finally {
       setLoading(false);
     }
-  }, [messages, addMessage, setLoading, buildContextSnapshot, buildPreferences, uiMode]);
+  }, [addMessage, setLoading, buildContextSnapshot, buildPreferences, uiMode]);
 
   const switchToCopilotMode = () => {
     setUIMode('copilot');

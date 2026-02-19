@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo, useCallback } from "react";
+import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Card,
@@ -92,6 +92,8 @@ function ChartsContent() {
   const [fundError, setFundError] = useState<string | null>(null);
   const [fundPeriod, setFundPeriod] = useState<string>("latest");
   const [fundSearch, setFundSearch] = useState("");
+  const fundamentalsAbortRef = useRef<AbortController | null>(null);
+  const fundamentalsRequestSeqRef = useRef(0);
 
   // Initialize symbol from URL params
   useEffect(() => {
@@ -171,16 +173,26 @@ function ChartsContent() {
   }, [searchInput, symbol, router]);
 
   const loadFundamentals = useCallback(async (sym: string, period: string) => {
+    const requestSeq = fundamentalsRequestSeqRef.current + 1;
+    fundamentalsRequestSeqRef.current = requestSeq;
+    fundamentalsAbortRef.current?.abort();
+    const controller = new AbortController();
+    fundamentalsAbortRef.current = controller;
+
     setFundLoading(true);
     setFundError(null);
     try {
       const response = await fetch(
-        `/api/fundamentals?symbol=${encodeURIComponent(sym)}&statement=all&period=${encodeURIComponent(period)}`
+        `/api/fundamentals?symbol=${encodeURIComponent(sym)}&statement=all&period=${encodeURIComponent(period)}`,
+        { signal: controller.signal }
       );
 
       if (!response.ok) {
         const maybe = await response.json().catch(() => null);
         const msg = maybe?.error || `HTTP error! status: ${response.status}`;
+        if (requestSeq !== fundamentalsRequestSeqRef.current || controller.signal.aborted) {
+          return;
+        }
         if (response.status === 404) {
           setFundamentals(null);
           setFundError(msg);
@@ -190,16 +202,33 @@ function ChartsContent() {
       }
 
       const result: FundamentalsResponse = await response.json();
+      if (requestSeq !== fundamentalsRequestSeqRef.current || controller.signal.aborted) {
+        return;
+      }
       setFundamentals(result);
       setFundPeriod(result.period || period);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+      if (requestSeq !== fundamentalsRequestSeqRef.current || controller.signal.aborted) {
+        return;
+      }
       console.error("Failed to fetch fundamentals:", err);
       const msg = err instanceof Error ? err.message : "Failed to load fundamentals";
       setFundamentals(null);
       setFundError(msg);
     } finally {
-      setFundLoading(false);
+      if (requestSeq === fundamentalsRequestSeqRef.current) {
+        setFundLoading(false);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      fundamentalsAbortRef.current?.abort();
+    };
   }, []);
 
   // Fetch fundamentals when symbol changes (separate from OHLCV time range).

@@ -19,6 +19,24 @@ const PLATFORM_IP_HEADERS = [
   "x-azure-clientip",
 ];
 const GENERIC_PROXY_IP_HEADERS = ["x-real-ip", "x-forwarded-for"];
+const FALLBACK_FINGERPRINT_HEADERS = [
+  "user-agent",
+  "accept-language",
+  "accept",
+  "accept-encoding",
+  "sec-ch-ua",
+  "sec-ch-ua-platform",
+  "sec-ch-ua-platform-version",
+  "sec-ch-ua-mobile",
+  "sec-ch-ua-model",
+  "sec-ch-ua-arch",
+  "sec-ch-ua-bitness",
+  "sec-fetch-site",
+  "sec-fetch-mode",
+  "sec-fetch-dest",
+  "dnt",
+  "upgrade-insecure-requests",
+] as const;
 
 // Cleanup old entries every minute
 if (typeof setInterval !== 'undefined') {
@@ -130,39 +148,65 @@ export function getClientIdentifier(request: Request): string {
     }
   }
 
-  // Fallback: Use a unique identifier based on available request info
-  // This prevents all unknown clients from sharing one static bucket.
-  const userAgent = request.headers.get('user-agent') || '';
-  const acceptLanguage = request.headers.get('accept-language') || '';
-  const accept = request.headers.get('accept') || '';
-  const secChUa = request.headers.get('sec-ch-ua') || '';
-  const secChUaPlatform = request.headers.get('sec-ch-ua-platform') || '';
-  const acceptEncoding = request.headers.get('accept-encoding') || '';
-
-  // Create a hash-like identifier from available headers
-  const fingerprint = [
-    userAgent,
-    acceptLanguage,
-    accept,
-    secChUa,
-    secChUaPlatform,
-    acceptEncoding,
-  ].join("|");
+  // Fallback: build a richer deterministic fingerprint when no trustworthy client IP is available.
+  const fingerprint = buildFallbackFingerprint(request);
   const fallbackId = `fallback-${hashString(fingerprint)}`;
   return fallbackId;
 }
 
 /**
- * Simple string hash function for creating fallback identifiers
+ * Build a stable fallback fingerprint from low-risk request metadata.
+ * Includes extra client hints to reduce collisions across unrelated clients.
+ */
+function buildFallbackFingerprint(request: Request): string {
+  const parts: string[] = [];
+  for (const headerName of FALLBACK_FINGERPRINT_HEADERS) {
+    parts.push(`${headerName}=${normalizeHeaderValue(request.headers.get(headerName), 320)}`);
+  }
+
+  parts.push(`originHost=${extractUrlHost(request.headers.get("origin"))}`);
+  parts.push(`refererHost=${extractUrlHost(request.headers.get("referer"))}`);
+  parts.push(`requestHost=${extractUrlHost(request.url)}`);
+
+  return parts.join("|");
+}
+
+function normalizeHeaderValue(value: string | null, maxLength: number): string {
+  if (!value) return "";
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, maxLength);
+}
+
+function extractUrlHost(rawUrl: string | null): string {
+  if (!rawUrl) return "";
+  try {
+    return new URL(rawUrl).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 64-bit-like string hash (two independent 32-bit lanes) for low collision rate.
  */
 function hashString(str: string): string {
-  let hash = 0;
+  let hashA = 0x811c9dc5;
+  let hashB = 0x1b873593;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    hashA ^= char;
+    hashA = Math.imul(hashA, 0x01000193);
+    hashB ^= char;
+    hashB = Math.imul(hashB, 0x5bd1e995);
   }
-  return Math.abs(hash).toString(36);
+
+  hashA ^= hashA >>> 16;
+  hashB ^= hashB >>> 13;
+  const partA = (hashA >>> 0).toString(36).padStart(7, "0");
+  const partB = (hashB >>> 0).toString(36).padStart(7, "0");
+  return `${partA}${partB}`;
 }
 
 /**

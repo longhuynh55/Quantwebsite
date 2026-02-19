@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDataQualityReport, hasSufficientDataQuality, loadOHLCVForSymbol } from "@/lib/data";
+import { getDataQualityReport, getDatasetLoadStatus, hasSufficientDataQuality, loadOHLCVForSymbol } from "@/lib/data";
 import {
   BacktestConfigInput,
   STRATEGIES,
@@ -12,6 +12,7 @@ import {
   validateStrategyParams,
 } from "@/lib/quant/backtest";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { createLogger, createTraceId, toErrorMeta, type AppLogger } from "@/lib/logger";
 
 const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const MIN_CAPITAL = 1;
@@ -20,6 +21,7 @@ const DEFAULT_CAPITAL = 100000;
 const RATE_LIMIT_MAX = 30;
 const MIN_DATA_QUALITY_RATIO = 0.95;
 const MIN_DATA_POINTS = 30;
+const backtestingApiLogger = createLogger("api.backtesting");
 const STRATEGY_PARAM_KEYS = [
   "shortPeriod",
   "longPeriod",
@@ -123,6 +125,12 @@ async function executeBacktest(payload: {
   }
 
   if (data.length === 0) {
+    const ohlcvLoadStatus = getDatasetLoadStatus("ohlcv");
+    if (ohlcvLoadStatus.status === "error") {
+      const reason = ohlcvLoadStatus.reason ?? "unavailable";
+      const message = ohlcvLoadStatus.message ?? `OHLCV dataset is unavailable (${reason}).`;
+      return NextResponse.json({ error: message }, { status: 503 });
+    }
     return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
   }
 
@@ -172,10 +180,14 @@ async function executeBacktest(payload: {
   });
 }
 
-function getRateLimitedResponse(request: Request): NextResponse | null {
+function getRateLimitedResponse(request: Request, logger?: AppLogger): NextResponse | null {
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/backtesting", clientId), RATE_LIMIT_MAX, 60000);
   if (rateLimit.allowed) return null;
+  logger?.warn("rate_limit.blocked", {
+    remaining: rateLimit.remaining,
+    resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+  });
 
   return NextResponse.json(
     { error: "Too many requests. Please try again later." },
@@ -184,13 +196,19 @@ function getRateLimitedResponse(request: Request): NextResponse | null {
 }
 
 export async function GET(request: Request) {
-  const limited = getRateLimitedResponse(request);
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("backtest");
+  const logger = backtestingApiLogger.child({ traceId, method: "GET" });
+  const limited = getRateLimitedResponse(request, logger);
   if (limited) return limited;
 
+  let symbolForLog: string | null = null;
+  let strategyForLog: string | null = null;
   try {
     const { searchParams } = new URL(request.url);
 
     const symbol = searchParams.get("symbol")?.trim().toUpperCase();
+    symbolForLog = symbol ?? null;
     if (!symbol) {
       return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
     }
@@ -199,6 +217,7 @@ export async function GET(request: Request) {
     }
 
     const strategyRaw = searchParams.get("strategy");
+    strategyForLog = strategyRaw ?? null;
     if (!strategyRaw) {
       return NextResponse.json({ error: "Strategy is required" }, { status: 400 });
     }
@@ -234,13 +253,21 @@ export async function GET(request: Request) {
       rawConfig,
     });
   } catch (error) {
-    console.error("Backtest API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      symbol: symbolForLog,
+      strategy: strategyForLog,
+    });
     return NextResponse.json({ error: "Failed to run backtest" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  const limited = getRateLimitedResponse(request);
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("backtest");
+  const logger = backtestingApiLogger.child({ traceId, method: "POST" });
+  const limited = getRateLimitedResponse(request, logger);
   if (limited) return limited;
 
   const contentType = request.headers.get("content-type");
@@ -259,17 +286,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  let symbolForLog: string | null = null;
+  let strategyForLog: string | null = null;
   try {
     const symbolRaw = body.symbol;
     if (typeof symbolRaw !== "string" || symbolRaw.trim() === "") {
       return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
     }
     const symbol = symbolRaw.trim().toUpperCase();
+    symbolForLog = symbol;
     if (!VALID_SYMBOL_REGEX.test(symbol)) {
       return NextResponse.json({ error: "Invalid symbol format. Must be 1-10 uppercase letters or digits." }, { status: 400 });
     }
 
     const strategyRaw = body.strategy;
+    strategyForLog = typeof strategyRaw === "string" ? strategyRaw : null;
     if (typeof strategyRaw !== "string" || strategyRaw.trim() === "") {
       return NextResponse.json({ error: "Strategy is required" }, { status: 400 });
     }
@@ -299,7 +330,12 @@ export async function POST(request: Request) {
       rawConfig,
     });
   } catch (error) {
-    console.error("Backtest API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      symbol: symbolForLog,
+      strategy: strategyForLog,
+    });
     return NextResponse.json({ error: "Failed to run backtest" }, { status: 500 });
   }
 }
