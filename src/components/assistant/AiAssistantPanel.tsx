@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { X, Trash2, Bot, AlertCircle } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { X, Trash2, Bot, AlertCircle, ShieldCheck, Database, ScrollText, PanelTop, Table2 } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAssistantStore } from '@/lib/stores/assistantStore';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -11,8 +11,17 @@ import { TypingIndicator } from './TypingIndicator';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AssistantContextSnapshot, AssistantResponse, AssistantPreferences } from '@/types/assistant';
+import { logUiEvent } from '@/lib/frontendTelemetry';
+
+type AssistantUiError = {
+  message: string;
+  requestId: string;
+  traceSummary?: string;
+  recoveryHint: string;
+};
 
 export function AiAssistantPanel() {
+  const router = useRouter();
   const {
     isOpen,
     closePanel,
@@ -22,10 +31,12 @@ export function AiAssistantPanel() {
     clearMessages,
     setLoading,
     experienceLevel,
+    uiMode,
+    setUIMode,
   } = useAssistantStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AssistantUiError | null>(null);
   const pathname = usePathname();
 
   // Scroll to bottom when new messages arrive
@@ -105,13 +116,14 @@ export function AiAssistantPanel() {
 
     return {
       page,
+      uiMode,
       symbol,
       symbols: symbols.length > 0 ? symbols : undefined,
       timeframe,
       selectedIndicators: indicators.length > 0 ? indicators : undefined,
       filters: Object.keys(filters).length > 0 ? filters : undefined,
     };
-  }, [pathname]);
+  }, [pathname, uiMode]);
 
   const buildPreferences = useCallback((): AssistantPreferences => {
     const detailLevel =
@@ -130,6 +142,18 @@ export function AiAssistantPanel() {
     if (!content.trim()) return;
 
     setError(null);
+    const requestId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const startedAt = Date.now();
+    const contextSnapshot = buildContextSnapshot();
+    logUiEvent('info', 'assistant.request.started', {
+      requestId,
+      page: contextSnapshot.page,
+      messageChars: content.length,
+      uiMode,
+    });
 
     // Add user message
     addMessage({ role: 'user', content });
@@ -142,16 +166,15 @@ export function AiAssistantPanel() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-trace-id': requestId,
         },
         body: JSON.stringify({
           message: content,
           conversationHistory: messages.slice(-10),
-          contextSnapshot: buildContextSnapshot(),
+          contextSnapshot,
           preferences: buildPreferences(),
-          requestId:
-            typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-              ? crypto.randomUUID()
-              : `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          uiMode,
+          requestId,
           clientTs: new Date().toISOString(),
         }),
       });
@@ -159,7 +182,19 @@ export function AiAssistantPanel() {
       const data: AssistantResponse = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || 'Failed to get response');
+        logUiEvent('warn', 'assistant.request.failed', {
+          requestId,
+          status: response.status,
+          error: data.error ?? 'unknown_error',
+          durationMs: Date.now() - startedAt,
+        });
+        setError({
+          message: data.error || 'Failed to get response',
+          requestId: data.meta?.requestId ?? requestId,
+          traceSummary: data.meta?.toolStatusSummary,
+          recoveryHint: buildRecoveryHint(response.status, data.policyStatus),
+        });
+        return;
       }
 
       // Add assistant message
@@ -175,13 +210,40 @@ export function AiAssistantPanel() {
         messageBlocks: data.messageBlocks,
         meta: data.meta,
       });
+      logUiEvent('info', 'assistant.request.completed', {
+        requestId,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        policyStatus: data.policyStatus ?? null,
+        dataConfidence: data.dataConfidence ?? null,
+        citationCount: Array.isArray(data.citations) ? data.citations.length : 0,
+        toolCount: Array.isArray(data.usedTools) ? data.usedTools.length : 0,
+      });
     } catch (err) {
-      console.error('Error sending message:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred. Please try again.');
+      logUiEvent('error', 'assistant.request.exception', {
+        requestId,
+        durationMs: Date.now() - startedAt,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      setError({
+        message: err instanceof Error ? err.message : 'An error occurred. Please try again.',
+        requestId,
+        recoveryHint: 'Check your connection, then retry. If the problem persists, share the request ID with engineering.',
+      });
     } finally {
       setLoading(false);
     }
-  }, [messages, addMessage, setLoading, buildContextSnapshot, buildPreferences]);
+  }, [messages, addMessage, setLoading, buildContextSnapshot, buildPreferences, uiMode]);
+
+  const switchToCopilotMode = () => {
+    setUIMode('copilot');
+  };
+
+  const switchToScreenerMode = () => {
+    setUIMode('screener');
+    closePanel();
+    router.push('/screener');
+  };
 
   const handleClearChat = () => {
     if (window.confirm('Are you sure you want to clear the chat history?')) {
@@ -223,7 +285,36 @@ export function AiAssistantPanel() {
             </div>
             <div>
               <h2 className="font-semibold text-white">AI Assistant</h2>
-              <p className="text-xs text-white/70">Vietnamese Stock Market Expert</p>
+              <p className="text-xs text-white/80">Grounded Vietnamese Stock Market Copilot</p>
+              <div className="mt-1.5 inline-flex items-center rounded-lg bg-white/15 p-0.5 border border-white/20">
+                <button
+                  type="button"
+                  onClick={switchToCopilotMode}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    uiMode === "copilot" ? "bg-white text-blue-700" : "text-white/90 hover:bg-white/15"
+                  )}
+                >
+                  <PanelTop className="w-3.5 h-3.5" />
+                  Copilot
+                </button>
+                <button
+                  type="button"
+                  onClick={switchToScreenerMode}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    uiMode === "screener" ? "bg-white text-blue-700" : "text-white/90 hover:bg-white/15"
+                  )}
+                >
+                  <Table2 className="w-3.5 h-3.5" />
+                  Screener
+                </button>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Grounded Data</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Policy Guardrails</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Citations</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -251,7 +342,7 @@ export function AiAssistantPanel() {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" role="log" aria-live="polite" aria-label="Assistant conversation">
           {/* Welcome Message */}
           {messages.length === 0 && (
             <div className="p-4 text-center">
@@ -262,9 +353,28 @@ export function AiAssistantPanel() {
                 Welcome to QuantVN AI Assistant
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                I can help you understand Vietnamese stock market concepts, technical indicators,
-                and quantitative strategies.
+                Ask about symbols, metrics, valuation, risk, and market structure. Responses prioritize grounded evidence.
               </p>
+              <div className="grid grid-cols-1 gap-2 text-left">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
+                  <Database className="w-4 h-4 text-blue-500 mt-0.5" />
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                    <span className="font-medium">Grounded Data:</span> numeric outputs are fetched from internal QuantVN APIs.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 mt-0.5" />
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                    <span className="font-medium">Guardrails:</span> missing evidence triggers abstain/fallback behavior.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
+                  <ScrollText className="w-4 h-4 text-purple-500 mt-0.5" />
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                    <span className="font-medium">Traceability:</span> each response includes sources and execution trace.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -284,7 +394,18 @@ export function AiAssistantPanel() {
             <div className="mx-4 my-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                <p className="text-sm text-red-700 dark:text-red-300">{error.message}</p>
+                <p className="mt-1 text-[11px] text-red-700/90 dark:text-red-300/90 break-all">
+                  Request ID: <code className="font-mono">{error.requestId}</code>
+                </p>
+                {error.traceSummary && (
+                  <p className="mt-1 text-[11px] text-red-700/90 dark:text-red-300/90 break-words">
+                    Trace: {error.traceSummary}
+                  </p>
+                )}
+                <p className="mt-1 text-[11px] text-red-700/90 dark:text-red-300/90">
+                  Recovery: {error.recoveryHint}
+                </p>
                 <button
                   onClick={() => setError(null)}
                   className="text-xs text-red-600 dark:text-red-400 underline mt-1"
@@ -303,4 +424,23 @@ export function AiAssistantPanel() {
       </div>
     </>
   );
+}
+
+function buildRecoveryHint(
+  statusCode: number,
+  policyStatus: AssistantResponse["policyStatus"] | undefined
+): string {
+  if (statusCode === 429) {
+    return "Rate limit reached. Wait about a minute, then retry with a narrower request.";
+  }
+  if (policyStatus === "shadow_blocked") {
+    return "Request is outside grounded scope. Ask with HOSE-specific scope or a supported metric.";
+  }
+  if (policyStatus === "fallback") {
+    return "Grounding evidence was incomplete. Retry with symbol + metric + timeframe for better coverage.";
+  }
+  if (statusCode >= 500) {
+    return "Temporary backend/provider issue. Retry in a few seconds.";
+  }
+  return "Retry with a more specific prompt (symbol, metric, timeframe) to improve execution reliability.";
 }
