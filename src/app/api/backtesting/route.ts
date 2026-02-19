@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getDataQualityReport, getDatasetLoadStatus, hasSufficientDataQuality, loadOHLCVForSymbol } from "@/lib/data";
+import { getDataQualityReport, getDatasetLoadStatus, loadOHLCVForSymbol } from "@/lib/data";
+import { getDataBackendStatus } from "@/lib/dataBackend";
+import { queryDuckDbRows } from "@/lib/duckdbClient";
 import {
   BacktestConfigInput,
   STRATEGIES,
@@ -51,13 +53,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getDataQualityError(dataset: "ohlcv"): string | null {
-  if (hasSufficientDataQuality(dataset, MIN_DATA_QUALITY_RATIO)) {
-    return null;
+  const loadStatus = getDatasetLoadStatus(dataset);
+  if (loadStatus.status === "error") {
+    const reason = loadStatus.reason ?? "unavailable";
+    return loadStatus.message ?? `OHLCV dataset is unavailable (${reason}).`;
   }
 
   const report = getDataQualityReport(dataset);
   if (!report) {
-    return `Data quality check failed for ${dataset}: report unavailable`;
+    // Symbol-level queries (not full dataset loads) may not populate a dataset-wide quality report.
+    return null;
+  }
+
+  if (report.acceptedRatio >= MIN_DATA_QUALITY_RATIO) {
+    return null;
   }
 
   return (
@@ -110,6 +119,32 @@ function formatValidationError(prefix: string, issues: { field: string; message:
   return `${prefix}: ${first.field} - ${first.message}`;
 }
 
+async function getOhlcvOutageErrorForEmptyResult(): Promise<string | null> {
+  const ohlcvLoadStatus = getDatasetLoadStatus("ohlcv");
+  if (ohlcvLoadStatus.status === "error") {
+    const reason = ohlcvLoadStatus.reason ?? "unavailable";
+    return ohlcvLoadStatus.message ?? `OHLCV dataset is unavailable (${reason}).`;
+  }
+  if (ohlcvLoadStatus.status === "ok") {
+    return null;
+  }
+
+  try {
+    const backendStatus = await getDataBackendStatus();
+    if (backendStatus.active !== "duckdb") {
+      return null;
+    }
+    const rows = await queryDuckDbRows(backendStatus.duckdbPath, "SELECT 1 AS ok FROM ohlcv LIMIT 1");
+    if (rows.length === 0) {
+      return "OHLCV dataset is unavailable (duckdb table ohlcv is empty).";
+    }
+    return null;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return `OHLCV dataset is unavailable (${reason}).`;
+  }
+}
+
 async function executeBacktest(payload: {
   symbol: string;
   strategyType: StrategyType;
@@ -117,7 +152,12 @@ async function executeBacktest(payload: {
   rawParams: Record<string, unknown>;
   rawConfig: BacktestConfigInput;
 }) {
-  const data = await loadOHLCVForSymbol(payload.symbol);
+  let data: Awaited<ReturnType<typeof loadOHLCVForSymbol>>;
+  try {
+    data = await loadOHLCVForSymbol(payload.symbol);
+  } catch {
+    return NextResponse.json({ error: "OHLCV dataset is unavailable." }, { status: 503 });
+  }
 
   const qualityError = getDataQualityError("ohlcv");
   if (qualityError) {
@@ -125,11 +165,9 @@ async function executeBacktest(payload: {
   }
 
   if (data.length === 0) {
-    const ohlcvLoadStatus = getDatasetLoadStatus("ohlcv");
-    if (ohlcvLoadStatus.status === "error") {
-      const reason = ohlcvLoadStatus.reason ?? "unavailable";
-      const message = ohlcvLoadStatus.message ?? `OHLCV dataset is unavailable (${reason}).`;
-      return NextResponse.json({ error: message }, { status: 503 });
+    const outageError = await getOhlcvOutageErrorForEmptyResult();
+    if (outageError) {
+      return NextResponse.json({ error: outageError }, { status: 503 });
     }
     return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
   }
@@ -191,7 +229,7 @@ function getRateLimitedResponse(request: Request, logger?: AppLogger): NextRespo
 
   return NextResponse.json(
     { error: "Too many requests. Please try again later." },
-    { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
+    { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil((rateLimit.resetTime - Date.now()) / 1000))) } }
   );
 }
 

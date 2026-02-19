@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
   let requestId = createRequestId();
   let logger = assistantRouteLogger.child({ requestId });
   try {
-    const isEvalRequest = isAuthorizedEvalRequest(request);
+    const evalAuth = evaluateEvalAuthorization(request);
+    const isEvalRequest = evalAuth.authorized;
     const rateLimitScope = isEvalRequest ? 'assistant_eval' : 'assistant';
     const rateLimitLimit = isEvalRequest ? EVAL_RATE_LIMIT : RATE_LIMIT;
     const clientId = getClientIdentifier(request);
@@ -65,6 +66,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (evalAuth.evalRequested && !evalAuth.authorized) {
+      logger.warn('request.eval_auth_failed', {
+        reason: evalAuth.reason,
+      });
+      return NextResponse.json<AssistantResponse>(
+        {
+          message: '',
+          success: false,
+          error: 'Unauthorized eval request.',
+        },
+        { status: 401 }
+      );
+    }
+
     const toolBaseResolution = resolveTrustedToolBaseUrl(logger);
     const metaBase = {
       requestId: '',
@@ -72,7 +87,37 @@ export async function POST(request: NextRequest) {
       toolBaseUrlSource: toolBaseResolution.source,
     };
 
-    const body = (await request.json()) as Partial<AssistantRequest>;
+    let body: Partial<AssistantRequest>;
+    try {
+      const parsedBody = await request.json();
+      if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+        logger.warn("request.validation_failed", {
+          reason: "invalid_json_shape",
+        });
+        return NextResponse.json<AssistantResponse>(
+          {
+            message: "",
+            success: false,
+            error: "Invalid JSON payload. Expected an object body.",
+          },
+          { status: 400 }
+        );
+      }
+      body = parsedBody as Partial<AssistantRequest>;
+    } catch (jsonError) {
+      logger.warn("request.validation_failed", {
+        reason: "invalid_json",
+        ...toErrorMeta(jsonError),
+      });
+      return NextResponse.json<AssistantResponse>(
+        {
+          message: "",
+          success: false,
+          error: "Invalid JSON payload.",
+        },
+        { status: 400 }
+      );
+    }
     const message = normalizeText(body.message, MAX_TEXT_LENGTH);
     const conversationHistory = sanitizeConversationHistory(body.conversationHistory);
     const contextSnapshot = sanitizeContextSnapshot(body.contextSnapshot ?? legacyContextToSnapshot(body.context));
@@ -771,17 +816,44 @@ function normalizePort(value: string | undefined): string | undefined {
   return String(parsed);
 }
 
-function isAuthorizedEvalRequest(request: NextRequest): boolean {
+type EvalAuthResult = {
+  evalRequested: boolean;
+  authorized: boolean;
+  reason: "not_requested" | "missing_server_token" | "missing_request_token" | "invalid_token" | "ok";
+};
+
+function evaluateEvalAuthorization(request: NextRequest): EvalAuthResult {
   const evalMarker = String(request.headers.get(EVAL_MODE_HEADER) ?? '').trim().toLowerCase();
-  if (evalMarker !== 'true') return false;
+  if (evalMarker !== 'true') {
+    return { evalRequested: false, authorized: false, reason: "not_requested" };
+  }
 
   const configuredToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? '').trim();
   if (!configuredToken) {
-    return false;
+    return { evalRequested: true, authorized: false, reason: "missing_server_token" };
   }
 
   const candidate = String(request.headers.get(EVAL_TOKEN_HEADER) ?? '').trim();
-  return candidate.length > 0 && candidate === configuredToken;
+  if (!candidate) {
+    return { evalRequested: true, authorized: false, reason: "missing_request_token" };
+  }
+
+  if (!constantTimeEquals(candidate, configuredToken)) {
+    return { evalRequested: true, authorized: false, reason: "invalid_token" };
+  }
+
+  return { evalRequested: true, authorized: true, reason: "ok" };
+}
+
+function constantTimeEquals(left: string, right: string): boolean {
+  const maxLength = Math.max(left.length, right.length);
+  let mismatch = left.length ^ right.length;
+  for (let i = 0; i < maxLength; i++) {
+    const leftCode = i < left.length ? left.charCodeAt(i) : 0;
+    const rightCode = i < right.length ? right.charCodeAt(i) : 0;
+    mismatch |= leftCode ^ rightCode;
+  }
+  return mismatch === 0;
 }
 
 function resolveEvalRateLimit(): number {
