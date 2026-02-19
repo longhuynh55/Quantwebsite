@@ -236,7 +236,22 @@ async function run() {
     try {
       const { response, data } = await fetchJson("/api/stocks?limit=0");
       ensure(response.status === 400, `expected 400, got HTTP ${response.status}`);
+      ensure(typeof response.headers.get("x-trace-id") === "string" && response.headers.get("x-trace-id").length > 0, "x-trace-id header missing");
       ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
+      logPass(name);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "GET /api/stocks?exchange=HNX (HOSE-only contract)";
+    try {
+      const { response, data } = await fetchJson("/api/stocks?exchange=HNX");
+      ensure(response.status === 400, `expected 400, got HTTP ${response.status}`);
+      ensure(typeof response.headers.get("x-trace-id") === "string" && response.headers.get("x-trace-id").length > 0, "x-trace-id header missing");
+      ensure(String(data?.error ?? "") === 'Only "HOSE" exchange is supported.', "unexpected error message");
       logPass(name);
     } catch (error) {
       failures += 1;
