@@ -1,4 +1,4 @@
-# Observability & SLO Baseline
+﻿# Observability & SLO Baseline
 
 This document defines minimum service-level objectives (SLOs) for data reliability and assistant grounding.
 
@@ -21,11 +21,15 @@ Covered components:
 
 ### SLI-C: Core API Reliability
 - Definition: smoke/QA API checks pass rate
-- Success condition: `npm run docker:smoke:api` and `npm run docker:qa:api` exit code `0`
+- Success condition: `pnpm run docker:smoke:api` and `pnpm run docker:qa:api` exit code `0`
 
 ### SLI-D: Assistant Grounding
 - Definition: assistant evaluation quality metrics from evaluation report
 - Success condition: no threshold breach from configured env gates (unsupported claim rate, grounding pass rate, deception resistance, coverage)
+
+### SLI-E: CI Gate Enforceability
+- Definition: `qa-integration` dev/prod jobs execute live assistant gate and produce verdict artifacts.
+- Success condition: both verdict files report `status=success` and corresponding artifact bundles are present.
 
 ## 3) SLO Targets (Initial Baseline)
 
@@ -37,6 +41,7 @@ Track on rolling 30-day window:
 | SLI-B Full Data Health | 100% daily pass | At least once per day |
 | SLI-C Core API Reliability | >= 99% runs pass | Per release + daily smoke |
 | SLI-D Assistant Grounding | 100% threshold compliance on scheduled runs | Balanced daily, full weekly |
+| SLI-E CI Gate Enforceability | 100% required runs produce pass verdict + artifacts | Every PR + push |
 
 ## 4) Alert Policy
 
@@ -57,18 +62,18 @@ Run from `quant-website/`:
 ```bash
 curl "http://localhost:3010/api/health/data?probe=true&includeFundamentals=false"
 curl "http://localhost:3010/api/health/data?refresh=true"
-npm run docker:smoke:api
-npm run docker:qa:api
-npm run docker:eval:assistant
+pnpm run docker:smoke:api
+pnpm run docker:qa:api
+pnpm run docker:eval:assistant
 ```
 
 Production profile:
 
 ```bash
 curl "http://localhost:3011/api/health/data?probe=true&includeFundamentals=false"
-npm run docker:smoke:prod:api
-npm run docker:qa:prod:api
-npm run docker:eval:assistant:prod
+pnpm run docker:smoke:prod:api
+pnpm run docker:qa:prod:api
+pnpm run docker:eval:assistant:prod
 ```
 
 ## 6) Reporting Cadence
@@ -82,6 +87,11 @@ npm run docker:eval:assistant:prod
 Store and retain:
 - `artifacts/assistant-eval-report.json`
 - `artifacts/assistant-eval-comprehensive-report.json`
+- `artifacts/assistant-pr-gate-report.json`
+- `artifacts/qa-verdict-dev.json`
+- `artifacts/qa-verdict-prod.json`
+- `artifacts/docker-dev-app.log`
+- `artifacts/docker-prod-app.log`
 - Any data audit outputs under `quant-website/artifacts/`
 
 ## 8) Related Docs
@@ -90,3 +100,4 @@ Store and retain:
 - `docs/DATA_RELIABILITY_OPERATIONS.md`
 - `docs/ASSISTANT_EVAL_CRITERIA.md`
 - `docs/INCIDENT_RESPONSE.md`
+

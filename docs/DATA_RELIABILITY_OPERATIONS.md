@@ -1,4 +1,4 @@
-# Data Reliability Operations
+﻿# Data Reliability Operations
 
 This runbook defines a practical reliability contract so API functions and the AI assistant read consistent, correct data in both self-hosted Node runtime and Docker deployments.
 
@@ -45,24 +45,29 @@ Recommended profile:
 Run from `quant-website/`:
 
 ```bash
-npm run data:prepare:2018_2025
-npm run data:validate:fundamentals
-npm run build
-npm run docker:smoke:api
-npm run docker:qa:api
-npm run docker:eval:assistant
+pnpm run data:prepare:2018_2025
+pnpm run data:validate:fundamentals
+pnpm run build
+pnpm run docker:smoke:api
+pnpm run docker:qa:api
+pnpm run docker:eval:assistant
 ```
 
 For release-sensitive changes, also run:
 
 ```bash
-npm run docker:eval:assistant:full
-npm run docker:qa:prod:api
+pnpm run docker:eval:assistant:full
+pnpm run docker:qa:prod:api
 ```
 
 Exit criteria:
 - All commands exit code `0`
 - No persistent `data-manifest` or `data-backend` errors in logs
+
+CI alignment (`.github/workflows/qa-integration.yml`):
+- Run deterministic data preparation for CI (`pnpm run data:generate:ci`) and fundamentals validation (`pnpm run data:validate:fundamentals`) before smoke/QA.
+- Execute assistant PR gate in live mode (`pnpm run eval:assistant:pr-gate`), not dry-run.
+- Persist run evidence (`assistant-*.json`, `assistant-*.md`, docker logs, `qa-verdict-*.json`) for auditability.
 
 ## 4) Runtime Health Contract
 
@@ -105,14 +110,14 @@ When `/api/health/data` fails:
 1. Check `backend.reason` in health response.
 2. Verify runtime files in `public/data`.
 3. Rebuild runtime artifacts:
-   - `npm run data:prepare:2018_2025`
-   - `npm run data:validate:fundamentals`
-   - `npm run data:export:duckdb` (if DuckDB mode)
+   - `pnpm run data:prepare:2018_2025`
+   - `pnpm run data:validate:fundamentals`
+   - `pnpm run data:export:duckdb` (if DuckDB mode)
 4. Restart services:
    - `docker compose restart app`
 5. Re-run:
-   - `npm run docker:smoke:api`
-   - `npm run docker:qa:api`
+   - `pnpm run docker:smoke:api`
+   - `pnpm run docker:qa:api`
 
 ## 7) Related Docs
 
@@ -123,3 +128,4 @@ When `/api/health/data` fails:
 - `docs/DATA_RELEASE_CHECKLIST.md`
 - `docs/OBSERVABILITY_SLO.md`
 - `docs/INCIDENT_RESPONSE.md`
+

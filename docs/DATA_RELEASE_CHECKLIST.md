@@ -1,4 +1,4 @@
-# Data Release Checklist
+﻿# Data Release Checklist
 
 Use this checklist whenever data files, parsing logic, backend mode, or assistant grounding rules are changed.
 
@@ -27,29 +27,32 @@ Run from `quant-website/`.
 
 ### 3.1 Prepare + Validate Data
 
-- [ ] `npm run data:prepare:2018_2025`
-- [ ] `npm run data:validate:fundamentals`
+- [ ] `pnpm run data:prepare:2018_2025`
+- [ ] `pnpm run data:validate:fundamentals`
 - [ ] Verify `public/data/data_manifest_2018_2025.json` is regenerated
 - [ ] Verify required runtime files exist in `public/data/`
 
 ### 3.2 Build + API Reliability
 
-- [ ] `npm run build`
-- [ ] `npm run docker:smoke:api`
-- [ ] `npm run docker:qa:api`
+- [ ] `pnpm run build`
+- [ ] `pnpm run docker:smoke:api`
+- [ ] `pnpm run docker:qa:api`
 - [ ] `curl "http://localhost:3010/api/health/data?refresh=true"` returns HTTP `200` and `"ok": true`
+- [ ] `GET /api/stocks?exchange=HNX` returns HTTP `400` with `Only "HOSE" exchange is supported.`
+- [ ] `/api/stocks` responses include `x-trace-id` header (success and validation errors)
 
 ### 3.3 Assistant Reliability
 
-- [ ] `npm run docker:eval:assistant`
-- [ ] If release-sensitive: `npm run docker:eval:assistant:full`
+- [ ] `pnpm run docker:eval:assistant`
+- [ ] `pnpm run eval:assistant:pr-gate` (live mode, no `--dry-run`)
+- [ ] If release-sensitive: `pnpm run docker:eval:assistant:full`
 - [ ] Confirm no regression versus previous baseline report
 
 ### 3.4 Production Profile Gate
 
-- [ ] `npm run docker:up:prod`
-- [ ] `npm run docker:smoke:prod:api`
-- [ ] `npm run docker:qa:prod:api`
+- [ ] `pnpm run docker:up:prod`
+- [ ] `pnpm run docker:smoke:prod:api`
+- [ ] `pnpm run docker:qa:prod:api`
 - [ ] `curl "http://localhost:3011/api/health/data?probe=true&includeFundamentals=false"` returns HTTP `200`
 
 ## 4) Release Approval Record
@@ -68,7 +71,25 @@ backend_target: (auto/csv/duckdb)
 assistant_eval_result:
 qa_result:
 go_live_decision: (approved/rejected)
+ci_run_id:
+ci_job_status_dev:
+ci_job_status_prod:
+artifact_bundle_dev:
+artifact_bundle_prod:
 ```
+
+## 4.1 Required CI Evidence (qa-integration)
+
+- `qa-dev-artifacts-<run_id>-<attempt>` includes:
+  - `artifacts/assistant-*.json`
+  - `artifacts/assistant-*.md`
+  - `artifacts/docker-dev-app.log`
+  - `artifacts/qa-verdict-dev.json`
+- `qa-prod-artifacts-<run_id>-<attempt>` includes:
+  - `artifacts/assistant-*.json`
+  - `artifacts/assistant-*.md`
+  - `artifacts/docker-prod-app.log`
+  - `artifacts/qa-verdict-prod.json`
 
 ## 5) Post-Deploy Verification (T+0)
 
@@ -96,3 +117,4 @@ Rollback actions:
 - `docs/DOCKER_RUNBOOK.md`
 - `docs/ASSISTANT_EVAL_CRITERIA.md`
 - `docs/INCIDENT_RESPONSE.md`
+

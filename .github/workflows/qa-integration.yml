@@ -24,19 +24,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
   docker-dev-integration:
     runs-on: ubuntu-latest
@@ -49,13 +54,39 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
-      - name: Generate CI data
-        run: npm run data:generate:ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deterministic CI data prepare
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:generate:ci
+
+      - name: Deterministic fundamentals validation
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:validate:fundamentals
 
       - name: Start dev app container
         run: docker compose up -d --build app
+
+      - name: Dev health probe fail-fast
+        run: |
+          node -e "fetch('http://localhost:3010/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('dev_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
+
+      - name: Assistant PR gate (live)
+        run: pnpm run eval:assistant:pr-gate
 
       - name: Dev smoke
         run: docker compose run --rm smoke
@@ -66,9 +97,54 @@ jobs:
       - name: Dev assistant hallucination eval
         run: docker compose run --rm smoke node scripts/eval-assistant.mjs
 
+      - name: Dev assistant routing matrix gate
+        run: pnpm run eval:assistant:routing
+
+      - name: Dev assistant policy matrix gate
+        run: pnpm run eval:assistant:policy-matrix
+
+      - name: Dev assistant perf reliability gate
+        run: pnpm run eval:assistant:perf-reliability
+
+      - name: Dev assistant comprehensive metrics gate
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: docker compose run --rm -e ASSISTANT_EVAL_PROFILE=quick -e ASSISTANT_EVAL_ENFORCE_DECEPTION=false smoke node scripts/eval-assistant-comprehensive.mjs
+
       - name: Collect docker logs (dev)
         if: always()
-        run: docker compose logs --tail=200 app
+        run: |
+          mkdir -p artifacts
+          docker compose logs --no-color --tail=200 app > artifacts/docker-dev-app.log
+
+      - name: Write QA verdict (dev)
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/qa-verdict-dev.json <<EOF
+          {
+            "workflow": "qa-integration",
+            "job": "docker-dev-integration",
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "event_name": "${{ github.event_name }}",
+            "status": "${{ job.status }}",
+            "generated_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Upload artifacts and logs (dev)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-dev-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/assistant-*.json
+            artifacts/assistant-*.md
+            artifacts/docker-dev-app.log
+            artifacts/qa-verdict-dev.json
+          if-no-files-found: warn
 
       - name: Shutdown containers (dev)
         if: always()
@@ -85,13 +161,41 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
-      - name: Generate CI data
-        run: npm run data:generate:ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deterministic CI data prepare
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:generate:ci
+
+      - name: Deterministic fundamentals validation
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:validate:fundamentals
 
       - name: Start prod app container
         run: docker compose --profile prod up -d --build app-prod
+
+      - name: Prod health probe fail-fast
+        run: |
+          node -e "fetch('http://localhost:3011/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('prod_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
+
+      - name: Assistant PR gate (live)
+        env:
+          ASSISTANT_PR_GATE_BASE_URL: http://localhost:3011
+        run: pnpm run eval:assistant:pr-gate
 
       - name: Prod smoke
         run: docker compose --profile prod run --rm smoke-prod
@@ -102,9 +206,49 @@ jobs:
       - name: Prod assistant hallucination eval
         run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant.mjs
 
+      - name: Prod assistant policy matrix gate
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-policy-matrix.mjs
+
+      - name: Prod assistant perf reliability gate
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-perf-reliability.mjs
+
       - name: Collect docker logs (prod)
         if: always()
-        run: docker compose logs --tail=200 app-prod
+        run: |
+          mkdir -p artifacts
+          docker compose --profile prod logs --no-color --tail=200 app-prod > artifacts/docker-prod-app.log
+
+      - name: Write QA verdict (prod)
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/qa-verdict-prod.json <<EOF
+          {
+            "workflow": "qa-integration",
+            "job": "docker-prod-integration",
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "event_name": "${{ github.event_name }}",
+            "status": "${{ job.status }}",
+            "generated_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Upload artifacts and logs (prod)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-prod-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/assistant-*.json
+            artifacts/assistant-*.md
+            artifacts/docker-prod-app.log
+            artifacts/qa-verdict-prod.json
+          if-no-files-found: warn
 
       - name: Shutdown containers (prod)
         if: always()

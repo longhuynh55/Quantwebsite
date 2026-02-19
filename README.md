@@ -1,4 +1,4 @@
-# QuantVN - Vietnamese Stock Market Quantitative Analysis Platform
+﻿# QuantVN - Vietnamese Stock Market Quantitative Analysis Platform
 
 A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho Chi Minh City Stock Exchange) stocks with a preferred daily dataset from 2018-2025 (fallbacks supported). Built with modern web technologies to provide professional-grade quantitative tools for investors and researchers.
 
@@ -70,7 +70,7 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 ## Prerequisites
 
 - **Node.js** >= 18.17.0
-- **npm** >= 9.0.0 (or yarn/pnpm/bun)
+- **pnpm** >= 10.0.0
 - **Modern browser** with JavaScript enabled
 
 ## Installation
@@ -83,7 +83,7 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 
 2. **Install dependencies**
    ```bash
-   npm install
+   pnpm install
    # or
    yarn install
    # or
@@ -94,13 +94,13 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
    - Place CSV data files in `public/data/` directory
    - If you have raw files in `../data`, generate prepared runtime data:
      ```bash
-     npm run data:prepare:2018_2025
+     pnpm run data:prepare:2018_2025
      ```
    - This command also writes `public/data/data_manifest_2018_2025.json` (and `data_manifest.json`) for runtime integrity checks.
 
 4. **Start the development server**
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
 5. **Open your browser**
@@ -110,29 +110,30 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server on port 3000 |
-| `npm run build` | Build the application for production |
-| `npm run start` | Start the production server |
-| `npm run lint` | Run ESLint for code quality checks |
-| `npm run eval:assistant` | Evaluate assistant hallucination risk on backtesting responses |
-| `npm run eval:assistant:full` | Run comprehensive assistant evaluation (full-data scan + grounding + numeric fidelity) |
-| `npm run data:prepare:2018_2025` | Generate prepared runtime CSVs + manifest for 2018-2025 into `public/data/` |
-| `npm run data:export:duckdb` | Export runtime CSVs in `public/data/` to `public/data/quant_data.duckdb` (Node `duckdb` binding or Docker fallback) |
-| `npm run data:generate:ci` | Generate synthetic runtime CSVs for CI integration tests |
-| `npm run qa:docker` | Run deep QA checks against `SMOKE_BASE_URL` (default: `http://localhost:3010`) |
-| `npm run docker:up` | Start app container on `http://localhost:3010` |
-| `npm run docker:logs` | Tail app container logs (dev profile) |
-| `npm run docker:smoke` | Run smoke checks from isolated container |
-| `npm run docker:eval:assistant` | Run assistant hallucination eval from isolated container (dev profile) |
-| `npm run docker:eval:assistant:full` | Run comprehensive assistant evaluation from isolated container (dev profile) |
-| `npm run docker:qa` | Run deep QA checks from isolated container (dev profile) |
-| `npm run docker:up:prod` | Build/start production container on `http://localhost:3011` |
-| `npm run docker:logs:prod` | Tail production container logs |
-| `npm run docker:smoke:prod` | Run smoke checks against production container |
-| `npm run docker:eval:assistant:prod` | Run assistant hallucination eval against production container |
-| `npm run docker:eval:assistant:full:prod` | Run comprehensive assistant evaluation against production container |
-| `npm run docker:qa:prod` | Run deep QA checks against production container |
-| `npm run docker:down` | Stop/remove docker services |
+| `pnpm run dev` | Start development server on port 3000 |
+| `pnpm run build` | Build the application for production |
+| `pnpm run start` | Start the production server |
+| `pnpm run lint` | Run ESLint for code quality checks |
+| `pnpm run eval:assistant` | Evaluate assistant hallucination risk on backtesting responses |
+| `pnpm run eval:assistant:pr-gate` | Run assistant routing/policy/perf/UX PR gate (live) |
+| `pnpm run eval:assistant:full` | Run comprehensive assistant evaluation (full-data scan + grounding + numeric fidelity) |
+| `pnpm run data:prepare:2018_2025` | Generate prepared runtime CSVs + manifest for 2018-2025 into `public/data/` |
+| `pnpm run data:export:duckdb` | Export runtime CSVs in `public/data/` to `public/data/quant_data.duckdb` (Node `duckdb` binding or Docker fallback) |
+| `pnpm run data:generate:ci` | Generate synthetic runtime CSVs for CI integration tests |
+| `pnpm run qa:docker` | Run deep QA checks against `SMOKE_BASE_URL` (default: `http://localhost:3010`) |
+| `pnpm run docker:up` | Start app container on `http://localhost:3010` |
+| `pnpm run docker:logs` | Tail app container logs (dev profile) |
+| `pnpm run docker:smoke` | Run smoke checks from isolated container |
+| `pnpm run docker:eval:assistant` | Run assistant hallucination eval from isolated container (dev profile) |
+| `pnpm run docker:eval:assistant:full` | Run comprehensive assistant evaluation from isolated container (dev profile) |
+| `pnpm run docker:qa` | Run deep QA checks from isolated container (dev profile) |
+| `pnpm run docker:up:prod` | Build/start production container on `http://localhost:3011` |
+| `pnpm run docker:logs:prod` | Tail production container logs |
+| `pnpm run docker:smoke:prod` | Run smoke checks against production container |
+| `pnpm run docker:eval:assistant:prod` | Run assistant hallucination eval against production container |
+| `pnpm run docker:eval:assistant:full:prod` | Run comprehensive assistant evaluation against production container |
+| `pnpm run docker:qa:prod` | Run deep QA checks against production container |
+| `pnpm run docker:down` | Stop/remove docker services |
 
 ## CI Workflow
 
@@ -140,13 +141,14 @@ GitHub Actions workflow: `.github/workflows/qa-integration.yml`
 
 It runs:
 1. Static checks (`lint`, `tsc --noEmit`, `build`)
-2. Docker dev integration (`smoke` + `qa` + `assistant eval`)
-3. Docker prod integration (`smoke-prod` + `qa-prod` + `assistant eval`)
+2. Docker dev integration (deterministic CI data prep + fundamentals validation + health probe + live assistant PR gate + smoke/qa/eval)
+3. Docker prod integration (deterministic CI data prep + fundamentals validation + health probe + live assistant PR gate + smoke/qa/eval)
 
-For CI only, synthetic CSV data is generated via `npm run data:generate:ci` so large local datasets are not required in the repository.
+For CI only, synthetic CSV data is generated via `pnpm run data:generate:ci` so large local datasets are not required in the repository.
 Set `ASSISTANT_EVAL_STRICT=true` to fail the pipeline when AI provider is unavailable instead of skipping eval.
 See `docs/ASSISTANT_EVAL_CRITERIA.md` for full evaluation criteria and thresholds.
 For faster local runs with real API key, use `ASSISTANT_EVAL_PROFILE=balanced` (stratified top/mid/low symbols, fewer prompts).
+Each CI integration job uploads run evidence artifacts (assistant reports, docker logs, `qa-verdict-*.json`) for release auditability.
 
 ### Assistant Provider Priority
 
@@ -154,8 +156,8 @@ Provider order is controlled by `ASSISTANT_PROVIDER_PRIORITY` (default: `openrou
 `docker-compose.yml` sets this value for both `app` and `app-prod`, so OpenRouter is the primary provider by default.
 Default OpenRouter model chain:
 - Primary: `OPENROUTER_MODEL=openai/gpt-oss-120b:free`
-- Secondary: `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-20b:free`
-- Tertiary (testing): `OPENROUTER_TERTIARY_MODEL=stepfun/step-3.5-flash:free`
+- Secondary: `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-120b`
+- Tertiary (testing): `OPENROUTER_TERTIARY_MODEL=openai/gpt-oss-20b:free`
 `docker-compose.yml` sets `ASSISTANT_OPENROUTER_ONLY=true`, so assistant calls are restricted to OpenRouter chain by default.
 Grounding tool calls use `ASSISTANT_TOOL_BASE_URL` (set in `docker-compose.yml` to `http://127.0.0.1:3000`) to avoid untrusted host/origin routing.
 If `ASSISTANT_TOOL_BASE_URL` is not set, `/api/assistant` falls back to request origin before using development fallback.
@@ -167,6 +169,7 @@ Use `ASSISTANT_POLICY_MODE` to control anti-hallucination enforcement in `/api/a
 - `enforce_high_risk`: hard-block numeric claims on high-risk pages (`backtesting`, `risk`, `factors`, `charts`, `portfolio`) when grounding requirements fail
 - `enforce_all`: hard-block numeric claims for all intents when grounding requirements fail
 - `ASSISTANT_BASELINE_ONLY` defaults to `false`, enabling valuation/peer/health/sensitivity tools by default.
+- `ASSISTANT_QUERY_PLAN_STRICT` defaults to `false` (hybrid mode): use planner-selected tools first, then allow signal-based fallback tools to recover from misrouting. Set `true` for strict planner-only execution.
 - `ASSISTANT_EVAL_AUTH_TOKEN` and `ASSISTANT_EVAL_RATE_LIMIT_MAX` configure a dedicated eval traffic bucket (`x-assistant-eval`) for assistant evaluation scripts.
 - Model request timeout can be increased via:
   - `GLM_REQUEST_TIMEOUT_MS` (GLM primary)
@@ -181,7 +184,7 @@ Use `ASSISTANT_POLICY_MODE` to control anti-hallucination enforcement in `/api/a
 - `DATA_BACKEND=auto|csv|duckdb` (default: `auto`): runtime uses DuckDB when `quant_data.duckdb` exists **and** Node binding is available; otherwise it falls back to CSV.
 - `DATA_BACKEND_STRICT=true`: if `DATA_BACKEND=duckdb` but artifact/binding is missing, fail fast instead of fallback.
 - `DATA_DUCKDB_PATH`: override DuckDB artifact path (default: `public/data/quant_data.duckdb`).
-- `DATA_EXPORT_DUCKDB=true`: when running `npm run data:prepare:2018_2025`, auto-export DuckDB artifact after CSV preparation.
+- `DATA_EXPORT_DUCKDB=true`: when running `pnpm run data:prepare:2018_2025`, auto-export DuckDB artifact after CSV preparation.
 - `INSTALL_DUCKDB_BINDING=true` (Docker compose default): installs Node `duckdb` binding in `app` / `app-prod` containers during build/startup for strict DuckDB mode.
 - `GET /api/health/data`: returns backend mode, manifest info, dataset quality, and fundamentals readiness (`?refresh=true` to clear caches before check).
 - Docker healthcheck uses probe mode: `/api/health/data?probe=true&includeFundamentals=false`.
@@ -193,7 +196,7 @@ For full step-by-step testing/debug/production procedures, see `docs/DOCKER_RUNB
 
 1. Start app container:
    ```bash
-   npm run docker:up
+   pnpm run docker:up
    ```
 2. Watch app logs (optional):
    ```bash
@@ -201,7 +204,7 @@ For full step-by-step testing/debug/production procedures, see `docs/DOCKER_RUNB
    ```
 3. Run smoke checks:
    ```bash
-   npm run docker:smoke
+   pnpm run docker:smoke
    ```
 4. Check data health (optional):
    ```bash
@@ -213,7 +216,7 @@ For full step-by-step testing/debug/production procedures, see `docs/DOCKER_RUNB
    ```
 6. Stop services:
    ```bash
-   npm run docker:down
+   pnpm run docker:down
    ```
 
 ### Optional Make Shortcuts
@@ -232,15 +235,15 @@ make down
 
 1. Start production container:
    ```bash
-   npm run docker:up:prod
+   pnpm run docker:up:prod
    ```
 2. Run smoke checks against production:
    ```bash
-   npm run docker:smoke:prod
+   pnpm run docker:smoke:prod
    ```
 3. Tail production logs:
    ```bash
-   npm run docker:logs:prod
+   pnpm run docker:logs:prod
    ```
 
 ## Thesis / KLTN (Write-up Framework)
@@ -348,3 +351,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Disclaimer**: This platform is for educational and research purposes only. It is not intended as financial advice. Always do your own research before making investment decisions.
+
