@@ -6,18 +6,31 @@
   AssistantToolUsage,
 } from '@/types/assistant';
 import type { FinanceAnalysisType } from '@/lib/finance';
-import { collectRequiredSignals, getCandidateSymbols, hasAnyKeyword, normalizeForKeywordMatch } from '@/lib/assistant/signals';
+import {
+  collectRequiredSignals,
+  getCandidateSymbols,
+  hasAnyKeyword,
+  isFabricationDirective,
+  normalizeForKeywordMatch,
+} from '@/lib/assistant/signals';
+import type { AssistantQueryPlan } from '@/lib/assistant/planner';
+import { createLogger, hashText } from '@/lib/logger';
 
 const TOOL_TIMEOUT_MS = resolveToolTimeoutMs();
-const MAX_TOOL_CONCURRENCY = 3;
+const MAX_TOOL_CONCURRENCY = 4;
+const MAX_SYMBOL_TOOL_FANOUT = 2;
 const MAX_FACTS = 12;
 const MAX_MESSAGE_BLOCKS = 6;
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
+const QUERY_PLAN_STRICT_MODE = String(process.env.ASSISTANT_QUERY_PLAN_STRICT ?? "true").trim().toLowerCase() === "true";
+const groundingToolsLogger = createLogger('assistant.tools');
 
 interface GroundingInput {
   baseUrl?: string;
   message: string;
   contextSnapshot?: AssistantContextSnapshot;
+  queryPlan?: AssistantQueryPlan;
+  requestId?: string;
 }
 
 export interface GroundingResult {
@@ -47,11 +60,24 @@ interface HttpErrorShape {
 }
 
 export async function runGroundingTools(input: GroundingInput): Promise<GroundingResult> {
+  const startedAt = Date.now();
+  const logger = groundingToolsLogger.child({ requestId: input.requestId ?? '' });
   const symbols = getCandidateSymbols(input.message, input.contextSnapshot);
-  const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot);
+  const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan);
+  logger.debug('grounding.started', {
+    hasToolBaseUrl: Boolean(input.baseUrl),
+    plannedTaskCount: plannedTasks.length,
+    plannedTools: plannedTasks.map((task) => task.name),
+    symbolCount: symbols.length,
+    queryIntent: input.queryPlan?.intent ?? null,
+  });
   if (!input.baseUrl) {
+    logger.warn('grounding.base_url_missing', {
+      plannedTaskCount: plannedTasks.length,
+      durationMs: Date.now() - startedAt,
+    });
     return {
-      facts: [],
+      facts: ["Grounding is unavailable because ASSISTANT_TOOL_BASE_URL is not configured."],
       citations: [],
       usedTools:
         plannedTasks.length > 0
@@ -61,19 +87,27 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
               latencyMs: 0,
               evidenceCount: 0,
               warningCount: 0,
+              errorCode: "grounding_base_url_missing",
               error: 'Assistant grounding base URL is not configured.',
             }))
           : [{ name: 'marketSnapshot', status: 'skipped', latencyMs: 0, evidenceCount: 0, warningCount: 0 }],
-      messageBlocks: [],
+      messageBlocks: [
+        {
+          type: "text",
+          title: "Grounding Diagnostics",
+          content: "Assistant grounding base URL is missing. Numeric claims are blocked until internal tool routing is configured.",
+        },
+      ],
     };
   }
 
-  const tasks = buildToolTasks(input.baseUrl, input.message, symbols, input.contextSnapshot);
+  const tasks = buildToolTasks(input.baseUrl, input.message, symbols, input.contextSnapshot, input.queryPlan);
 
   const facts: string[] = [];
   const citations: AssistantCitation[] = [];
   const usedTools: AssistantToolUsage[] = [];
   const messageBlocks: AssistantMessageBlock[] = [];
+  const errorSummaries: string[] = [];
   const executed = await runTasksWithConcurrency(tasks, MAX_TOOL_CONCURRENCY);
   for (const item of executed) {
     if (item.status === 'success') {
@@ -91,23 +125,60 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         warningCount: output.warningCount ?? 0,
         requestParams: output.requestParams,
       });
+      logger.info('tool.success', {
+        tool: item.task.name,
+        latencyMs: item.latencyMs,
+        evidenceCount: output.evidenceCount ?? 0,
+        warningCount: output.warningCount ?? 0,
+        factsCount: output.facts.length,
+        citationsCount: output.citations.length,
+        messageBlocksCount: Array.isArray(output.messageBlocks) ? output.messageBlocks.length : 0,
+        firstFactDigest: output.facts.length > 0 ? hashText(output.facts[0]) : null,
+      });
       continue;
     }
 
     const normalizedError = normalizeHttpError(item.error);
+    const errorCode = deriveToolErrorCode(normalizedError);
+    errorSummaries.push(`${item.task.name}: ${normalizedError.status ? `HTTP ${normalizedError.status}` : normalizedError.message}`);
     usedTools.push({
       name: item.task.name,
       status: 'error',
       latencyMs: item.latencyMs,
       evidenceCount: 0,
       warningCount: 0,
+      errorCode,
       error: normalizedError.status ? `HTTP ${normalizedError.status}: ${normalizedError.message}` : normalizedError.message,
+    });
+    logger.warn('tool.error', {
+      tool: item.task.name,
+      latencyMs: item.latencyMs,
+      errorCode,
+      status: normalizedError.status,
+      message: normalizedError.message,
     });
   }
 
   if (tasks.length === 0) {
     usedTools.push({ name: 'marketSnapshot', status: 'skipped', latencyMs: 0, evidenceCount: 0, warningCount: 0 });
   }
+  if (errorSummaries.length > 0) {
+    messageBlocks.push({
+      type: "text",
+      title: "Grounding Diagnostics",
+      content: errorSummaries.slice(0, 8).join("\n"),
+    });
+  }
+  const successTools = usedTools.filter((tool) => tool.status === 'success').length;
+  const errorTools = usedTools.filter((tool) => tool.status === 'error').length;
+  logger.info('grounding.completed', {
+    taskCount: tasks.length,
+    successTools,
+    errorTools,
+    factsCount: facts.length,
+    citationCount: citations.length,
+    durationMs: Date.now() - startedAt,
+  });
 
   return {
     facts: facts.slice(0, MAX_FACTS),
@@ -161,10 +232,17 @@ function buildToolTasks(
   baseUrl: string,
   message: string,
   symbols: string[],
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlan?: AssistantQueryPlan
 ): ToolTask[] {
   const messageLower = normalizeForKeywordMatch(message);
-  const primarySymbol = symbols[0];
+  const requestsUniverseStockRanking = isStockUniverseRankingQuery(message, contextSnapshot);
+  const symbolTargets = requestsUniverseStockRanking ? [] : symbols.slice(0, MAX_SYMBOL_TOOL_FANOUT);
+  const hasSymbolTargets = symbolTargets.length > 0;
+  const hasQueryPlanSteps = Boolean(queryPlan && Array.isArray(queryPlan.steps) && queryPlan.steps.length > 0);
+  const planIncludesStockSnapshot = hasQueryPlanSteps
+    ? queryPlan!.steps.some((step) => step.tool === "stockSnapshot")
+    : false;
   const requiredSignals = collectRequiredSignals({
     message,
     contextSnapshot,
@@ -194,13 +272,29 @@ function buildToolTasks(
     "bull",
     "bear",
     "base case",
+    "what if",
+    "wacc tang",
+    "wacc giam",
+    "fair value thay doi",
+    "thay doi the nao",
+    "terminal growth tang",
+    "terminal growth giam",
   ]);
   const tasks: ToolTask[] = [];
-  const seen = new Set<AssistantToolName>();
-  const addTask = (name: AssistantToolName, run: () => Promise<ToolRunOutput>) => {
-    if (seen.has(name)) return;
-    seen.add(name);
+  const seen = new Set<string>();
+  const addTask = (name: AssistantToolName, run: () => Promise<ToolRunOutput>, dedupeKey?: string) => {
+    const key = dedupeKey ?? name;
+    if (seen.has(key)) return;
+    seen.add(key);
     tasks.push({ name, run });
+  };
+  const addTaskForSymbols = (
+    name: AssistantToolName,
+    runner: (symbol: string) => Promise<ToolRunOutput>
+  ) => {
+    for (const symbol of symbolTargets) {
+      addTask(name, () => runner(symbol), `${name}:${symbol}`);
+    }
   };
 
   const addTaskByName = (name: AssistantToolName) => {
@@ -209,48 +303,55 @@ function buildToolTasks(
       return;
     }
     if (name === "stockSnapshot") {
-      if (!primarySymbol) return;
-      addTask(name, () => fetchStockSnapshot(baseUrl, primarySymbol, contextSnapshot?.timeframe, message, contextSnapshot));
+      if (hasSymbolTargets) {
+        addTaskForSymbols(
+          name,
+          (symbol) => fetchStockSnapshot(baseUrl, symbol, contextSnapshot?.timeframe, message, contextSnapshot)
+        );
+        return;
+      }
+      if (!requestsUniverseStockRanking) return;
+      addTask(name, () => fetchStockUniverseSnapshot(baseUrl, message, contextSnapshot));
       return;
     }
     if (name === "fundamentalSnapshot") {
-      if (!primarySymbol) return;
-      addTask(name, () => fetchFundamentalSnapshot(baseUrl, primarySymbol, message, contextSnapshot));
+      if (!hasSymbolTargets) return;
+      addTaskForSymbols(name, (symbol) => fetchFundamentalSnapshot(baseUrl, symbol, message, contextSnapshot));
       return;
     }
     if (name === "fundamentalAnalysis") {
-      if (!primarySymbol) return;
-      addTask(name, () => fetchFinanceAnalysis(baseUrl, primarySymbol, "fundamental"));
+      if (!hasSymbolTargets) return;
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "fundamental", message, contextSnapshot));
       return;
     }
     if (name === "financialHealthScore") {
-      if (!primarySymbol || BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchFinanceAnalysis(baseUrl, primarySymbol, "health"));
+      if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "health", message, contextSnapshot));
       return;
     }
     if (name === "valuationDcf") {
-      if (!primarySymbol || BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchFinanceAnalysis(baseUrl, primarySymbol, "valuation"));
+      if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "valuation", message, contextSnapshot));
       return;
     }
     if (name === "peerMultiples") {
-      if (!primarySymbol || BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchFinanceAnalysis(baseUrl, primarySymbol, "peer"));
+      if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "peer", message, contextSnapshot));
       return;
     }
     if (name === "scenarioSensitivity") {
-      if (!primarySymbol || BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchFinanceAnalysis(baseUrl, primarySymbol, "sensitivity"));
+      if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "sensitivity", message, contextSnapshot));
       return;
     }
     if (name === "riskSnapshot") {
-      if (!primarySymbol) return;
-      addTask(name, () => fetchRiskSnapshot(baseUrl, primarySymbol));
+      if (!hasSymbolTargets) return;
+      addTaskForSymbols(name, (symbol) => fetchRiskSnapshot(baseUrl, symbol));
       return;
     }
     if (name === "backtestSummary") {
-      if (!primarySymbol) return;
-      addTask(name, () => fetchBacktestSummary(baseUrl, primarySymbol));
+      if (!hasSymbolTargets) return;
+      addTaskForSymbols(name, (symbol) => fetchBacktestSummary(baseUrl, symbol));
       return;
     }
     if (name === "factorSnapshot") {
@@ -271,11 +372,22 @@ function buildToolTasks(
     }
   };
 
+  if (hasQueryPlanSteps) {
+    for (const step of queryPlan?.steps ?? []) {
+      addTaskByName(step.tool);
+    }
+    if (tasks.length > 0 && QUERY_PLAN_STRICT_MODE) {
+      return tasks;
+    }
+  }
+
+  const allowStockPrefetch = !hasQueryPlanSteps || planIncludesStockSnapshot;
   const shouldPrefetchStockSnapshot = Boolean(
-    primarySymbol
+    allowStockPrefetch
+    && !requestsUniverseStockRanking
+    && hasSymbolTargets
     && (
       needsSymbolScopedSignals
-      || (requiredSignals.length === 0 && !needsIcbSnapshot && !needsValuationRanking)
       || contextSnapshot?.page === "charts"
       || contextSnapshot?.page === "risk"
       || contextSnapshot?.page === "backtesting"
@@ -314,27 +426,27 @@ function buildToolTasks(
     }
   }
 
-  if (primarySymbol && (needsFundamentals || needsHealthScore)) {
+  if (hasSymbolTargets && (needsFundamentals || needsHealthScore)) {
     addTaskByName("fundamentalAnalysis");
   }
 
-  if (primarySymbol && !BASELINE_ONLY_MODE && (needsSensitivity || needsValuation)) {
+  if (hasSymbolTargets && !BASELINE_ONLY_MODE && (needsSensitivity || needsValuation)) {
     addTaskByName("scenarioSensitivity");
   }
 
-  if (primarySymbol && needsPeer) {
+  if (hasSymbolTargets && needsPeer) {
     addTaskByName("peerMultiples");
   }
-  if (primarySymbol && needsRisk) {
+  if (hasSymbolTargets && needsRisk) {
     addTaskByName("riskSnapshot");
   }
-  if (primarySymbol && needsBacktest) {
+  if (hasSymbolTargets && needsBacktest) {
     addTaskByName("backtestSummary");
   }
   if (needsFactor) {
     addTaskByName("factorSnapshot");
   }
-  if (!primarySymbol || needsMarket) {
+  if (!requestsUniverseStockRanking && (!hasSymbolTargets || needsMarket)) {
     addTaskByName("marketSnapshot");
   }
   if (needsIcbSnapshot) {
@@ -406,13 +518,13 @@ async function fetchStockSnapshot(
   message?: string,
   contextSnapshot?: AssistantContextSnapshot
 ): Promise<ToolRunOutput> {
-  const limit = timeframe && /^\d+$/.test(timeframe) ? timeframe : '60';
+  const limit = resolveStockSnapshotLimit(timeframe, message, contextSnapshot);
   const requestedDate = extractRequestedDate(message ?? "", contextSnapshot);
   const endpoint = requestedDate
     ? `/api/stocks?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(requestedDate)}&limit=1`
     : `/api/stocks?symbol=${encodeURIComponent(symbol)}&limit=${encodeURIComponent(limit)}`;
   const payload = await fetchJson<{
-    data?: Array<{ date?: string; close?: number; volume?: number }>;
+    data?: Array<{ date?: string; open?: number; high?: number; low?: number; close?: number; volume?: number }>;
     requestedDate?: string;
     asOfDate?: string;
     exactDateMatch?: boolean;
@@ -445,15 +557,191 @@ async function fetchStockSnapshot(
   const facts = [
     `Stock snapshot ${symbol}: latest_close=${formatMaybeNumber(latestClose)}, day_change_pct=${formatMaybePercent(dayChangePct)}, latest_volume=${formatMaybeNumber(latestVolume)}, latest_date=${String(latest.date ?? 'unknown')}${requestedDate ? `, requested_date=${payload.requestedDate ?? requestedDate}, as_of_date=${payload.asOfDate ?? String(latest.date ?? "unknown")}, exact_date_match=${payload.exactDateMatch === true ? "true" : "false"}` : ""}.`,
   ];
+  const shouldIncludeChart = shouldAttachStockChartBlock(message ?? "", contextSnapshot);
+  const preferredChartType = resolveRequestedStockChartType(message ?? "", contextSnapshot);
+  const chartBlock = shouldIncludeChart
+    ? buildStockSnapshotChartBlock(series, symbol, preferredChartType)
+    : null;
+  const messageBlocks = chartBlock ? [chartBlock] : undefined;
 
   return {
     facts,
     citations: [buildCitation(`stock-${symbol}`, `OHLCV snapshot for ${symbol}`, endpoint, symbol)],
+    messageBlocks,
     evidenceCount: countNumericEvidence([latestClose, dayChangePct, latestVolume]),
     requestParams: {
       symbol,
       timeframe: limit,
       requestedDate,
+    },
+  };
+}
+
+async function fetchStockUniverseSnapshot(
+  baseUrl: string,
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): Promise<ToolRunOutput> {
+  const requestedDate = extractRequestedDate(message, contextSnapshot);
+  const metric = extractStockUniverseMetric(message, contextSnapshot);
+  const order = extractRankingOrder(message, contextSnapshot);
+  const limit = extractTopLimit(message, contextSnapshot, 10) ?? 10;
+  const requestedExchange = extractStockUniverseExchange(message, contextSnapshot);
+  const exchange = "HOSE";
+  const icbFilter = extractIcbFilter(message, contextSnapshot);
+
+  if (requestedExchange !== "HOSE") {
+    const scopeMessage =
+      `Scope guard: requested_exchange=${requestedExchange}. Grounded dataset currently supports HOSE only. ` +
+      `Use exchange=HOSE for numeric ranking queries.`;
+    return {
+      facts: [
+        `Stock universe scope limitation: requested_exchange=${requestedExchange}, but current dataset only supports HOSE. Numeric ranking for ${requestedExchange} cannot be provided from grounded data.`,
+      ],
+      citations: [
+        buildCitation(
+          "stock-universe-scope-hose-only",
+          "Stock universe scope (HOSE only)",
+          "/api/stocks?exchange=HOSE&limit=1"
+        ),
+      ],
+      messageBlocks: [
+        {
+          type: "text",
+          title: "Exchange Scope Guard",
+          content: scopeMessage,
+        },
+      ],
+      evidenceCount: 1,
+      warningCount: 1,
+      requestParams: {
+        requestedExchange,
+        exchange,
+        requestedDate,
+        metric,
+        order,
+        limit,
+        icbFilter,
+      },
+    };
+  }
+
+  const params = new URLSearchParams();
+  params.set("exchange", exchange);
+  params.set("limit", String(limit));
+  params.set("metric", metric);
+  params.set("order", order);
+  if (requestedDate) params.set("date", requestedDate);
+  if (icbFilter) params.set("icb", icbFilter);
+  const endpoint = `/api/stocks?${params.toString()}`;
+
+  const payload = await fetchJson<{
+    exchange?: string;
+    requestedDate?: string;
+    asOfDate?: string;
+    pricedSymbols?: number;
+    exactDateMatchCount?: number;
+    total?: number;
+    stocks?: Array<{
+      symbol?: string;
+      date?: string;
+      open?: number;
+      high?: number;
+      low?: number;
+      close?: number;
+      volume?: number;
+      exactDateMatch?: boolean;
+    }>;
+  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 30_000));
+
+  const candidates = Array.isArray(payload.stocks)
+    ? payload.stocks
+        .map((row) => ({
+          ...row,
+          metricValue: getStockUniverseMetricValue(row, metric),
+        }))
+        .filter(
+          (row): row is {
+            symbol: string;
+            date: string;
+            open?: number;
+            high?: number;
+            low?: number;
+            close?: number;
+            volume?: number;
+            exactDateMatch?: boolean;
+            metricValue: number;
+          } => typeof row.symbol === "string" && typeof row.date === "string" && row.metricValue !== null
+        )
+    : [];
+  const topRows = candidates.slice(0, limit);
+  const rankedCandidates = toNumber(payload.total);
+  const facts: string[] = [
+    `Stock universe ranking: exchange=${payload.exchange ?? exchange}, metric=${metric}, order=${order}, requested_date=${payload.requestedDate ?? requestedDate ?? "latest"}, as_of_date=${payload.asOfDate ?? "n/a"}, priced_symbols=${formatMaybeNumber(toNumber(payload.pricedSymbols))}, ranked_candidates=${formatMaybeNumber(rankedCandidates ?? candidates.length)}, returned_rows=${topRows.length}.`,
+  ];
+  if (topRows.length > 0) {
+    const leader = topRows[0];
+    facts.push(
+      `Top ranked stock: symbol=${leader.symbol}, metric_value=${formatMaybeNumber(leader.metricValue)}, close=${formatMaybeNumber(toNumber(leader.close))}, volume=${formatMaybeNumber(toNumber(leader.volume))}, date=${leader.date}.`
+    );
+    const rankedRowSummary = topRows
+      .slice(0, Math.min(5, topRows.length))
+      .map((row, index) => {
+        return `#${index + 1} ${row.symbol} metric=${formatMaybeNumber(row.metricValue)} close=${formatMaybeNumber(toNumber(row.close))} date=${row.date}`;
+      })
+      .join("; ");
+    facts.push(`Stock ranked rows: ${rankedRowSummary}.`);
+  } else {
+    facts.push("No stock rows were returned for the requested stock-universe ranking filters.");
+  }
+
+  const pricedSymbols = toNumber(payload.pricedSymbols);
+  const exactDateMatchCount = toNumber(payload.exactDateMatchCount);
+  const hasAsOfFallback =
+    requestedDate !== null
+    && pricedSymbols !== null
+    && exactDateMatchCount !== null
+    && exactDateMatchCount < pricedSymbols;
+  if (hasAsOfFallback) {
+    facts.push(
+      `Date alignment notice: exact_date_match_count=${formatMaybeNumber(exactDateMatchCount)} is lower than priced_symbols=${formatMaybeNumber(pricedSymbols)}, so some rows were taken from the nearest previous trading day.`
+    );
+  }
+
+  const tableRows = topRows.map((row, index) => [
+    index + 1,
+    row.symbol,
+    row.date,
+    metric,
+    row.metricValue,
+    toNumber(row.close),
+    toNumber(row.volume),
+    row.exactDateMatch === true ? "true" : "false",
+  ] as Array<string | number | null>);
+
+  const messageBlocks: AssistantMessageBlock[] = [];
+  if (tableRows.length > 0) {
+    messageBlocks.push({
+      type: "table",
+      title: "Stock Ranking (Universe)",
+      columns: ["Rank", "Symbol", "Date", "Metric", "Metric Value", "Close", "Volume", "Exact Date"],
+      rows: tableRows,
+    });
+  }
+
+  return {
+    facts,
+    citations: [buildCitation("stock-universe-ranking", "Stock universe ranking", endpoint)],
+    messageBlocks,
+    evidenceCount: tableRows.length,
+    warningCount: hasAsOfFallback ? 1 : 0,
+    requestParams: {
+      exchange,
+      requestedDate,
+      metric,
+      order,
+      limit,
+      icbFilter,
     },
   };
 }
@@ -465,9 +753,12 @@ async function fetchFundamentalSnapshot(
   contextSnapshot?: AssistantContextSnapshot
 ): Promise<ToolRunOutput> {
   const statement = extractFundamentalStatement(message, contextSnapshot);
-  const endpoint = `/api/fundamentals?symbol=${encodeURIComponent(symbol)}&period=latest&statement=${encodeURIComponent(statement)}`;
+  const periodIntent = extractFinancialPeriodIntent(message, contextSnapshot);
+  const requestedPeriod = periodIntent.explicitPeriod ?? "latest";
+  const endpoint = `/api/fundamentals?symbol=${encodeURIComponent(symbol)}&period=${encodeURIComponent(requestedPeriod)}&statement=${encodeURIComponent(statement)}`;
   const payload = await fetchJson<{
     period?: string;
+    availablePeriods?: string[];
     incomeStatement?: unknown;
     balanceSheet?: unknown;
     cashFlow?: unknown;
@@ -483,15 +774,19 @@ async function fetchFundamentalSnapshot(
   const balanceFields = extractStatementFields(payload.balanceSheet);
   const cashFlowFields = extractStatementFields(payload.cashFlow);
 
-  const revenue = getFirstNumericByHints(incomeFields, ['revenue', 'doanh thu', 'sales']);
-  const netIncome = getFirstNumericByHints(incomeFields, ['net income', 'lá»£i nhuáº­n', 'profit']);
-  const totalAssets = getFirstNumericByHints(balanceFields, ['total assets', 'tá»•ng tÃ i sáº£n', 'assets']);
-  const opCashFlow = getFirstNumericByHints(cashFlowFields, ['operating cash', 'lÆ°u chuyá»ƒn tiá»n', 'cash flow']);
+  const revenue = getFirstNumericByHints(incomeFields, ['revenue', 'net_sales', 'sales', 'doanh thu']);
+  const netIncome = getFirstNumericByHints(incomeFields, ['net_profit_for_the_year', 'net_income', 'profit_after_tax', 'profit', 'loi nhuan']);
+  const totalAssets = getFirstNumericByHints(balanceFields, ['total_assets', 'assets', 'tong tai san']);
+  const opCashFlow = getFirstNumericByHints(cashFlowFields, ['operating_cash_flow', 'cash_flow_from_operating', 'cash flow', 'luu chuyen tien']);
   const evidenceCount = countNumericEvidence([revenue, netIncome, totalAssets, opCashFlow]);
   const warnings = normalizeWarnings(payload.warnings);
+  const availablePeriods = Array.isArray(payload.availablePeriods)
+    ? payload.availablePeriods.filter((period): period is string => typeof period === "string")
+    : [];
+  const recentPeriods = availablePeriods.slice(-4);
 
   const facts = [
-    `Fundamentals ${symbol}: statement=${statement}, period=${payload.period ?? 'latest'}, confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}, revenue=${formatMaybeNumber(revenue)}, net_income=${formatMaybeNumber(netIncome)}, total_assets=${formatMaybeNumber(totalAssets)}, operating_cash_flow=${formatMaybeNumber(opCashFlow)}.`,
+    `Fundamentals ${symbol}: statement=${statement}, requested_period=${requestedPeriod}, resolved_period=${payload.period ?? 'latest'}, available_periods=${availablePeriods.length}, latest_4_periods=${recentPeriods.join(",") || "n/a"}, confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}, revenue=${formatMaybeNumber(revenue)}, net_income=${formatMaybeNumber(netIncome)}, total_assets=${formatMaybeNumber(totalAssets)}, operating_cash_flow=${formatMaybeNumber(opCashFlow)}.`,
   ];
   if (warnings.length > 0) {
     facts.push(`Fundamentals warnings ${symbol}: ${warnings.join(" | ")}`);
@@ -515,6 +810,7 @@ async function fetchFundamentalSnapshot(
     requestParams: {
       symbol,
       statement,
+      requestedPeriod,
       period: payload.period ?? "latest",
     },
   };
@@ -862,9 +1158,28 @@ async function fetchValuationRanking(
 async function fetchFinanceAnalysis(
   baseUrl: string,
   symbol: string,
-  analysisType: FinanceAnalysisType
+  analysisType: FinanceAnalysisType,
+  message?: string,
+  contextSnapshot?: AssistantContextSnapshot
 ): Promise<ToolRunOutput> {
-  const endpoint = `/api/finance-analysis?symbol=${encodeURIComponent(symbol)}&type=${encodeURIComponent(analysisType)}`;
+  const periodIntent = extractFinancialPeriodIntent(message ?? "", contextSnapshot);
+  const params = new URLSearchParams({
+    symbol,
+    type: analysisType,
+  });
+  if (periodIntent.explicitPeriod) {
+    params.set("period", periodIntent.explicitPeriod);
+  }
+  if (periodIntent.lookbackQuarters !== null) {
+    params.set("lookback", String(periodIntent.lookbackQuarters));
+  }
+  const endpoint = `/api/finance-analysis?${params.toString()}`;
+  const analysisRequestParams: Record<string, string | number | boolean | null> = {
+    symbol,
+    type: analysisType,
+    requestedPeriod: periodIntent.explicitPeriod,
+    lookbackQuarters: periodIntent.lookbackQuarters,
+  };
   const payload = await fetchJson<{
     data?: unknown;
     citations?: AssistantCitation[];
@@ -881,6 +1196,9 @@ async function fetchFinanceAnalysis(
   const data = payload.data as Record<string, unknown> | undefined;
   const warnings = normalizeWarnings(payload.warnings);
   const coverageRatio = toNumber(payload.coverage?.coverageRatio);
+  const selectedPeriods = Array.isArray(payload.coverage?.selectedPeriods)
+    ? payload.coverage?.selectedPeriods.filter((period): period is string => typeof period === "string")
+    : [];
   const selectedPeriodCount = Array.isArray(payload.coverage?.selectedPeriods)
     ? payload.coverage?.selectedPeriods.length
     : null;
@@ -902,6 +1220,7 @@ async function fetchFinanceAnalysis(
       messageBlocks,
       evidenceCount: 0,
       warningCount: warnings.length + 1,
+      requestParams: analysisRequestParams,
     };
   }
 
@@ -951,6 +1270,7 @@ async function fetchFinanceAnalysis(
         ],
         evidenceCount,
         warningCount: warnings.length,
+        requestParams: analysisRequestParams,
       };
     }
 
@@ -958,7 +1278,48 @@ async function fetchFinanceAnalysis(
     const debtToEquity = pickLatestFromRatioCollection(data, 'leverage', 'debtToEquity');
     const netMargin = pickLatestFromRatioCollection(data, 'profitability', 'netMargin');
     const ocfToNetIncome = pickLatestFromRatioCollection(data, 'cashFlowQuality', 'ocfToNetIncome');
-    const evidenceCount = countNumericEvidence([currentRatio, debtToEquity, netMargin, ocfToNetIncome]);
+    const revenueSeries = getPointSeries(data, "incomeStatement", "revenue");
+    const netIncomeSeries = getPointSeries(data, "incomeStatement", "netIncome");
+    const netMarginSeries = getPointSeries(data, "profitability", "netMargin");
+    const requestedPeriods = selectFinancialPeriods(selectedPeriods, periodIntent);
+    const latestPeriod = requestedPeriods.length > 0 ? requestedPeriods[requestedPeriods.length - 1] : null;
+    const latestRevenue = latestPeriod ? getSeriesValueByPeriod(revenueSeries, latestPeriod) : null;
+    const latestNetIncome = latestPeriod ? getSeriesValueByPeriod(netIncomeSeries, latestPeriod) : null;
+    const trendRows = requestedPeriods.map((period) => [
+      period,
+      getSeriesValueByPeriod(revenueSeries, period),
+      getSeriesValueByPeriod(netIncomeSeries, period),
+      getSeriesValueByPeriod(netMarginSeries, period),
+    ] as Array<string | number | null>);
+    const periodWarnings: string[] = [];
+    if (periodIntent.explicitPeriod && !selectedPeriods.includes(periodIntent.explicitPeriod)) {
+      periodWarnings.push(`Requested period ${periodIntent.explicitPeriod} is not present in loaded coverage window.`);
+    }
+    if (
+      periodIntent.lookbackQuarters !== null
+      && periodIntent.lookbackQuarters > 0
+      && selectedPeriods.length > 0
+      && periodIntent.lookbackQuarters > selectedPeriods.length
+    ) {
+      periodWarnings.push(
+        `Requested ${periodIntent.lookbackQuarters} quarter(s), but only ${selectedPeriods.length} period(s) are loaded for this request.`
+      );
+    }
+    if (periodWarnings.length > 0) {
+      messageBlocks.push({
+        type: "text",
+        title: `Period Coverage Notice (${symbol})`,
+        content: periodWarnings.join("\n"),
+      });
+    }
+    const evidenceCount = countNumericEvidence([
+      currentRatio,
+      debtToEquity,
+      netMargin,
+      ocfToNetIncome,
+      latestRevenue,
+      latestNetIncome,
+    ]);
     const tableBlock: AssistantMessageBlock = {
       type: 'table',
       title: `Fundamental Snapshot (${symbol})`,
@@ -971,14 +1332,28 @@ async function fetchFinanceAnalysis(
       ],
       note: 'Derived from local financial statements.',
     };
+    const trendBlock: AssistantMessageBlock = {
+      type: 'table',
+      title: `${Math.max(1, trendRows.length)}-Quarter Trend (${symbol})`,
+      columns: ['Period', 'Revenue', 'Net Income', 'Net Margin'],
+      rows: trendRows,
+      note: 'Trend periods are selected from available financial statements.',
+    };
+    const blockList = trendRows.length > 1
+      ? [...messageBlocks, tableBlock, trendBlock]
+      : [...messageBlocks, tableBlock];
     return {
       facts: [
-        `Fundamental analysis ${symbol}: confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(coverageRatio)}, periods=${selectedPeriodCount ?? 'n/a'}, current_ratio=${formatMaybeNumber(currentRatio)}, debt_to_equity=${formatMaybeNumber(debtToEquity)}, net_margin=${formatMaybePercent(netMargin)}, ocf_to_net_income=${formatMaybeNumber(ocfToNetIncome)}.`,
+        `Fundamental analysis ${symbol}: confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(coverageRatio)}, loaded_periods=${selectedPeriodCount ?? 'n/a'}, requested_period=${periodIntent.explicitPeriod ?? 'latest'}, requested_lookback_quarters=${periodIntent.lookbackQuarters ?? 'n/a'}, latest_period=${latestPeriod ?? 'n/a'}, latest_revenue=${formatMaybeNumber(latestRevenue)}, latest_net_income=${formatMaybeNumber(latestNetIncome)}, net_margin=${formatMaybePercent(netMargin)}, current_ratio=${formatMaybeNumber(currentRatio)}, debt_to_equity=${formatMaybeNumber(debtToEquity)}, ocf_to_net_income=${formatMaybeNumber(ocfToNetIncome)}.`,
+        `Fundamental trend ${symbol}: selected_periods=${requestedPeriods.join(",") || "n/a"}.`,
       ],
       citations,
-      messageBlocks: [...messageBlocks, tableBlock],
+      messageBlocks: blockList,
       evidenceCount,
-      warningCount: warnings.length,
+      warningCount: warnings.length + periodWarnings.length,
+      requestParams: {
+        ...analysisRequestParams,
+      },
     };
   }
 
@@ -1002,6 +1377,7 @@ async function fetchFinanceAnalysis(
       messageBlocks: [...messageBlocks, tableBlock],
       evidenceCount,
       warningCount: warnings.length,
+      requestParams: analysisRequestParams,
     };
   }
 
@@ -1031,6 +1407,7 @@ async function fetchFinanceAnalysis(
       messageBlocks: [...messageBlocks, tableBlock],
       evidenceCount: countNumericEvidence([fairValue, currentPrice, upsideDownside, wacc]),
       warningCount: warnings.length,
+      requestParams: analysisRequestParams,
     };
   }
 
@@ -1062,6 +1439,7 @@ async function fetchFinanceAnalysis(
       ],
       evidenceCount: countNumericEvidence([toNumber(data.medianPe), toNumber(data.medianPb)]) + rows.length,
       warningCount: warnings.length,
+      requestParams: analysisRequestParams,
     };
   }
 
@@ -1090,6 +1468,7 @@ async function fetchFinanceAnalysis(
     ],
     evidenceCount: countNumericEvidence([toNumber(data.baseFairValuePerShare)]) + (cells.length > 0 ? 1 : 0),
     warningCount: warnings.length,
+    requestParams: analysisRequestParams,
   };
 }
 
@@ -1166,9 +1545,23 @@ async function fetchJson<T>(baseUrl: string, endpoint: string, timeoutMs: number
 }
 
 function normalizeHttpError(error: unknown): HttpErrorShape {
-  if (isHttpErrorShape(error)) return error;
-  if (error instanceof Error) return { message: error.message };
-  return { message: String(error) };
+  if (isHttpErrorShape(error)) {
+    return {
+      status: error.status,
+      message: sanitizeToolErrorMessage(error.message),
+    };
+  }
+  if (error instanceof Error) return { message: sanitizeToolErrorMessage(error.message) };
+  return { message: sanitizeToolErrorMessage(String(error)) };
+}
+
+function deriveToolErrorCode(error: HttpErrorShape): string {
+  if (typeof error.status === "number") return `tool_http_${error.status}`;
+  const normalized = String(error.message ?? "").toLowerCase();
+  if (normalized.includes("timed out")) return "tool_timeout";
+  if (normalized.includes("aborted")) return "tool_aborted";
+  if (normalized.includes("network")) return "tool_network";
+  return "tool_error";
 }
 
 function isHttpErrorShape(value: unknown): value is HttpErrorShape {
@@ -1208,13 +1601,104 @@ function extractStatementFields(value: unknown): Record<string, unknown> {
 
 function getFirstNumericByHints(fields: Record<string, unknown>, hints: string[]): number | null {
   const entries = Object.entries(fields);
+  const normalizedHints = hints.map((hint) => normalizeForKeywordMatch(hint));
+  const noisyPattern = /(yoy|qoq|margin|ratio|pct|percent|growth|change)/;
+
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestValue: number | null = null;
   for (const [key, value] of entries) {
-    const normalizedKey = key.toLowerCase();
-    if (!hints.some((hint) => normalizedKey.includes(hint))) continue;
     const numeric = toNumber(value);
-    if (numeric !== null) return numeric;
+    if (numeric === null) continue;
+    const normalizedKey = normalizeForKeywordMatch(key);
+
+    let score = Number.NEGATIVE_INFINITY;
+    for (const hint of normalizedHints) {
+      if (!hint) continue;
+      if (normalizedKey === hint) {
+        score = Math.max(score, 120);
+      } else if (normalizedKey.startsWith(`${hint}_`)) {
+        score = Math.max(score, 90);
+      } else if (normalizedKey.includes(hint)) {
+        score = Math.max(score, 60);
+      }
+    }
+
+    if (score === Number.NEGATIVE_INFINITY) continue;
+    if (noisyPattern.test(normalizedKey)) {
+      score -= 80;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestValue = numeric;
+    }
   }
-  return null;
+
+  return bestScore > Number.NEGATIVE_INFINITY ? bestValue : null;
+}
+
+function sanitizeToolErrorMessage(value: string): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "Tool request failed";
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const errorValue = parsed.error;
+    if (errorValue && typeof errorValue === "object" && !Array.isArray(errorValue)) {
+      const errorRecord = errorValue as Record<string, unknown>;
+      const code = normalizeToolErrorToken(errorRecord.code);
+      const type = normalizeToolErrorToken(errorRecord.type);
+      const message = normalizeToolErrorToken(errorRecord.message);
+      const summary = [code, type, message].filter(Boolean).join(":");
+      if (summary) return summary;
+    }
+    const message = normalizeToolErrorToken(parsed.message);
+    if (message) return message;
+  } catch {
+    // Fall back below.
+  }
+
+  const normalized = normalizeToolErrorToken(raw);
+  if (normalized) return normalized;
+  return `error_hash=${hashText(raw)}`;
+}
+
+function normalizeToolErrorToken(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9:_-]+/g, "")
+    .slice(0, 120)
+    .toLowerCase();
+}
+
+function getPointSeries(
+  data: Record<string, unknown>,
+  section: string,
+  key: string
+): Array<{ period: string; value: number | null }> {
+  const sec = data[section];
+  if (!isRecord(sec)) return [];
+  const collection = sec[key];
+  if (!Array.isArray(collection)) return [];
+
+  const series: Array<{ period: string; value: number | null }> = [];
+  for (const item of collection) {
+    if (!isRecord(item)) continue;
+    const period = typeof item.period === "string" ? item.period.trim() : "";
+    if (!period) continue;
+    series.push({ period, value: toNumber(item.value) });
+  }
+  return series;
+}
+
+function getSeriesValueByPeriod(
+  series: Array<{ period: string; value: number | null }>,
+  period: string
+): number | null {
+  const target = series.find((item) => item.period === period);
+  return target?.value ?? null;
 }
 
 function pickLatestFromPointSeries(
@@ -1245,6 +1729,106 @@ function normalizeWarnings(input: unknown): string[] {
   );
 }
 
+interface FinancialPeriodIntent {
+  explicitPeriod: string | null;
+  lookbackQuarters: number | null;
+  asksTrend: boolean;
+}
+
+function extractFinancialPeriodIntent(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): FinancialPeriodIntent {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const timeframe = typeof contextSnapshot?.timeframe === "string" ? contextSnapshot.timeframe : "";
+  const explicitPeriod =
+    normalizeQuarterPeriod(filters?.period)
+    || normalizeQuarterPeriod(filters?.quarter)
+    || normalizeQuarterPeriod(filters?.fiscalPeriod)
+    || normalizeQuarterPeriod(timeframe)
+    || extractQuarterPeriodFromMessage(message);
+
+  const filterLookback =
+    parsePositiveInt(filters?.lookbackQuarters, 1, 20)
+    || parsePositiveInt(filters?.quarters, 1, 20)
+    || parseQuarterToken(timeframe);
+  const messageLookback = extractLookbackQuartersFromMessage(message);
+  const lookbackQuarters = filterLookback ?? messageLookback ?? null;
+  const normalized = normalizeForKeywordMatch(message);
+  const asksTrend = [
+    "xu huong",
+    "trend",
+    "gan nhat",
+    "recent",
+    "qua cac quy",
+    "quarter trend",
+  ].some((keyword) => normalized.includes(keyword));
+
+  return {
+    explicitPeriod,
+    lookbackQuarters,
+    asksTrend,
+  };
+}
+
+function selectFinancialPeriods(availablePeriods: string[], intent: FinancialPeriodIntent): string[] {
+  if (availablePeriods.length === 0) return [];
+  if (intent.explicitPeriod && availablePeriods.includes(intent.explicitPeriod)) {
+    return [intent.explicitPeriod];
+  }
+
+  const lookback =
+    intent.lookbackQuarters !== null
+      ? intent.lookbackQuarters
+      : intent.asksTrend
+        ? 4
+        : 1;
+
+  return availablePeriods.slice(-Math.max(1, Math.min(20, lookback)));
+}
+
+function normalizeQuarterPeriod(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const matchA = /^(\d{4})\s*Q([1-4])$/i.exec(trimmed);
+  if (matchA) return `${matchA[1]}Q${matchA[2]}`;
+
+  const matchB = /^Q([1-4])[\s/-]*(\d{4})$/i.exec(trimmed);
+  if (matchB) return `${matchB[2]}Q${matchB[1]}`;
+  return null;
+}
+
+function extractQuarterPeriodFromMessage(message: string): string | null {
+  const matchA = /\b(20\d{2})\s*Q([1-4])\b/i.exec(message);
+  if (matchA) return `${matchA[1]}Q${matchA[2]}`;
+
+  const matchB = /\bQ([1-4])[\s/-]*(20\d{2})\b/i.exec(message);
+  if (matchB) return `${matchB[2]}Q${matchB[1]}`;
+  return null;
+}
+
+function parseQuarterToken(value: string): number | null {
+  const match = /\b(\d{1,2})\s*q\b/i.exec(value);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return Math.min(20, parsed);
+}
+
+function extractLookbackQuartersFromMessage(message: string): number | null {
+  const matchA = /\b(\d{1,2})\s*(quy|quarters?|qtrs?)\b/i.exec(message);
+  if (matchA) {
+    const parsed = Number.parseInt(matchA[1], 10);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(20, parsed);
+  }
+
+  const normalized = normalizeForKeywordMatch(message);
+  if (normalized.includes("4 quy")) return 4;
+  return null;
+}
+
 function extractRequestedDate(message: string, contextSnapshot?: AssistantContextSnapshot): string | null {
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
   const filterDate =
@@ -1257,6 +1841,138 @@ function extractRequestedDate(message: string, contextSnapshot?: AssistantContex
   const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/);
   if (!match) return null;
   return normalizeDateLike(match[1]);
+}
+
+function shouldAttachStockChartBlock(message: string, contextSnapshot?: AssistantContextSnapshot): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  const explicitChartIntent = hasAnyKeyword(normalized, [
+    "chart",
+    "graph",
+    "plot",
+    "line",
+    "line chart",
+    "candlestick",
+    "candle",
+    "ohlc",
+    "gia",
+    "xu huong",
+    "trend",
+    "bieu do",
+    "do thi",
+    "nen",
+  ]);
+  if (explicitChartIntent) return true;
+  if (contextSnapshot?.page !== "charts") return false;
+
+  // On charts page, attach chart blocks only when the query asks price/OHLC/trend-like data.
+  return hasAnyKeyword(normalized, [
+    "price",
+    "gia",
+    "gia dong cua",
+    "dong cua",
+    "gia mo cua",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "khoi luong",
+    "trend",
+    "xu huong",
+    "ohlc",
+  ]);
+}
+
+function resolveRequestedStockChartType(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): "line" | "candlestick" {
+  const normalized = normalizeForKeywordMatch(message);
+  if (
+    hasAnyKeyword(normalized, [
+      "candlestick",
+      "candle",
+      "ohlc",
+      "nen",
+      "nen nhat",
+      "nen gia",
+    ])
+  ) {
+    return "candlestick";
+  }
+  if (contextSnapshot?.page === "charts") return "candlestick";
+  return "line";
+}
+
+type StockSnapshotSeriesRow = {
+  date?: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  volume?: number;
+};
+
+function buildStockSnapshotChartBlock(
+  series: StockSnapshotSeriesRow[],
+  symbol: string,
+  chartType: "line" | "candlestick"
+): AssistantMessageBlock | null {
+  if (!Array.isArray(series) || series.length === 0) return null;
+  const cappedSeries = series.slice(-90);
+  if (chartType === "candlestick") {
+    const candlePoints = cappedSeries
+      .map((row) => {
+        const x = String(row.date ?? "").trim();
+        const open = toNumber(row.open);
+        const high = toNumber(row.high);
+        const low = toNumber(row.low);
+        const close = toNumber(row.close);
+        const volume = toNumber(row.volume);
+        if (!x || open === null || high === null || low === null || close === null) return null;
+        return {
+          x,
+          open,
+          high: Math.max(high, open, close, low),
+          low: Math.min(low, open, close, high),
+          close,
+          volume,
+        };
+      })
+      .filter(
+        (
+          point
+        ): point is { x: string; open: number; high: number; low: number; close: number; volume: number | null } =>
+          point !== null
+      );
+    if (candlePoints.length > 0) {
+      return {
+        type: "chart",
+        chartType: "candlestick",
+        title: `Price Candlestick (${symbol})`,
+        points: candlePoints,
+        note: "OHLC derived from grounded stock snapshot rows.",
+      };
+    }
+  }
+
+  const linePoints = cappedSeries
+    .map((row) => {
+      const x = String(row.date ?? "").trim();
+      const y = toNumber(row.close);
+      if (!x || y === null) return null;
+      return { x, y };
+    })
+    .filter((point): point is { x: string; y: number } => point !== null);
+  if (linePoints.length === 0) return null;
+  return {
+    type: "chart",
+    chartType: "line",
+    title: `Close Price Trend (${symbol})`,
+    points: linePoints,
+    yLabel: "Close",
+    note: "Close prices derived from grounded stock snapshot rows.",
+  };
 }
 
 function extractIcbLevel(message: string, contextSnapshot?: AssistantContextSnapshot): string | null {
@@ -1302,6 +2018,91 @@ function extractTopLimit(message: string, contextSnapshot: AssistantContextSnaps
     if (Number.isFinite(parsed) && parsed > 0) return Math.min(50, parsed);
   }
   return fallback;
+}
+
+type StockUniverseMetric = "close" | "open" | "high" | "low" | "volume";
+
+function isStockUniverseRankingQuery(message: string, contextSnapshot?: AssistantContextSnapshot): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const metricHint = normalizeForKeywordMatch(
+    String(filters?.metric ?? filters?.sortBy ?? filters?.field ?? filters?.valueField ?? "")
+  );
+  const hasRankingSignal = hasAnyKeyword(normalized, ["top", "ranking", "xep hang", "cao nhat", "thap nhat", "lon nhat", "nho nhat"])
+    || parsePositiveInt(filters?.limit, 1, 50) !== null;
+  const asksFabricationRanking = isFabricationDirective(normalized) && hasRankingSignal;
+  const hasNumericSignal = hasAnyKeyword(`${metricHint} ${normalized}`.trim(), [
+    "gia",
+    "gia dong cua",
+    "dong cua",
+    "gia mo cua",
+    "open",
+    "close",
+    "high",
+    "low",
+    "khoi luong",
+    "volume",
+  ]) || hasAnyKeyword(normalized, [
+    "gainer",
+    "loser",
+    "gain",
+    "loss",
+    "performance",
+    "return",
+    "change",
+    "tang",
+    "giam",
+    "sinh loi",
+    "bien dong",
+  ]);
+  const hasUniverseHint = hasAnyKeyword(normalized, ["co phieu", "stock", "stocks", "ticker", "ma co phieu", "thi truong", "hose", "hnx", "upcom"])
+    || asksFabricationRanking
+    || typeof filters?.exchange === "string"
+    || typeof filters?.market === "string"
+    || typeof filters?.icb === "string"
+    || normalizeDateLike(filters?.date) !== null
+    || normalizeDateLike(filters?.asOfDate) !== null
+    || extractRequestedDate(message, contextSnapshot) !== null
+    || (hasRankingSignal && hasNumericSignal);
+  return asksFabricationRanking || (hasRankingSignal && hasNumericSignal && hasUniverseHint);
+}
+
+function extractStockUniverseMetric(message: string, contextSnapshot?: AssistantContextSnapshot): StockUniverseMetric {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const metricHint = normalizeForKeywordMatch(
+    String(filters?.metric ?? filters?.sortBy ?? filters?.field ?? filters?.valueField ?? "")
+  );
+  const normalized = normalizeForKeywordMatch(message);
+  const combined = `${metricHint} ${normalized}`.trim();
+
+  if (combined.includes("volume") || combined.includes("khoi luong")) return "volume";
+  if (combined.includes("gia mo cua") || combined.includes("open")) return "open";
+  if (combined.includes("gia cao nhat") || /\bhigh\b/.test(combined)) return "high";
+  if (combined.includes("gia thap nhat") || /\blow\b/.test(combined)) return "low";
+  if (combined.includes("gia dong cua") || combined.includes("dong cua") || /\bclose\b/.test(combined)) return "close";
+  return "close";
+}
+
+function extractStockUniverseExchange(message: string, contextSnapshot?: AssistantContextSnapshot): "HOSE" | "HNX" | "UPCOM" {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const exchangeHint = normalizeForKeywordMatch(String(filters?.exchange ?? filters?.market ?? filters?.san ?? ""));
+  const normalized = normalizeForKeywordMatch(message);
+  const combined = `${exchangeHint} ${normalized}`.trim();
+
+  if (combined.includes("hnx")) return "HNX";
+  if (combined.includes("upcom")) return "UPCOM";
+  return "HOSE";
+}
+
+function getStockUniverseMetricValue(
+  row: { open?: number; high?: number; low?: number; close?: number; volume?: number },
+  metric: StockUniverseMetric
+): number | null {
+  if (metric === "open") return toNumber(row.open);
+  if (metric === "high") return toNumber(row.high);
+  if (metric === "low") return toNumber(row.low);
+  if (metric === "volume") return toNumber(row.volume);
+  return toNumber(row.close);
 }
 
 function extractFundamentalStatement(
@@ -1401,6 +2202,66 @@ function parsePositiveInt(value: unknown, min: number, max: number): number | nu
   const parsed = Number.parseInt(String(value ?? "").trim(), 10);
   if (!Number.isFinite(parsed) || parsed < min) return null;
   return Math.min(max, parsed);
+}
+
+function resolveStockSnapshotLimit(
+  timeframe: string | undefined,
+  message: string | undefined,
+  contextSnapshot?: AssistantContextSnapshot
+): string {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
+  const candidateRaw =
+    String(
+      filters?.limit
+      ?? filters?.window
+      ?? filters?.range
+      ?? filters?.lookback
+      ?? timeframe
+      ?? ""
+    )
+      .trim()
+      .toLowerCase();
+  const candidate = candidateRaw.replace(/\s+/g, "");
+  const normalizedMessage = normalizeForKeywordMatch(message ?? "");
+
+  if (candidate === "all" || candidate === "max" || candidate === "full") return "all";
+  if (
+    normalizedMessage.includes("toan bo")
+    || normalizedMessage.includes("full history")
+    || normalizedMessage.includes("all history")
+    || normalizedMessage.includes("lich su day du")
+  ) {
+    return "all";
+  }
+
+  const numeric = parsePositiveInt(candidate, 1, 1000);
+  if (numeric !== null) return String(numeric);
+
+  const timeframeMap: Record<string, number> = {
+    "1w": 5,
+    "2w": 10,
+    "1m": 22,
+    "3m": 66,
+    "6m": 132,
+    "9m": 198,
+    "12m": 252,
+    "1y": 252,
+    "2y": 504,
+    "3y": 756,
+    "5y": 1000,
+    "ytd": 252,
+  };
+  if (candidate in timeframeMap) return String(timeframeMap[candidate]);
+
+  const quarterMatch = /^(\d{1,2})q$/.exec(candidate);
+  if (quarterMatch) {
+    const quarters = Number.parseInt(quarterMatch[1], 10);
+    if (Number.isFinite(quarters) && quarters > 0) {
+      return String(Math.min(1000, quarters * 63));
+    }
+  }
+
+  return "60";
 }
 
 function countNumericEvidence(values: Array<number | null>): number {

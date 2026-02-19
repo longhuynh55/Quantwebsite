@@ -78,6 +78,30 @@ function parseDateMs(raw) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function toDateKey(raw) {
+  const ms = parseDateMs(raw);
+  if (ms === null) return null;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function normalizeSymbol(raw) {
+  return String(raw ?? "").trim().toUpperCase();
+}
+
+function diffCalendarDays(olderDateKey, newerDateKey) {
+  const olderMs = parseDateMs(`${olderDateKey}T00:00:00Z`);
+  const newerMs = parseDateMs(`${newerDateKey}T00:00:00Z`);
+  if (olderMs === null || newerMs === null) return Number.NaN;
+  return Math.max(0, Math.round((newerMs - olderMs) / 86400000));
+}
+
+function formatSymbols(symbols, max = 6) {
+  const list = uniq(symbols.map((item) => normalizeSymbol(item))).filter(Boolean);
+  if (list.length === 0) return "none";
+  if (list.length <= max) return list.join(", ");
+  return `${list.slice(0, max).join(", ")} (+${list.length - max} more)`;
+}
+
 function validateOhlcvSeriesPoints(points) {
   ensure(Array.isArray(points), "data is not an array");
   ensure(points.length > 0, "data array is empty");
@@ -151,7 +175,9 @@ async function run() {
   let fullSymbol = null;
   let partialSymbol = null;
   let inactiveSymbol = null;
+  let freshnessSampleSymbols = [];
   const fullSeriesBySymbol = new Map();
+  const stockMetadataBySymbol = new Map();
 
   checks.push(async () => {
     const name = "GET /api/stocks?limit=all (metadata)";
@@ -164,6 +190,12 @@ async function run() {
       ensure(data.stocks.length > 0, "stocks list is empty");
 
       allStocks = data.stocks;
+      stockMetadataBySymbol.clear();
+      for (const row of allStocks) {
+        const sym = normalizeSymbol(row?.symbol);
+        if (sym) stockMetadataBySymbol.set(sym, row);
+      }
+
       const active = allStocks
         .filter((s) => String(s?.status ?? "").toUpperCase() === "ACTIVE")
         .filter((s) => Number.isFinite(Number(s?.dataRows)));
@@ -179,12 +211,18 @@ async function run() {
       fullSymbol = sortedByRowsDesc[0]?.symbol ?? primarySymbol;
       partialSymbol = sortedByRowsAsc[0]?.symbol ?? null;
       inactiveSymbol = allStocks.find((s) => String(s?.status ?? "").toUpperCase() !== "ACTIVE")?.symbol ?? null;
+      const highCoverageActive = sortedByRowsDesc.filter((s) => Number(s?.dataRows) >= 365);
+      freshnessSampleSymbols = (highCoverageActive.length > 0 ? highCoverageActive : sortedByRowsDesc)
+        .slice(0, 6)
+        .map((s) => normalizeSymbol(s?.symbol))
+        .filter(Boolean);
 
       const infoParts = [
         primarySymbol ? `primary=${primarySymbol}` : null,
         fullSymbol ? `full=${fullSymbol}` : null,
         partialSymbol ? `partial=${partialSymbol}` : null,
         inactiveSymbol ? `inactive=${inactiveSymbol}` : null,
+        freshnessSampleSymbols.length > 0 ? `freshnessSample=${freshnessSampleSymbols.join(",")}` : null,
       ].filter(Boolean);
       logInfo(`metadata loaded: total=${data.total}; ${infoParts.join(", ")}`);
 
@@ -272,8 +310,35 @@ async function run() {
 
       validateOhlcvSeriesPoints(data.data);
 
-      // If metadata includes dataRows, it should match total for the prepared dataset.
-      if (Number.isFinite(Number(data.metadata?.dataRows))) {
+      const upperSymbol = normalizeSymbol(symbol);
+      const sourceMetadata = stockMetadataBySymbol.get(upperSymbol);
+      if (sourceMetadata) {
+        const metadataRows = Number(sourceMetadata?.dataRows);
+        if (Number.isFinite(metadataRows)) {
+          ensure(
+            metadataRows === data.total,
+            `rows mismatch for ${upperSymbol}: metadata.dataRows=${metadataRows}, series.total=${data.total}; possible stale/truncated OHLCV`
+          );
+        }
+
+        const expectedFirstDate = toDateKey(sourceMetadata?.firstDate);
+        const expectedLastDate = toDateKey(sourceMetadata?.lastDate);
+        const gotFirstDate = toDateKey(data.data[0]?.date);
+        const gotLastDate = toDateKey(data.data[data.data.length - 1]?.date);
+
+        if (expectedFirstDate && gotFirstDate) {
+          ensure(
+            gotFirstDate === expectedFirstDate,
+            `first-date mismatch for ${upperSymbol}: metadata=${expectedFirstDate}, series=${gotFirstDate}; possible head truncation`
+          );
+        }
+        if (expectedLastDate && gotLastDate) {
+          ensure(
+            gotLastDate === expectedLastDate,
+            `last-date mismatch for ${upperSymbol}: metadata=${expectedLastDate}, series=${gotLastDate}; possible stale/tail truncation`
+          );
+        }
+      } else if (Number.isFinite(Number(data.metadata?.dataRows))) {
         ensure(
           Number(data.metadata.dataRows) === data.total,
           `metadata.dataRows (${data.metadata.dataRows}) != total (${data.total})`
@@ -299,6 +364,60 @@ async function run() {
         await validateSymbolSeries(sym)();
       }
       logPass(name, `symbols=${symbols.length}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "Stocks freshness/truncation guard (top active sample)";
+    try {
+      const sample = uniq(freshnessSampleSymbols).slice(0, 6);
+      ensure(sample.length >= 3, `insufficient active sample for freshness check (got ${sample.length}, need >=3)`);
+
+      const observations = [];
+      for (const sym of sample) {
+        const { response, data } = await fetchJson(`/api/stocks?symbol=${encodeURIComponent(sym)}&limit=1`);
+        ensure(response.ok, `${sym} HTTP ${response.status}`);
+        ensure(Array.isArray(data?.data), `${sym} data is not an array`);
+        ensure(data.data.length === 1, `${sym} expected 1 row for limit=1, got ${data.data.length}`);
+        ensure(Number.isFinite(data?.total) && data.total > 0, `${sym} invalid total`);
+
+        const lastDate = toDateKey(data.data[0]?.date);
+        ensure(lastDate, `${sym} invalid last date in limit=1 response`);
+
+        const sourceMetadata = stockMetadataBySymbol.get(normalizeSymbol(sym));
+        if (sourceMetadata && Number.isFinite(Number(sourceMetadata?.dataRows))) {
+          const expectedRows = Number(sourceMetadata.dataRows);
+          ensure(
+            expectedRows === data.total,
+            `${sym} metadata.dataRows=${expectedRows}, API total=${data.total}; possible stale/truncated stock dataset`
+          );
+        }
+
+        observations.push({ symbol: sym, lastDate });
+      }
+
+      const cohortLatest = observations.reduce((latest, item) => (item.lastDate > latest ? item.lastDate : latest), "");
+      ensure(cohortLatest, "unable to determine cohort latest date");
+
+      const stale = observations
+        .map((item) => ({
+          symbol: item.symbol,
+          lastDate: item.lastDate,
+          lagDays: diffCalendarDays(item.lastDate, cohortLatest),
+        }))
+        .filter((item) => Number.isFinite(item.lagDays) && item.lagDays > 20);
+
+      ensure(
+        stale.length <= 1,
+        `stale sample symbols vs cohort latest ${cohortLatest}: ${stale
+          .map((item) => `${item.symbol}@${item.lastDate}(lag=${item.lagDays}d)`)
+          .join(", ")}`
+      );
+
+      logPass(name, `sample=${sample.length}, latest=${cohortLatest}, stale>${20}d=${stale.length}`);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));
@@ -422,6 +541,57 @@ async function run() {
         ensure(Array.isArray(data?.excludedSymbols), `method=${method} excludedSymbols missing`);
         ensure(data.effectiveUniverse.length === data.allocations.length, `method=${method} universe/allocation mismatch`);
 
+        const requestedSymbols = symbols.map((sym) => normalizeSymbol(sym)).filter(Boolean);
+        const requestedSet = new Set(requestedSymbols);
+        const universeSymbols = data.effectiveUniverse.map((sym) => normalizeSymbol(sym)).filter(Boolean);
+        const universeSet = new Set(universeSymbols);
+        ensure(
+          universeSet.size === universeSymbols.length,
+          `method=${method} duplicate symbols in effectiveUniverse: ${formatSymbols(universeSymbols)}`
+        );
+
+        const excludedSymbols = data.excludedSymbols
+          .map((item) => normalizeSymbol(item?.symbol))
+          .filter(Boolean);
+        const excludedSet = new Set(excludedSymbols);
+        const overlap = universeSymbols.filter((sym) => excludedSet.has(sym));
+        ensure(
+          overlap.length === 0,
+          `method=${method} symbol appears in both effectiveUniverse and excludedSymbols: ${formatSymbols(overlap)}`
+        );
+
+        const unknownUniverse = universeSymbols.filter((sym) => !requestedSet.has(sym));
+        ensure(
+          unknownUniverse.length === 0,
+          `method=${method} effectiveUniverse contains unknown symbols: ${formatSymbols(unknownUniverse)}`
+        );
+
+        const unknownExcluded = [...excludedSet].filter((sym) => !requestedSet.has(sym));
+        ensure(
+          unknownExcluded.length === 0,
+          `method=${method} excludedSymbols contains unknown symbols: ${formatSymbols(unknownExcluded)}`
+        );
+
+        const accounted = new Set([...universeSet, ...excludedSet]);
+        const missingRequested = [...requestedSet].filter((sym) => !accounted.has(sym));
+        ensure(
+          missingRequested.length === 0,
+          `method=${method} unaccounted requested symbols: ${formatSymbols(missingRequested)}`
+        );
+
+        const allocationSymbols = data.allocations.map((item) => normalizeSymbol(item?.symbol)).filter(Boolean);
+        const allocationSet = new Set(allocationSymbols);
+        ensure(
+          allocationSet.size === allocationSymbols.length,
+          `method=${method} duplicate symbols in allocations: ${formatSymbols(allocationSymbols)}`
+        );
+        const missingAlloc = universeSymbols.filter((sym) => !allocationSet.has(sym));
+        const extraAlloc = allocationSymbols.filter((sym) => !universeSet.has(sym));
+        ensure(
+          missingAlloc.length === 0 && extraAlloc.length === 0,
+          `method=${method} allocations/effectiveUniverse mismatch missing=${formatSymbols(missingAlloc)} extra=${formatSymbols(extraAlloc)}`
+        );
+
         // Weights sanity
         const weights = data.allocations.map((a) => Number(a?.weight));
         ensure(weights.every((w) => Number.isFinite(w) && w >= 0), `method=${method} invalid weights`);
@@ -431,12 +601,20 @@ async function run() {
         // Correlation matrix shape sanity
         ensure(data?.correlationMatrix?.symbols, `method=${method} correlationMatrix.symbols missing`);
         ensure(Array.isArray(data?.correlationMatrix?.matrix), `method=${method} correlationMatrix.matrix missing`);
-        const mSyms = data.correlationMatrix.symbols;
+        const mSyms = data.correlationMatrix.symbols.map((sym) => normalizeSymbol(sym)).filter(Boolean);
         const m = data.correlationMatrix.matrix;
         ensure(mSyms.length === m.length, `method=${method} correlation matrix dimension mismatch`);
         for (const row of m) {
           ensure(Array.isArray(row) && row.length === mSyms.length, `method=${method} correlation row mismatch`);
         }
+        const matrixSet = new Set(mSyms);
+        ensure(matrixSet.size === mSyms.length, `method=${method} duplicate symbols in correlationMatrix: ${formatSymbols(mSyms)}`);
+        const missingMatrix = universeSymbols.filter((sym) => !matrixSet.has(sym));
+        const extraMatrix = mSyms.filter((sym) => !universeSet.has(sym));
+        ensure(
+          missingMatrix.length === 0 && extraMatrix.length === 0,
+          `method=${method} correlationMatrix/effectiveUniverse mismatch missing=${formatSymbols(missingMatrix)} extra=${formatSymbols(extraMatrix)}`
+        );
 
         // Expected metrics
         ensure(Number.isFinite(Number(data?.expectedReturn)), `method=${method} expectedReturn missing`);

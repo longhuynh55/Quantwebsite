@@ -1,11 +1,19 @@
 const baseUrl = process.env.SMOKE_BASE_URL ?? process.env.ASSISTANT_EVAL_BASE_URL ?? "http://localhost:3010";
 const defaultTimeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? 120000);
-const strictMode = process.env.ASSISTANT_EVAL_STRICT === "true";
+const ciMode = readBoolEnv(process.env.CI);
+const strictMode = readBoolEnv(process.env.ASSISTANT_EVAL_STRICT) || ciMode;
 const evalAuthToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
 const evalRequestHeaders = {
   "x-assistant-eval": "true",
   ...(evalAuthToken ? { "x-assistant-eval-token": evalAuthToken } : {}),
 };
+
+function readBoolEnv(rawValue) {
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 function logInfo(message) {
   console.log(`INFO ${message}`);
@@ -346,6 +354,42 @@ async function run() {
           "fundamentals statement=is citation missing"
         );
         logPass(name, `symbol=${symbol}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+          throw error;
+        }
+        failures += 1;
+        logFail(name, message);
+      }
+    },
+    async () => {
+      const name = "Assistant should expose query-plan metadata for valuation ranking";
+      try {
+        const prompt = "Top 5 cổ phiếu ngân hàng HOSE theo PE ngày 31/12/2025.";
+        const assistant = await askAssistant(prompt, { page: "home" });
+        ensure(
+          typeof assistant?.meta?.queryIntent === "string" && assistant.meta.queryIntent.length > 0,
+          "meta.queryIntent missing"
+        );
+        ensure(
+          assistant.meta.queryIntent === "valuation_ranking" || assistant.meta.queryIntent === "icb_snapshot",
+          `unexpected queryIntent=${assistant.meta.queryIntent}`
+        );
+        ensure(
+          typeof assistant?.meta?.queryPlanSummary === "string" && assistant.meta.queryPlanSummary.includes("tools="),
+          "meta.queryPlanSummary missing or malformed"
+        );
+        ensure(
+          Array.isArray(assistant?.meta?.plannedTools) && assistant.meta.plannedTools.length > 0,
+          "meta.plannedTools missing"
+        );
+        ensure(
+          assistant.meta.plannedTools.includes("valuationRanking"),
+          "plannedTools does not include valuationRanking"
+        );
+
+        logPass(name);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {

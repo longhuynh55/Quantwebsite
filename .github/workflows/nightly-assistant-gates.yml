@@ -1,0 +1,96 @@
+name: Nightly Assistant Gates
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-assistant-gates
+  cancel-in-progress: true
+
+jobs:
+  nightly-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate CI data
+        run: pnpm run data:generate:ci
+
+      - name: Start app container
+        run: docker compose up -d --build app
+
+      - name: Health probe fail-fast
+        run: |
+          node -e "fetch('http://localhost:3010/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('nightly_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
+
+      - name: Assistant routing matrix stability gate
+        run: pnpm run eval:assistant:routing:stable
+
+      - name: Assistant policy matrix stability gate
+        run: pnpm run eval:assistant:policy-matrix:stable
+
+      - name: Assistant perf reliability stability gate
+        run: pnpm run eval:assistant:perf-reliability:stable
+
+      - name: Assistant realworld stability gate
+        run: pnpm run eval:assistant:realworld:stable
+
+      - name: Assistant backtesting KPI matrix
+        run: pnpm run eval:assistant:backtesting:kpi-matrix
+
+      - name: Assistant comprehensive full stability (soft gate)
+        id: assistant_full
+        continue-on-error: true
+        run: pnpm run eval:assistant:full:stable
+
+      - name: Nightly full gate summary
+        if: always()
+        run: |
+          if [ "${{ steps.assistant_full.outcome }}" != "success" ]; then
+            echo "assistant_full: soft_fail (non-blocking); inspect artifacts/assistant-eval-comprehensive-report.json" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "assistant_full: pass" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload assistant artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-assistant-artifacts
+          path: |
+            artifacts/assistant-routing-matrix-report.json
+            artifacts/assistant-policy-matrix-report.json
+            artifacts/assistant-perf-reliability-report.json
+            artifacts/assistant-realworld-report.json
+            artifacts/backtesting-kpi-matrix-report.json
+            artifacts/assistant-eval-comprehensive-report.json
+            artifacts/assistant-eval-summary.md
+          if-no-files-found: warn
+
+      - name: Collect docker logs
+        if: always()
+        run: docker compose logs --tail=200 app
+
+      - name: Shutdown containers
+        if: always()
+        run: docker compose down --remove-orphans

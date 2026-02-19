@@ -85,8 +85,8 @@ jobs:
         run: |
           node -e "fetch('http://localhost:3010/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('dev_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
 
-      - name: Assistant PR gate (live)
-        run: pnpm run eval:assistant:pr-gate
+      - name: Assistant PR gate stability gate
+        run: pnpm run eval:assistant:pr-gate:stable
 
       - name: Dev smoke
         run: docker compose run --rm smoke
@@ -100,15 +100,15 @@ jobs:
       - name: Dev assistant routing matrix gate
         run: pnpm run eval:assistant:routing
 
-      - name: Dev assistant policy matrix gate
-        run: pnpm run eval:assistant:policy-matrix
+      - name: Dev assistant policy matrix stability gate
+        run: pnpm run eval:assistant:policy-matrix:stable
 
-      - name: Dev assistant perf reliability gate
-        run: pnpm run eval:assistant:perf-reliability
+      - name: Dev assistant perf reliability stability gate
+        run: pnpm run eval:assistant:perf-reliability:stable
 
-      - name: Dev assistant comprehensive metrics gate
+      - name: Dev assistant comprehensive stability gate
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        run: docker compose run --rm -e ASSISTANT_EVAL_PROFILE=quick -e ASSISTANT_EVAL_ENFORCE_DECEPTION=false smoke node scripts/eval-assistant-comprehensive.mjs
+        run: docker compose run --rm -e ASSISTANT_EVAL_PROFILE=quick -e ASSISTANT_EVAL_ENFORCE_DECEPTION=false smoke node scripts/eval-assistant-stability-gate.mjs --suite full
 
       - name: Collect docker logs (dev)
         if: always()
@@ -192,10 +192,11 @@ jobs:
         run: |
           node -e "fetch('http://localhost:3011/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{const j=await r.json().catch(()=>null); if(!r.ok||!j?.ok){console.error(JSON.stringify({status:r.status, body:j})); process.exit(1);} console.log('prod_probe_ok');}).catch((e)=>{console.error(e); process.exit(1);})"
 
-      - name: Assistant PR gate (live)
+      - name: Assistant PR gate stability gate
         env:
           ASSISTANT_PR_GATE_BASE_URL: http://localhost:3011
-        run: pnpm run eval:assistant:pr-gate
+          ASSISTANT_EVAL_BASE_URL: http://localhost:3011
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-stability-gate.mjs --suite pr-gate
 
       - name: Prod smoke
         run: docker compose --profile prod run --rm smoke-prod
@@ -206,13 +207,17 @@ jobs:
       - name: Prod assistant hallucination eval
         run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant.mjs
 
-      - name: Prod assistant policy matrix gate
+      - name: Prod assistant policy matrix stability gate
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-policy-matrix.mjs
+        env:
+          ASSISTANT_EVAL_BASE_URL: http://localhost:3011
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-stability-gate.mjs --suite policy-matrix
 
-      - name: Prod assistant perf reliability gate
+      - name: Prod assistant perf reliability stability gate
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-perf-reliability.mjs
+        env:
+          ASSISTANT_EVAL_BASE_URL: http://localhost:3011
+        run: docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-stability-gate.mjs --suite perf-reliability
 
       - name: Collect docker logs (prod)
         if: always()

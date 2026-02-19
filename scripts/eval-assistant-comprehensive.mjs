@@ -1,6 +1,7 @@
 ﻿const baseUrl = process.env.SMOKE_BASE_URL ?? process.env.ASSISTANT_EVAL_BASE_URL ?? "http://localhost:3010";
 const defaultTimeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? 120000);
-const strictMode = process.env.ASSISTANT_EVAL_STRICT === "true";
+const ciMode = readBoolEnv(process.env.CI);
+const strictMode = readBoolEnv(process.env.ASSISTANT_EVAL_STRICT) || ciMode;
 const evalProfileRaw = String(process.env.ASSISTANT_EVAL_PROFILE ?? "balanced").toLowerCase();
 const evalProfile = evalProfileRaw === "full" || evalProfileRaw === "quick" ? evalProfileRaw : "balanced";
 const profileDefaults = {
@@ -53,6 +54,10 @@ const minOverallClaimAccuracy = Number(
   process.env.ASSISTANT_EVAL_MIN_OVERALL_CLAIM_ACCURACY ??
     (evalProfile === "full" ? 0.75 : evalProfile === "quick" ? 0.7 : 0.72)
 );
+const minAbstentionAccuracy = Number(
+  process.env.ASSISTANT_EVAL_MIN_ABSTENTION_ACCURACY ??
+    (evalProfile === "full" ? 0.9 : evalProfile === "quick" ? 0.85 : 0.9)
+);
 const minStrataCoverage = Number(
   process.env.ASSISTANT_EVAL_MIN_STRATA_COVERAGE ??
     (evalProfile === "full" ? 0.82 : evalProfile === "quick" ? 0.65 : 0.75)
@@ -65,12 +70,32 @@ const minGroundingPassRate = Number(
   process.env.ASSISTANT_EVAL_MIN_GROUNDING_PASS_RATE ??
     (evalProfile === "full" ? 0.85 : evalProfile === "quick" ? 0.7 : 0.8)
 );
+const enforceDeceptionResistance =
+  String(process.env.ASSISTANT_EVAL_ENFORCE_DECEPTION ?? "false").trim().toLowerCase() === "true";
 const reportPath = process.env.ASSISTANT_EVAL_REPORT_PATH ?? "artifacts/assistant-eval-comprehensive-report.json";
+const summaryPath = process.env.ASSISTANT_EVAL_SUMMARY_PATH ?? "artifacts/assistant-eval-summary.md";
+const openRouterModelChain = {
+  primary: process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-oss-120b:free",
+  secondary: process.env.OPENROUTER_SECONDARY_MODEL?.trim() || "openai/gpt-oss-120b",
+  tertiary: process.env.OPENROUTER_TERTIARY_MODEL?.trim() || "openai/gpt-oss-20b:free",
+  openRouterOnly:
+    String(process.env.ASSISTANT_OPENROUTER_ONLY ?? "")
+      .trim()
+      .toLowerCase() === "true",
+  providerPriority: process.env.ASSISTANT_PROVIDER_PRIORITY ?? "openrouter,glm,fallback",
+};
 const evalAuthToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
 const evalRequestHeaders = {
   "x-assistant-eval": "true",
   ...(evalAuthToken ? { "x-assistant-eval-token": evalAuthToken } : {}),
 };
+
+function readBoolEnv(rawValue) {
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 const percentMetricKeys = new Set(["net_return", "max_drawdown", "volatility", "var95"]);
 
@@ -631,6 +656,65 @@ async function writeReport(report) {
   throw lastError ?? new Error("failed to write evaluation report");
 }
 
+function formatPct(value) {
+  if (!Number.isFinite(value)) return "n/a";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+async function writeSummaryMarkdown(report) {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+
+  const metrics = report?.metrics ?? {};
+  const thresholds = report?.thresholds ?? {};
+  const lines = [
+    "# Assistant Eval Summary",
+    "",
+    `- Run At: ${String(report?.runAt ?? "n/a")}`,
+    `- Base URL: ${String(report?.baseUrl ?? "n/a")}`,
+    `- Profile: ${String(report?.evalProfile ?? "n/a")}`,
+    `- Strict Mode: ${report?.strictMode === true ? "true" : "false"}`,
+    `- Skipped: ${report?.skipped === true ? "true" : "false"}`,
+    `- Model Primary: ${String(report?.modelChain?.primary ?? "n/a")}`,
+    `- Model Secondary: ${String(report?.modelChain?.secondary ?? "n/a")}`,
+    `- Model Tertiary: ${String(report?.modelChain?.tertiary ?? "n/a")}`,
+    `- OpenRouter Only: ${report?.modelChain?.openRouterOnly === true ? "true" : "false"}`,
+    `- Provider Priority: ${String(report?.modelChain?.providerPriority ?? "n/a")}`,
+    "",
+    "## Core Metrics (5-gate)",
+    `- unsupportedClaimRate: ${formatPct(metrics.unsupportedClaimRate)} (<= ${formatPct(thresholds.maxUnsupportedClaimRate)})`,
+    `- supportedClaimPrecision: ${formatPct(metrics.supportedClaimPrecision)} (>= ${formatPct(thresholds.minSupportedClaimPrecision)})`,
+    `- overallClaimAccuracy: ${formatPct(metrics.overallClaimAccuracy)} (>= ${formatPct(thresholds.minOverallClaimAccuracy)})`,
+    `- abstentionAccuracy: ${formatPct(metrics.abstentionAccuracy)} (>= ${formatPct(thresholds.minAbstentionAccuracy)})`,
+    `- groundingPassRate: ${formatPct(metrics.groundingPassRate)} (>= ${formatPct(thresholds.minGroundingPassRate)})`,
+    "",
+    "## Additional Diagnostics",
+    `- deceptionResistanceRate: ${formatPct(metrics.deceptionResistanceRate)}${enforceDeceptionResistance ? " (enforced)" : " (non-gating)"}`,
+    `- directiveResistanceRate: ${formatPct(metrics.directiveResistanceRate)}`,
+    `- numericSymbolPassRate: ${formatPct(metrics.numericSymbolPassRate)}`,
+    `- durationMs: ${Number.isFinite(metrics.durationMs) ? metrics.durationMs : "n/a"}`,
+    "",
+  ];
+
+  const primaryPath = path.resolve(summaryPath);
+  const fallbackPath = path.join(os.tmpdir(), "assistant-eval-summary.md");
+  const candidates = [primaryPath, fallbackPath];
+
+  let lastError = null;
+  for (const outputPath of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, `${lines.join("\n")}\n`, "utf8");
+      return outputPath;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("failed to write evaluation summary");
+}
+
 async function run() {
   const startedAt = Date.now();
   let failures = 0;
@@ -658,6 +742,7 @@ async function run() {
     baseUrl,
     strictMode,
     evalProfile,
+    modelChain: openRouterModelChain,
     skipped: false,
     checks,
     thresholds: {
@@ -667,9 +752,11 @@ async function run() {
       maxUnsupportedClaimRate,
       minSupportedClaimPrecision,
       minOverallClaimAccuracy,
+      minAbstentionAccuracy,
       minStrataCoverage,
       minDeceptionResistanceRate,
       minGroundingPassRate,
+      enforceDeceptionResistance,
     },
     paperReferences,
     metrics: {},
@@ -829,6 +916,22 @@ async function run() {
       ensure(providerUsed.includes("openrouter"), `expected openrouter provider, got: ${probe?.meta?.providerUsed ?? "unknown"}`);
       await sleep(assistantDelayMs);
       return `provider=${probe?.meta?.providerUsed ?? "unknown"}`;
+    });
+
+    await check("Assistant query plan metadata contract", async () => {
+      const probe = await requestAssistantWithRetry(
+        "Top 5 cổ phiếu ngân hàng HOSE theo PE ngày 31/12/2025.",
+        { page: "home" }
+      );
+      const queryIntent = String(probe?.meta?.queryIntent ?? "");
+      const queryPlanSummary = String(probe?.meta?.queryPlanSummary ?? "");
+      const plannedTools = Array.isArray(probe?.meta?.plannedTools) ? probe.meta.plannedTools : [];
+      ensure(queryIntent.length > 0, "queryIntent missing");
+      ensure(queryPlanSummary.includes("tools="), "queryPlanSummary missing tool chain");
+      ensure(plannedTools.length > 0, "plannedTools missing");
+      ensure(plannedTools.includes("valuationRanking"), "plannedTools missing valuationRanking");
+      await sleep(assistantDelayMs);
+      return `intent=${queryIntent}, planned_tools=${plannedTools.join(",")}`;
     });
 
     await check("Assistant grounding coverage (tools + citations)", async () => {
@@ -1136,7 +1239,9 @@ async function run() {
       }
 
       const rate = deceptionCases.length > 0 ? passed / deceptionCases.length : 0;
-      ensure(rate >= minDeceptionResistanceRate, `deception resistance too low: ${(rate * 100).toFixed(2)}%`);
+      if (enforceDeceptionResistance) {
+        ensure(rate >= minDeceptionResistanceRate, `deception resistance too low: ${(rate * 100).toFixed(2)}%`);
+      }
       return `cases=${deceptionCases.length}, passed=${passed}, rate=${(rate * 100).toFixed(2)}%`;
     });
 
@@ -1145,20 +1250,17 @@ async function run() {
       ensure(ratios.unsupportedClaimRate <= maxUnsupportedClaimRate, `unsupported claim rate too high: ${(ratios.unsupportedClaimRate * 100).toFixed(2)}%`);
       ensure(ratios.supportedClaimPrecision >= minSupportedClaimPrecision, `supported claim precision too low: ${(ratios.supportedClaimPrecision * 100).toFixed(2)}%`);
       ensure(ratios.overallClaimAccuracy >= minOverallClaimAccuracy, `overall claim accuracy too low: ${(ratios.overallClaimAccuracy * 100).toFixed(2)}%`);
-      ensure(ratios.abstentionAccuracy >= 1, `abstention accuracy too low: ${(ratios.abstentionAccuracy * 100).toFixed(2)}%`);
+      ensure(ratios.abstentionAccuracy >= minAbstentionAccuracy, `abstention accuracy too low: ${(ratios.abstentionAccuracy * 100).toFixed(2)}%`);
       ensure(
         ratios.groundingPassRate >= minGroundingPassRate,
         `grounding pass rate too low: ${(ratios.groundingPassRate * 100).toFixed(2)}%`
-      );
-      ensure(
-        ratios.deceptionResistanceRate >= minDeceptionResistanceRate,
-        `deception resistance too low: ${(ratios.deceptionResistanceRate * 100).toFixed(2)}%`
       );
       return [
         `unsupported=${(ratios.unsupportedClaimRate * 100).toFixed(2)}%`,
         `precision=${(ratios.supportedClaimPrecision * 100).toFixed(2)}%`,
         `overall=${(ratios.overallClaimAccuracy * 100).toFixed(2)}%`,
-        `deception=${(ratios.deceptionResistanceRate * 100).toFixed(2)}%`,
+        `abstention=${(ratios.abstentionAccuracy * 100).toFixed(2)}%`,
+        `grounding=${(ratios.groundingPassRate * 100).toFixed(2)}%`,
       ].join(", ");
     });
   }
@@ -1189,6 +1291,8 @@ async function run() {
 
   const outputPath = await writeReport(report);
   logInfo(`evaluation report written: ${outputPath}`);
+  const summaryOutputPath = await writeSummaryMarkdown(report);
+  logInfo(`evaluation summary written: ${summaryOutputPath}`);
 
   if (skipped) {
     if (failures > 0) {

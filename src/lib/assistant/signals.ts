@@ -29,6 +29,33 @@ const BANNED_SYMBOLS = new Set([
   "BCDKT",
   "KQKD",
 ]);
+const COMMON_NON_SYMBOL_TOKENS = new Set([
+  "CHO",
+  "TOI",
+  "BAN",
+  "LAY",
+  "GIUP",
+  "CO",
+  "PHIEU",
+  "GIA",
+  "DONG",
+  "CUA",
+  "NGAY",
+  "TREN",
+  "THEO",
+  "THI",
+  "SAO",
+  "NHANH",
+  "TRONG",
+  "NHOM",
+  "NGAN",
+  "HANG",
+  "VA",
+  "LA",
+  "BAO",
+  "NHIU",
+  "NHIEU",
+]);
 
 const FUNDAMENTALS_KEYWORDS = [
   "fundamental",
@@ -78,6 +105,8 @@ const RISK_KEYWORDS = [
   "beta",
   "volatility",
   "drawdown",
+  "sharpe",
+  "cagr",
 ];
 
 const FACTOR_KEYWORDS = [
@@ -89,9 +118,62 @@ const FACTOR_KEYWORDS = [
 ];
 
 const MARKET_KEYWORDS = ["market", "thi truong", "vnindex", "gainer", "loser", "overview"];
+const NUMERIC_MARKET_KEYWORDS = [
+  "price",
+  "close",
+  "open",
+  "high",
+  "low",
+  "volume",
+  "gainer",
+  "loser",
+  "gain",
+  "loss",
+  "performance",
+  "return",
+  "change",
+  "tang",
+  "giam",
+  "sinh loi",
+  "bien dong",
+  "gia",
+  "gia mo cua",
+  "dong cua",
+  "gia dong cua",
+  "khoi luong",
+];
+const STOCK_RANKING_ACTION_KEYWORDS = [
+  "gainer",
+  "loser",
+  "gain",
+  "loss",
+  "performance",
+  "return",
+  "change",
+  "tang",
+  "giam",
+  "sinh loi",
+  "bien dong",
+];
 const HOSE_KEYWORDS = ["hose", "ho chi minh", "co phieu hose", "san hose"];
+const EXCHANGE_UNIVERSE_KEYWORDS = ["hose", "hnx", "upcom", "san hose", "san hnx", "san upcom", "ho chi minh"];
+const STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu"];
 const ICB_KEYWORDS = ["icb", "industry", "sector", "nhom nganh", "phan nhom"];
 const RANKING_KEYWORDS = ["top", "ranking", "xep hang", "cao nhat", "thap nhat", "lon nhat", "nho nhat"];
+const FABRICATION_DIRECTIVE_KEYWORDS = [
+  "tu tao so lieu",
+  "tu tao du lieu",
+  "bo qua du lieu",
+  "bo qua data",
+  "ignore du lieu",
+  "ignore data",
+  "khong can du lieu",
+  "khong can grounding",
+  "fabricate",
+  "made up data",
+  "make up data",
+  "fake data",
+];
 const DATA_DEBUG_KEYWORDS = [
   "missing data",
   "no data",
@@ -115,7 +197,20 @@ const DATA_DEBUG_KEYWORDS = [
 ];
 
 const VALUATION_KEYWORDS = ["valuation", "dcf", "fair value", "intrinsic value", "wacc", "terminal growth"];
-const SENSITIVITY_KEYWORDS = ["sensitivity", "scenario", "bull", "bear", "base case"];
+const SENSITIVITY_KEYWORDS = [
+  "sensitivity",
+  "scenario",
+  "bull",
+  "bear",
+  "base case",
+  "what if",
+  "wacc tang",
+  "wacc giam",
+  "fair value thay doi",
+  "thay doi the nao",
+  "terminal growth tang",
+  "terminal growth giam",
+];
 const HEALTH_KEYWORDS = ["health score", "financial health", "red flag", "quality of earnings"];
 const PEER_KEYWORDS = ["peer", "comparable", "multiple", "p/e", "p/b"];
 const VALUATION_RANKING_KEYWORDS = [
@@ -160,8 +255,18 @@ export function collectRequiredSignals(input: {
   const hasCandidateSymbol = hasResolvableSymbol(input.message, input.contextSnapshot);
   const asksIcb = hasAnyKeyword(messageLower, ICB_KEYWORDS);
   const asksHoseUniverse = hasAnyKeyword(messageLower, HOSE_KEYWORDS);
+  const asksExchangeUniverse = hasAnyKeyword(messageLower, EXCHANGE_UNIVERSE_KEYWORDS);
   const asksRanking = hasAnyKeyword(messageLower, RANKING_KEYWORDS);
+  const asksFabricationDirective = isFabricationDirective(messageLower);
+  const asksFabricationRanking = asksFabricationDirective && (
+    asksRanking
+    || hasRankingFilter
+    || /\btop\s*\d{1,2}\b/.test(messageLower)
+  );
   const asksDataDebug = hasAnyKeyword(messageLower, DATA_DEBUG_KEYWORDS);
+  const asksNumericMarketData = hasAnyKeyword(messageLower, NUMERIC_MARKET_KEYWORDS);
+  const asksStockRankingAction = hasAnyKeyword(messageLower, STOCK_RANKING_ACTION_KEYWORDS);
+  const asksSpecificStockUniverseHint = hasAnyKeyword(messageLower, STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS);
   const asksFundamentals = hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS);
   const asksValuationSignal =
     hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
@@ -169,6 +274,23 @@ export function collectRequiredSignals(input: {
     || hasAnyKeyword(messageLower, VALUATION_RANKING_KEYWORDS)
     || hasValuationMetricFilter;
   const asksUniverseFilters = hasDateFilter || hasIcbFilter || hasHoseFilter;
+  const hasUniverseScope =
+    asksSpecificStockUniverseHint
+    || asksHoseUniverse
+    || asksExchangeUniverse
+    || asksUniverseFilters
+    || hasRankingFilter;
+  const asksStockUniverseRanking =
+    !asksIcb
+    && !hasIcbFilter
+    && (
+      asksFabricationRanking
+      || (
+        (asksRanking || hasRankingFilter || asksStockRankingAction)
+        && hasUniverseScope
+        && (asksNumericMarketData || asksStockRankingAction || !asksValuationSignal)
+      )
+    );
   const signals: RequiredSignal[] = [];
 
   const pushUnique = (tool: AssistantToolName, endpoint: string) => {
@@ -185,6 +307,10 @@ export function collectRequiredSignals(input: {
     || hasAnyKeyword(messageLower, BACKTEST_KEYWORDS)
   ) {
     pushUnique("backtestSummary", "/api/backtesting");
+  }
+
+  if ((hasCandidateSymbol && asksNumericMarketData) || asksStockUniverseRanking) {
+    pushUnique("stockSnapshot", "/api/stocks");
   }
 
   if (
@@ -236,14 +362,14 @@ export function collectRequiredSignals(input: {
     }
   }
 
-  if (asksIcb || hasIcbFilter || (asksHoseUniverse && (asksRanking || hasRankingFilter || hasDateFilter)) || (hasHoseFilter && asksValuationSignal)) {
+  if (asksIcb || hasIcbFilter) {
     pushUnique("icbSnapshot", "/api/analytics/icb-snapshot");
   }
 
-  if (
+  if (!asksStockUniverseRanking && (
     input.contextSnapshot?.page === "home"
     || hasAnyKeyword(messageLower, MARKET_KEYWORDS)
-  ) {
+  )) {
     pushUnique("marketSnapshot", "/api/market-overview");
   }
 
@@ -254,33 +380,49 @@ export function hasResolvableSymbol(message: string, contextSnapshot: AssistantC
   return getCandidateSymbols(message, contextSnapshot).length > 0;
 }
 
+export function isFabricationDirective(message: string): boolean {
+  return hasAnyKeyword(message, FABRICATION_DIRECTIVE_KEYWORDS);
+}
+
 export function getCandidateSymbols(message: string, contextSnapshot?: AssistantContextSnapshot): string[] {
-  const symbols: string[] = [];
+  const contextSymbols: string[] = [];
   if (contextSnapshot?.symbol) {
-    symbols.push(normalizeSymbol(contextSnapshot.symbol));
+    contextSymbols.push(normalizeSymbol(contextSnapshot.symbol));
   }
   if (Array.isArray(contextSnapshot?.symbols)) {
     for (const symbol of contextSnapshot.symbols) {
-      symbols.push(normalizeSymbol(symbol));
+      contextSymbols.push(normalizeSymbol(symbol));
     }
   }
   if (isRecord(contextSnapshot?.filters)) {
     const filter = contextSnapshot.filters;
     const candidates = [filter.symbol, filter.ticker, filter.stock, filter.code, filter.ma];
     for (const candidate of candidates) {
-      symbols.push(normalizeSymbol(candidate));
+      contextSymbols.push(normalizeSymbol(candidate));
     }
   }
 
-  const matches = message.match(/\b[A-Z0-9]{3,5}\b/g) ?? [];
-  for (const symbol of matches) {
-    symbols.push(normalizeSymbol(symbol));
+  const explicitMessageSymbols = extractExplicitSymbolHints(message);
+  if (
+    looksLikeUniverseStockRanking(message, contextSnapshot)
+    && contextSymbols.length === 0
+    && explicitMessageSymbols.length === 0
+  ) {
+    return [];
   }
 
-  const unique = Array.from(new Set(symbols))
+  const messageUppercaseTokens = extractUppercaseSymbolTokens(message);
+  const unique = Array.from(
+    new Set([
+      ...contextSymbols,
+      ...explicitMessageSymbols,
+      ...messageUppercaseTokens,
+    ])
+  )
     .filter((symbol) => symbol.length >= 3 && symbol.length <= 5)
     .filter((symbol) => /[A-Z]/.test(symbol))
-    .filter((symbol) => !BANNED_SYMBOLS.has(symbol));
+    .filter((symbol) => !BANNED_SYMBOLS.has(symbol))
+    .filter((symbol) => !COMMON_NON_SYMBOL_TOKENS.has(symbol));
 
   return unique.slice(0, 3);
 }
@@ -295,13 +437,53 @@ export function normalizeForKeywordMatch(value: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Ä‘/g, "d");
+    .replace(/\u0111/g, "d");
 }
 
 function normalizeSymbol(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim().toUpperCase();
+}
+
+function extractUppercaseSymbolTokens(message: string): string[] {
+  const matches = message.match(/\b[A-Z0-9]{3,5}\b/g) ?? [];
+  return matches.map(normalizeSymbol);
+}
+
+function extractExplicitSymbolHints(message: string): string[] {
+  const normalized = normalizeForKeywordMatch(message);
+  const regex = /\b(?:ma|ticker|symbol|cp)\b\s*[:=-]?\s*([a-z0-9]{2,5})\b/g;
+  const hints: string[] = [];
+  let match = regex.exec(normalized);
+  while (match) {
+    hints.push(normalizeSymbol(match[1]));
+    match = regex.exec(normalized);
+  }
+  return hints;
+}
+
+function looksLikeUniverseStockRanking(message: string, contextSnapshot?: AssistantContextSnapshot): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const hasRankingSignal =
+    hasAnyKeyword(normalized, RANKING_KEYWORDS)
+    || parsePositiveInt(filters?.limit, 1, 50) !== null
+    || parsePositiveInt(filters?.top, 1, 50) !== null
+    || parsePositiveInt(filters?.n, 1, 50) !== null
+    || /\btop\s*\d{1,2}\b/.test(normalized);
+  const hasNumericSignal =
+    hasAnyKeyword(normalized, NUMERIC_MARKET_KEYWORDS)
+    || hasAnyKeyword(normalized, STOCK_RANKING_ACTION_KEYWORDS);
+  const hasIcbSignal =
+    hasAnyKeyword(normalized, ICB_KEYWORDS)
+    || hasFilterValue(filters, ["icb", "industry", "sector", "icbLevel", "icb_level"]);
+  const hasUniverseHint =
+    hasAnyKeyword(normalized, STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS)
+    || hasAnyKeyword(normalized, EXCHANGE_UNIVERSE_KEYWORDS)
+    || hasFilterValue(filters, ["exchange", "market", "san", "date", "asOfDate", "as_of_date", "day"])
+    || /\b(\d{1,2}[-/]\d{1,2}[-/]\d{4}|20\d{2}[-/]\d{1,2}[-/]\d{1,2})\b/.test(message);
+
+  return hasRankingSignal && hasNumericSignal && hasUniverseHint && !hasIcbSignal;
 }
 
 function hasFilterValue(
@@ -334,6 +516,13 @@ function hasFilterKeyword(
   return values.some((value) => keywords.some((keyword) => value.includes(normalizeForKeywordMatch(keyword))));
 }
 
+function parsePositiveInt(value: unknown, min: number, max: number): number | null {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < min) return null;
+  return Math.min(max, parsed);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
