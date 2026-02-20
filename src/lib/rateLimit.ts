@@ -19,15 +19,17 @@ const PLATFORM_IP_HEADERS = [
   "x-azure-clientip",
 ];
 const GENERIC_PROXY_IP_HEADERS = ["x-real-ip", "x-forwarded-for"];
-const FALLBACK_FINGERPRINT_HEADERS = [
+const FALLBACK_CORE_HEADERS = [
   "user-agent",
   "accept-language",
-  "accept",
-  "accept-encoding",
   "sec-ch-ua",
   "sec-ch-ua-platform",
-  "sec-ch-ua-platform-version",
   "sec-ch-ua-mobile",
+] as const;
+const FALLBACK_EXTENDED_HEADERS = [
+  "accept",
+  "accept-encoding",
+  "sec-ch-ua-platform-version",
   "sec-ch-ua-model",
   "sec-ch-ua-arch",
   "sec-ch-ua-bitness",
@@ -119,7 +121,7 @@ export function createRateLimitKey(scope: string, identifier: string): string {
  */
 export function getClientIdentifier(request: Request): string {
   const isValidIP = (ip: string): boolean =>
-    /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) ||
+    isValidIPv4(ip) ||
     /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(ip);
 
   const extractFirstValidIp = (value: string | null): string | null => {
@@ -129,7 +131,8 @@ export function getClientIdentifier(request: Request): string {
       .map((item) => item.trim())
       .filter(Boolean);
     for (const candidate of candidates) {
-      if (isValidIP(candidate)) return candidate;
+      const normalized = normalizeIpCandidate(candidate);
+      if (normalized && isValidIP(normalized)) return normalized;
     }
     return null;
   };
@@ -160,8 +163,24 @@ export function getClientIdentifier(request: Request): string {
  */
 function buildFallbackFingerprint(request: Request): string {
   const parts: string[] = [];
-  for (const headerName of FALLBACK_FINGERPRINT_HEADERS) {
+  for (const headerName of FALLBACK_CORE_HEADERS) {
     parts.push(`${headerName}=${normalizeHeaderValue(request.headers.get(headerName), 320)}`);
+  }
+
+  const authSignature = normalizeHeaderValue(request.headers.get("authorization"), 640);
+  if (authSignature) {
+    parts.push(`authorization=${hashString(authSignature)}`);
+  }
+
+  const stableCookieSignature = extractStableCookieSignature(request.headers.get("cookie"));
+  if (stableCookieSignature) {
+    parts.push(`cookie=${hashString(stableCookieSignature)}`);
+  }
+
+  if (!authSignature && !stableCookieSignature) {
+    for (const headerName of FALLBACK_EXTENDED_HEADERS) {
+      parts.push(`${headerName}=${normalizeHeaderValue(request.headers.get(headerName), 320)}`);
+    }
   }
 
   parts.push(`originHost=${extractUrlHost(request.headers.get("origin"))}`);
@@ -169,6 +188,77 @@ function buildFallbackFingerprint(request: Request): string {
   parts.push(`requestHost=${extractUrlHost(request.url)}`);
 
   return parts.join("|");
+}
+
+function isValidIPv4(ip: string): boolean {
+  const segments = ip.split(".");
+  if (segments.length !== 4) return false;
+  for (const segment of segments) {
+    if (!/^\d{1,3}$/.test(segment)) return false;
+    const parsed = Number.parseInt(segment, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 255) return false;
+  }
+  return true;
+}
+
+function normalizeIpCandidate(raw: string): string | null {
+  let candidate = raw.trim().replace(/^"+|"+$/g, "");
+  if (!candidate) return null;
+
+  // RFC 7239 format: for=203.0.113.5 or for="[2001:db8::1]:443"
+  if (candidate.toLowerCase().startsWith("for=")) {
+    candidate = candidate.slice(4).trim();
+    candidate = candidate.replace(/^"+|"+$/g, "");
+  }
+
+  const bracketedIPv6 = candidate.match(/^\[([0-9a-fA-F:.%]+)\](?::\d{1,5})?$/);
+  if (bracketedIPv6) {
+    candidate = bracketedIPv6[1];
+  } else if (candidate.includes(".") && candidate.includes(":") && candidate.indexOf(":") === candidate.lastIndexOf(":")) {
+    // IPv4 with port
+    candidate = candidate.slice(0, candidate.lastIndexOf(":"));
+  }
+
+  // Drop IPv6 zone identifiers (e.g., fe80::1%eth0)
+  candidate = candidate.split("%")[0].trim();
+  if (!candidate) return null;
+  return candidate.toLowerCase();
+}
+
+function extractStableCookieSignature(rawCookie: string | null): string {
+  if (!rawCookie) return "";
+  const items: string[] = [];
+  const pairs = rawCookie.split(";").map((part) => part.trim()).filter(Boolean);
+  for (const pair of pairs) {
+    const separatorIndex = pair.indexOf("=");
+    if (separatorIndex <= 0) continue;
+    const rawKey = pair.slice(0, separatorIndex).trim();
+    const rawValue = pair.slice(separatorIndex + 1).trim();
+    if (!rawKey || !rawValue) continue;
+
+    const key = rawKey.toLowerCase();
+    if (!isStableIdentityCookieKey(key)) continue;
+
+    const normalizedValue = normalizeHeaderValue(rawValue, 160);
+    if (!normalizedValue) continue;
+    items.push(`${key}=${normalizedValue}`);
+    if (items.length >= 12) break;
+  }
+
+  items.sort();
+  return items.join("&");
+}
+
+function isStableIdentityCookieKey(key: string): boolean {
+  if (!key) return false;
+  return (
+    key.includes("session") ||
+    key.includes("auth") ||
+    key.includes("token") ||
+    key === "sid" ||
+    key.endsWith("_sid") ||
+    key.endsWith("-sid")
+  );
 }
 
 function normalizeHeaderValue(value: string | null, maxLength: number): string {

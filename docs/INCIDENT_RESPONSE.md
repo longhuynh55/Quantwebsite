@@ -1,4 +1,4 @@
-# Incident Response Runbook
+﻿# Incident Response Runbook
 
 Use this runbook when data APIs, fundamentals, or assistant grounding show reliability issues.
 
@@ -55,22 +55,22 @@ Record:
 ### Case A: `backend.ok=false` or strict backend failure
 1. Check `DATA_BACKEND`, `DATA_BACKEND_STRICT`, `DATA_DUCKDB_PATH`.
 2. Verify `public/data/quant_data.duckdb` existence/readability.
-3. If DuckDB is required, run `npm run data:export:duckdb`.
+3. If DuckDB is required, run `pnpm run data:export:duckdb`.
 4. Restart service: `docker compose restart app`.
 
 ### Case B: Core dataset health failed
 1. Verify runtime CSV files exist in `public/data/`.
-2. Regenerate runtime artifacts: `npm run data:prepare:2018_2025`.
+2. Regenerate runtime artifacts: `pnpm run data:prepare:2018_2025`.
 3. Recheck: `curl "http://localhost:3010/api/health/data?refresh=true"`.
 
 ### Case C: Fundamentals unavailable
 1. Confirm 3 quarterly files exist/readable in `public/data/`.
-2. Run `npm run data:validate:fundamentals`.
+2. Run `pnpm run data:validate:fundamentals`.
 3. Recheck `/api/fundamentals` and `/api/health/data`.
 
 ### Case D: Assistant eval regression
-1. Run `npm run docker:eval:assistant`.
-2. If still failing, run `npm run docker:eval:assistant:full`.
+1. Run `pnpm run docker:eval:assistant`.
+2. If still failing, run `pnpm run docker:eval:assistant:full`.
 3. Compare latest report against previous baseline and isolate failing metric.
 
 ## 6) Mitigation and Recovery
@@ -81,8 +81,8 @@ Primary mitigation options:
 - Disable risky release and redeploy previous image.
 
 Recovery validation (required):
-- `npm run docker:smoke:api`
-- `npm run docker:qa:api`
+- `pnpm run docker:smoke:api`
+- `pnpm run docker:qa:api`
 - `/api/health/data?refresh=true` returns HTTP `200` and `"ok": true`
 
 ## 7) Communication Template
@@ -126,3 +126,4 @@ Corrective actions must link to one of:
 - `docs/DATA_RELEASE_CHECKLIST.md`
 - `docs/DATA_RELIABILITY_OPERATIONS.md`
 - `docs/DOCKER_RUNBOOK.md`
+

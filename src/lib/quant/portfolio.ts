@@ -39,6 +39,8 @@ export interface OptimizationResult {
   expectedReturn: number;
   volatility: number;
   sharpeRatio: number;
+  diversificationRatio: number;
+  effectiveN: number;
   correlationMatrix: { symbols: string[]; matrix: number[][] };
   assetStats: { symbol: string; meanReturn: number; volatility: number }[];
   excludedSymbols: ExcludedSymbol[];
@@ -184,6 +186,70 @@ function selectRemovalIndex(
   return activeSeries[idxA].symbol > activeSeries[idxB].symbol ? idxA : idxB;
 }
 
+function projectToSimplex(values: number[]): number[] {
+  if (!values || values.length === 0) return [];
+  const n = values.length;
+  const sorted = [...values].sort((a, b) => b - a);
+
+  let cumulative = 0;
+  let rho = -1;
+  for (let i = 0; i < n; i++) {
+    cumulative += sorted[i];
+    const threshold = (cumulative - 1) / (i + 1);
+    if (sorted[i] - threshold > 0) {
+      rho = i;
+    }
+  }
+
+  if (rho < 0) return new Array(n).fill(1 / n);
+
+  const theta = (sorted.slice(0, rho + 1).reduce((sum, value) => sum + value, 0) - 1) / (rho + 1);
+  const projected = values.map((value) => Math.max(value - theta, 0));
+  const sumProjected = projected.reduce((sum, value) => sum + value, 0);
+  if (sumProjected <= 0) return new Array(n).fill(1 / n);
+  return projected.map((value) => value / sumProjected);
+}
+
+function solveMinVarianceWeights(
+  covarianceAnnualMatrix: number[][],
+  maxIterations: number = 500,
+  learningRate: number = 0.05
+): number[] {
+  const n = covarianceAnnualMatrix.length;
+  if (n === 0) return [];
+
+  const stabilizedCovariance = covarianceAnnualMatrix.map((row, i) =>
+    row.map((value, j) => {
+      const safeValue = Number.isFinite(value) ? value : 0;
+      if (i === j) return Math.max(0, safeValue) + 1e-8;
+      return safeValue;
+    })
+  );
+
+  let weights = new Array(n).fill(1 / n);
+
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const gradient = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        gradient[i] += 2 * stabilizedCovariance[i][j] * weights[j];
+      }
+    }
+
+    const nextWeights = projectToSimplex(weights.map((weight, i) => weight - learningRate * gradient[i]));
+
+    let maxDiff = 0;
+    for (let i = 0; i < n; i++) {
+      maxDiff = Math.max(maxDiff, Math.abs(nextWeights[i] - weights[i]));
+    }
+    weights = nextWeights;
+
+    if (maxDiff < 1e-8) break;
+  }
+
+  return weights;
+}
+
 export function optimizePortfolio(
   data: Record<string, OHLCV[]>,
   symbols: string[],
@@ -323,6 +389,10 @@ export function optimizePortfolio(
       break;
     }
 
+    case "min_variance":
+      weights = solveMinVarianceWeights(covarianceAnnualMatrix);
+      break;
+
     case "mean_variance":
     default: {
       const sharpes = activeSeries.map((asset) =>
@@ -353,6 +423,14 @@ export function optimizePortfolio(
 
   const portfolioVolatility = Math.sqrt(Math.max(0, portfolioVarianceAnnual));
   const sharpeRatio = portfolioVolatility > 0 ? portfolioReturn / portfolioVolatility : 0;
+  const weightedVolatilitySum = activeSeries.reduce(
+    (sum, asset, index) => sum + weights[index] * asset.volatility,
+    0
+  );
+  const diversificationRatio =
+    portfolioVolatility > 0 ? weightedVolatilitySum / portfolioVolatility : 0;
+  const weightSquares = weights.reduce((sum, weight) => sum + weight * weight, 0);
+  const effectiveN = weightSquares > 0 ? 1 / weightSquares : 0;
 
   return {
     method,
@@ -360,6 +438,8 @@ export function optimizePortfolio(
     expectedReturn: portfolioReturn,
     volatility: portfolioVolatility,
     sharpeRatio,
+    diversificationRatio,
+    effectiveN,
     correlationMatrix: { symbols: activeSeries.map((asset) => asset.symbol), matrix: correlationMatrix },
     assetStats: activeSeries.map((asset) => ({
       symbol: asset.symbol,

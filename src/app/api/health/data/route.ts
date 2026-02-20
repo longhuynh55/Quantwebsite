@@ -20,7 +20,10 @@ import { queryDuckDbRows } from "@/lib/duckdbClient";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 
 const MIN_DATA_QUALITY_RATIO = 0.95;
-const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 60000;
+const RATE_LIMIT_MAX_FULL = 20;
+const RATE_LIMIT_MAX_PROBE = 60;
+const RATE_LIMIT_MAX_REFRESH = 10;
 const REFRESH_AUTH_HEADER = "x-health-refresh-token";
 const FUNDAMENTALS_CSV_FILES = [
   "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
@@ -71,6 +74,20 @@ function hasAuthorizedRefreshToken(request: Request): boolean {
   if (!expectedToken) return false;
   const providedToken = String(request.headers.get(REFRESH_AUTH_HEADER) ?? "").trim();
   return providedToken.length > 0 && providedToken === expectedToken;
+}
+
+function resolveRateLimitScope(options: {
+  probe: boolean;
+  refresh: boolean;
+  hasRefreshAuth: boolean;
+}): { scope: string; limit: number } {
+  if (options.refresh && options.hasRefreshAuth) {
+    return { scope: "api/health/data:refresh", limit: RATE_LIMIT_MAX_REFRESH };
+  }
+  if (options.probe) {
+    return { scope: "api/health/data:probe", limit: RATE_LIMIT_MAX_PROBE };
+  }
+  return { scope: "api/health/data:full", limit: RATE_LIMIT_MAX_FULL };
 }
 
 async function isReadable(filePath: string): Promise<boolean> {
@@ -272,14 +289,16 @@ export async function GET(request: Request) {
   const includeFundamentals = parseBoolean(searchParams.get("includeFundamentals"), true);
   const clientId = getClientIdentifier(request);
   const hasRefreshAuth = hasAuthorizedRefreshToken(request);
-  const skipRateLimit = hasRefreshAuth;
-  const rateLimit = skipRateLimit
-    ? { allowed: true, remaining: Infinity, resetTime: Date.now() }
-    : checkRateLimit(createRateLimitKey("api/health/data", clientId), RATE_LIMIT_MAX, 60000);
+  const rateLimitScope = resolveRateLimitScope({ probe, refresh, hasRefreshAuth });
+  const rateLimit = checkRateLimit(
+    createRateLimitKey(rateLimitScope.scope, clientId),
+    rateLimitScope.limit,
+    RATE_LIMIT_WINDOW_MS
+  );
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
+      { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil((rateLimit.resetTime - Date.now()) / 1000))) } }
     );
   }
 

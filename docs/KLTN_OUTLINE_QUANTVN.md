@@ -1,4 +1,4 @@
-# KLTN Outline (QuantVN / Quant Website)
+﻿# KLTN Outline (QuantVN / Quant Website)
 
 Muc tieu cua file nay la cung cap "khung" de viet KLTN theo style do an mau (Introduction -> Literature -> Methods -> Results -> Conclusion), nhung map truc tiep vao project QuantVN hien tai (Next.js + API routes + quant library + data robustness + Docker).
 
@@ -250,7 +250,8 @@ Neu can 1 bang ket qua "vua du" cho do an:
 
 ## Quick checklist (for defense)
 
-- Build: `npm run build` (PASS)
-- Smoke dev: `npm run docker:up` + `npm run docker:smoke`
-- Smoke prod: `npm run docker:up:prod` + `npm run docker:smoke:prod`
+- Build: `pnpm run build` (PASS)
+- Smoke dev: `pnpm run docker:up` + `pnpm run docker:smoke`
+- Smoke prod: `pnpm run docker:up:prod` + `pnpm run docker:smoke:prod`
 - Demo script: 5 scenarios in Chapter 5
+

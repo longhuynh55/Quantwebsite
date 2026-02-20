@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -32,6 +32,12 @@ interface OptimizationResult {
   expectedReturn: number;
   volatility: number;
   sharpeRatio: number;
+  diversificationRatio?: number;
+  effectiveN?: number;
+  benchmark?: string;
+  asOfDate?: string;
+  effectiveUniverse?: string[];
+  excludedSymbols?: Array<{ symbol: string; reason: string }>;
   correlationMatrix?: { symbols: string[]; matrix: number[][] };
   assetStats?: { symbol: string; meanReturn: number; volatility: number }[];
 }
@@ -43,11 +49,13 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   const MAX_SYMBOLS = 10;
 
   // AbortController for request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
 
   const addSymbol = () => {
     if (symbols.length >= MAX_SYMBOLS) {
@@ -68,34 +76,48 @@ export default function PortfolioPage() {
   };
 
   const optimize = async () => {
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
     if (symbols.length < 2) {
       const msg = "Add at least 2 symbols";
       setError(msg);
+      setStatusMessage("Portfolio optimization validation failed: add at least 2 symbols.");
       showError("Validation error", msg);
       return;
     }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
+
     setLoading(true);
     setError("");
+    setStatusMessage(`Optimizing portfolio for ${symbols.length} symbols...`);
 
     try {
       const response = await fetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbols, method }),
-        signal: abortControllerRef.current.signal,
+        signal: controller.signal,
       });
       const data = await response.json();
-      if (data.error) {
-        setError(data.error);
-        showError("Optimization failed", data.error);
+      if (!response.ok || data.error) {
+        if (requestId !== requestSeqRef.current) {
+          return;
+        }
+        const errorMessage = String(data?.error || `HTTP error! status: ${response.status}`);
+        setError(errorMessage);
+        setStatusMessage("Portfolio optimization failed.");
+        showError("Optimization failed", errorMessage);
       } else {
+        if (requestId !== requestSeqRef.current) {
+          return;
+        }
         setResult(data);
+        setStatusMessage("Portfolio optimization completed.");
         showSuccess("Portfolio optimized", `Sharpe ratio: ${data.sharpeRatio?.toFixed(2) || 'N/A'}`);
       }
     } catch (err) {
@@ -103,19 +125,34 @@ export default function PortfolioPage() {
       if (err instanceof Error && err.name === 'AbortError') {
         return;
       }
+      if (requestId !== requestSeqRef.current) {
+        return;
+      }
       const msg = "Failed to optimize portfolio";
       setError(msg);
+      setStatusMessage("Portfolio optimization failed.");
       showError("Optimization failed", msg);
     } finally {
-      setLoading(false);
+      if (requestId === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Portfolio Optimization</h1>
-        <p className="text-gray-600 dark:text-gray-400">Build optimized portfolios using Mean-Variance, Risk Parity, or Equal Weight</p>
+        <p className="text-gray-600 dark:text-gray-400">Build optimized portfolios using Mean-Variance, Min Variance, Risk Parity, or Equal Weight</p>
       </div>
 
       <Card className="mb-6">
@@ -145,7 +182,7 @@ export default function PortfolioPage() {
           <div className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Method</label>
-              <Select value={method} onChange={(e) => setMethod(e.target.value)} options={[{ value: "mean_variance", label: "Mean-Variance (Markowitz)" }, { value: "risk_parity", label: "Risk Parity" }, { value: "equal_weight", label: "Equal Weight" }]} />
+              <Select value={method} onChange={(e) => setMethod(e.target.value)} options={[{ value: "mean_variance", label: "Mean-Variance (Markowitz)" }, { value: "min_variance", label: "Min Variance (Covariance-Aware)" }, { value: "risk_parity", label: "Risk Parity" }, { value: "equal_weight", label: "Equal Weight" }]} />
             </div>
             <Button onClick={optimize} disabled={loading || symbols.length < 2}>
               {loading ? <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div> : <PieChartIcon className="w-4 h-4 mr-2" />}Optimize
@@ -175,12 +212,50 @@ export default function PortfolioPage() {
       {/* Results */}
       {result && !loading && (
         <>
+          {(result.benchmark || result.asOfDate) && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Optimization Context</CardTitle>
+                <CardDescription>Reference benchmark and as-of date used by optimizer</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {result.benchmark && <Badge variant="outline">Benchmark: {result.benchmark}</Badge>}
+                  {result.asOfDate && <Badge variant="outline">As of: {String(result.asOfDate).slice(0, 10)}</Badge>}
+                  {Array.isArray(result.effectiveUniverse) && (
+                    <Badge variant="outline">Effective Universe: {result.effectiveUniverse.length}</Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {result.expectedReturn !== undefined && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
               <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Expected Return</p><p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatPercent(result.expectedReturn)}</p></CardContent></Card>
               <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Volatility</p><p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatPercent(result.volatility)}</p></CardContent></Card>
               <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Sharpe Ratio</p><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{result.sharpeRatio?.toFixed(2)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Diversification Ratio</p><p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{Number.isFinite(result.diversificationRatio) ? Number(result.diversificationRatio).toFixed(2) : "N/A"}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Effective N</p><p className="text-2xl font-bold text-teal-600 dark:text-teal-400">{Number.isFinite(result.effectiveN) ? Number(result.effectiveN).toFixed(2) : "N/A"}</p></CardContent></Card>
             </div>
+          )}
+
+          {Array.isArray(result.excludedSymbols) && result.excludedSymbols.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Excluded Symbols</CardTitle>
+                <CardDescription>Symbols filtered out before optimization with reasons</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {result.excludedSymbols.slice(0, 20).map((item) => (
+                    <Badge key={`${item.symbol}:${item.reason}`} className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                      {item.symbol}: {item.reason}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           <Card className="mb-6">

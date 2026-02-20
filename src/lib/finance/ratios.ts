@@ -95,6 +95,15 @@ export async function buildFundamentalAnalysis(
     warnings.push(`Missing statement segments: ${coverage.missingStatements.length}.`);
   }
 
+  const revenueSeries = rows.map((row) => ({
+    period: row.period,
+    value: readNumericByAliases(row.is, [...ALIASES.revenue]),
+  }));
+  const netIncomeSeries = rows.map((row) => ({
+    period: row.period,
+    value: readNumericByAliases(row.is, [...ALIASES.netIncome]),
+  }));
+
   const bankingLike = isBankingLike(rows);
   if (bankingLike) {
     warnings.push(
@@ -109,6 +118,10 @@ export async function buildFundamentalAnalysis(
         note: "Baseline mode: bank-specific summary is provided while generic ratios are disabled.",
       },
       bankSummary: buildBankSummary(rows),
+      incomeStatement: {
+        revenue: revenueSeries.map((item) => toPoint(item.period, item.value)),
+        netIncome: netIncomeSeries.map((item) => toPoint(item.period, item.value)),
+      },
       coverage,
       liquidity: {
         currentRatio: nullSeries(rows),
@@ -135,15 +148,6 @@ export async function buildFundamentalAnalysis(
       warnings,
     };
   }
-
-  const revenueSeries = rows.map((row) => ({
-    period: row.period,
-    value: readNumericByAliases(row.is, [...ALIASES.revenue]),
-  }));
-  const netIncomeSeries = rows.map((row) => ({
-    period: row.period,
-    value: readNumericByAliases(row.is, [...ALIASES.netIncome]),
-  }));
 
   const liquidity = {
     currentRatio: rows.map((row) => {
@@ -221,6 +225,10 @@ export async function buildFundamentalAnalysis(
     symbol: symbol.toUpperCase(),
     generatedAt: new Date().toISOString(),
     coverage,
+    incomeStatement: {
+      revenue: revenueSeries.map((item) => toPoint(item.period, item.value)),
+      netIncome: netIncomeSeries.map((item) => toPoint(item.period, item.value)),
+    },
     liquidity,
     leverage,
     profitability,

@@ -29,7 +29,7 @@ export function QuickActions({ onAction, disabled = false }: QuickActionsProps) 
   return (
     <div className="p-4 border-b border-gray-200 dark:border-gray-700">
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-medium">
-        Quick Actions
+        Try these prompts
       </p>
       <div className="grid grid-cols-2 gap-2">
         {QUICK_ACTIONS.map((action) => {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { classifyFailureCause, summarizeFailureCategories } from "./eval-assistant-failure-taxonomy.mjs";
 
 const baseRounds = readNumber(process.env.ASSISTANT_EVAL_STABILITY_ROUNDS, 3);
 const baseMinPassRate = readNumber(process.env.ASSISTANT_EVAL_STABILITY_MIN_PASS_RATE, 1);
@@ -12,6 +13,7 @@ const baseMinSuccessfulRounds = readNumber(
 const defaultReportPath = process.env.ASSISTANT_EVAL_STABILITY_REPORT_PATH ?? "artifacts/assistant-stability-report.json";
 const ciMode = readBoolEnv(process.env.CI);
 const allowDryRunInCi = readBoolEnv(process.env.ASSISTANT_EVAL_ALLOW_DRY_RUN_IN_CI);
+const earlyStopEnabled = readBoolEnv(process.env.ASSISTANT_EVAL_STABILITY_EARLY_STOP ?? "true");
 
 const suites = {
   routing: {
@@ -301,6 +303,22 @@ function pickFailureReason(result) {
   return `exit_code_${result.exitCode}`;
 }
 
+function classifyRoundFailure(input) {
+  const reason = String(input?.failureReason ?? "").trim();
+  const failures = Array.isArray(input?.reportValidationErrors) ? input.reportValidationErrors : [];
+  const status = Number.isFinite(input?.exitCode) ? input.exitCode : null;
+  const classification = classifyFailureCause({
+    status,
+    reason,
+    failures,
+  });
+  return {
+    category: classification.category,
+    code: classification.code,
+    detail: classification.detail,
+  };
+}
+
 function resolveStabilityOutputPath(suiteId, cliValue) {
   if (typeof cliValue === "string" && cliValue.trim().length > 0) {
     return path.resolve(cliValue.trim());
@@ -311,12 +329,54 @@ function resolveStabilityOutputPath(suiteId, cliValue) {
   return path.resolve(`artifacts/assistant-${suiteId}-stability-report.json`);
 }
 
+function evaluateEarlyStop(config, rounds) {
+  if (!earlyStopEnabled || !Array.isArray(rounds) || rounds.length === 0) {
+    return { shouldStop: false, reasons: [] };
+  }
+
+  const executedRounds = rounds.length;
+  const successfulRounds = rounds.filter((item) => item.success).length;
+  const failedRounds = executedRounds - successfulRounds;
+  const remainingRounds = Math.max(0, config.rounds - executedRounds);
+  const possibleSuccessfulRounds = successfulRounds + remainingRounds;
+  const minPossibleFlakeRate = config.rounds > 0 ? failedRounds / config.rounds : 1;
+  const passRates = rounds.map((item) => item.passRate).filter((value) => isFiniteNumber(value));
+  const minObservedPassRate = passRates.length > 0 ? Math.min(...passRates) : null;
+  const integrityFailed = rounds.some((item) => item.reportValidationErrors.length > 0);
+  const reasons = [];
+
+  if (possibleSuccessfulRounds < config.minSuccessfulRounds) {
+    reasons.push("insufficient_remaining_rounds_for_success_threshold");
+  }
+  if (minPossibleFlakeRate > config.maxFlakeRate) {
+    reasons.push("flake_rate_threshold_unreachable");
+  }
+  if (isFiniteNumber(minObservedPassRate) && minObservedPassRate < config.minPassRate) {
+    reasons.push("min_pass_rate_already_below_threshold");
+  }
+  if (integrityFailed) {
+    reasons.push("report_integrity_already_failed");
+  }
+
+  return {
+    shouldStop: reasons.length > 0,
+    reasons,
+    executedRounds,
+    remainingRounds,
+    successfulRounds,
+    failedRounds,
+    minPossibleFlakeRate,
+    minObservedPassRate,
+  };
+}
+
 async function runSuiteStability(config) {
   const suiteStartedAt = Date.now();
   const suiteRoundDir = path.resolve("artifacts/stability", config.id);
   fs.mkdirSync(suiteRoundDir, { recursive: true });
 
   const rounds = [];
+  let earlyStop = null;
   for (let round = 1; round <= config.rounds; round += 1) {
     const roundReportPath = path.resolve(suiteRoundDir, `${config.id}-round-${round}.json`);
     const roundStartedAt = Date.now();
@@ -344,6 +404,13 @@ async function runSuiteStability(config) {
             : reportStatus === false
               ? "report_status_fail"
               : "round_failed");
+    const failureClassification = success
+      ? null
+      : classifyRoundFailure({
+        exitCode: execution.exitCode,
+        failureReason,
+        reportValidationErrors,
+      });
     rounds.push({
       round,
       success,
@@ -355,7 +422,22 @@ async function runSuiteStability(config) {
       reportStatus: parsedReport?.overallStatus ?? null,
       reportValidationErrors,
       failureReason,
+      failureCategory: failureClassification?.category ?? null,
+      failureCode: failureClassification?.code ?? null,
+      failureDetail: failureClassification?.detail ?? null,
     });
+
+    const earlyStopDecision = evaluateEarlyStop(config, rounds);
+    if (earlyStopDecision.shouldStop) {
+      earlyStop = {
+        ...earlyStopDecision,
+        atRound: round,
+      };
+      console.log(
+        `STABILITY EARLY_STOP suite=${config.id} round=${round} reasons=${earlyStop.reasons.join(",")}`
+      );
+      break;
+    }
   }
 
   const successfulRounds = rounds.filter((item) => item.success).length;
@@ -392,7 +474,12 @@ async function runSuiteStability(config) {
       comparator: "lte",
     },
   };
-  const gatePass = gates.flakeRate.pass && gates.successfulRounds.pass && gates.minPassRate.pass && gates.reportIntegrity.pass;
+  const gatePass =
+    !earlyStop
+    && gates.flakeRate.pass
+    && gates.successfulRounds.pass
+    && gates.minPassRate.pass
+    && gates.reportIntegrity.pass;
 
   const preferredRound = rounds.findLast((item) => item.success) ?? null;
   if (preferredRound && fs.existsSync(preferredRound.reportPath)) {
@@ -412,6 +499,8 @@ async function runSuiteStability(config) {
       minSuccessfulRounds: config.minSuccessfulRounds,
     },
     summary: {
+      configuredRounds: config.rounds,
+      executedRounds: rounds.length,
       successfulRounds,
       failedRounds,
       flakeRate,
@@ -419,6 +508,8 @@ async function runSuiteStability(config) {
       avgObservedPassRate,
       gatePass,
       durationMs: Date.now() - suiteStartedAt,
+      earlyStop,
+      failureCategorySummary: summarizeFailureCategories(rounds),
     },
     gates,
     rounds,

@@ -1,6 +1,7 @@
 // AI Assistant Types
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type AssistantUIMode = 'copilot' | 'screener';
 
 export type PageContext =
   | { page: 'home' }
@@ -41,6 +42,7 @@ export interface AssistantRequest {
   context?: PageContext;
   contextSnapshot?: AssistantContextSnapshot;
   preferences?: AssistantPreferences;
+  uiMode?: AssistantUIMode;
   requestId?: string;
   clientTs?: string;
 }
@@ -84,6 +86,31 @@ export type AssistantMessageBlock =
       note?: string;
     }
   | {
+      type: 'chart';
+      title: string;
+      chartType: 'line';
+      points: Array<{
+        x: string;
+        y: number;
+      }>;
+      yLabel?: string;
+      note?: string;
+    }
+  | {
+      type: 'chart';
+      title: string;
+      chartType: 'candlestick';
+      points: Array<{
+        x: string;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+        volume?: number | null;
+      }>;
+      note?: string;
+    }
+  | {
       type: 'text';
       title?: string;
       content: string;
@@ -107,8 +134,30 @@ export interface AssistantToolUsage {
   latencyMs?: number;
   evidenceCount?: number;
   warningCount?: number;
+  errorCode?: string;
   error?: string;
   requestParams?: Record<string, string | number | boolean | null>;
+}
+
+export type AssistantSemanticCheckStatus = 'pass' | 'warn' | 'fail' | 'skipped';
+
+export interface AssistantSemanticCheckItem {
+  id: string;
+  label: string;
+  status: AssistantSemanticCheckStatus;
+  guard?: boolean;
+  detail?: string;
+}
+
+export interface AssistantSemanticMeta {
+  phase: 'phase1' | 'phase2' | 'phase3';
+  version: string;
+  checklist: AssistantSemanticCheckItem[];
+  passRate?: number;
+  guardPassRate?: number;
+  guardEvaluatedCount?: number;
+  guardPassedCount?: number;
+  failedGuardIds?: string[];
 }
 
 export interface AssistantResponseMeta {
@@ -119,6 +168,17 @@ export interface AssistantResponseMeta {
   policyMode?: AssistantPolicyMode;
   groundingMode?: "enabled" | "disabled";
   toolBaseUrlSource?: string;
+  groundingRequired?: boolean;
+  groundingSatisfied?: boolean;
+  policyReasonCode?: string;
+  groundedFactsCount?: number;
+  citationCount?: number;
+  toolStatusSummary?: string;
+  queryIntent?: string;
+  queryPlanSummary?: string;
+  plannedToolCount?: number;
+  plannedTools?: AssistantToolName[];
+  semantic?: AssistantSemanticMeta;
 }
 
 export type AssistantPolicyMode = 'shadow' | 'enforce_high_risk' | 'enforce_all';
@@ -133,6 +193,7 @@ export interface AssistantContextSnapshot {
   timeframe?: string;
   selectedIndicators?: string[];
   lastApiPayload?: Record<string, unknown>;
+  uiMode?: AssistantUIMode;
 }
 
 export interface AssistantPreferences {

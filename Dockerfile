@@ -1,21 +1,23 @@
-FROM node:20-bookworm-slim AS deps
+﻿FROM node:20-bookworm-slim AS deps
 
 WORKDIR /app
+RUN corepack enable
 
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 ARG INSTALL_DUCKDB_BINDING=false
-RUN npm ci --legacy-peer-deps \
-  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then npm install duckdb --no-save --legacy-peer-deps; fi
+RUN pnpm install --frozen-lockfile \
+  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then pnpm add duckdb; fi
 
 FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
+RUN corepack enable
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build
+RUN pnpm run build
 
 FROM node:20-bookworm-slim AS runner
 
@@ -25,14 +27,17 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
-COPY package.json package-lock.json ./
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
 ARG INSTALL_DUCKDB_BINDING=false
-RUN npm ci --omit=dev --legacy-peer-deps \
-  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then npm install duckdb --no-save --legacy-peer-deps; fi
+RUN pnpm install --prod --frozen-lockfile \
+  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then pnpm add --prod duckdb; fi
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "--", "-p", "3000"]
+CMD ["pnpm", "run", "start", "-p", "3000"]
+

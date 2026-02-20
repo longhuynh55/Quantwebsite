@@ -3,6 +3,9 @@ export interface RiskMetrics {
   var99: number;
   cvar95: number;
   cvar99: number;
+  downsideDeviation: number;
+  sortinoRatio: number;
+  tailLossRatio95: number;
   maxDrawdown: number;
   avgDrawdown: number;
   drawdownDuration: number;
@@ -11,6 +14,8 @@ export interface RiskMetrics {
   trackingError: number;
   informationRatio: number;
 }
+
+const TAIL_WINSORIZE_PERCENTILE = 0.01;
 
 function calculateReturns(prices: number[]): number[] {
   if (!prices || prices.length < 2) return [];
@@ -65,6 +70,21 @@ function calculateCVaR(returns: number[], confidence: number): number {
   }
 
   return -tailReturns.reduce((a, b) => a + b, 0) / tailReturns.length;
+}
+
+function sanitizeReturnsForTailRisk(returns: number[]): number[] {
+  if (!returns || returns.length === 0) return [];
+  const finiteReturns = returns.filter((value) => Number.isFinite(value));
+  if (finiteReturns.length === 0) return [];
+  if (finiteReturns.length < 20) return finiteReturns;
+
+  const sorted = [...finiteReturns].sort((a, b) => a - b);
+  const lowerIndex = Math.floor((sorted.length - 1) * TAIL_WINSORIZE_PERCENTILE);
+  const upperIndex = Math.ceil((sorted.length - 1) * (1 - TAIL_WINSORIZE_PERCENTILE));
+  const lowerBound = sorted[lowerIndex];
+  const upperBound = sorted[upperIndex];
+
+  return finiteReturns.map((value) => Math.min(Math.max(value, lowerBound), upperBound));
 }
 
 function calculateDrawdowns(prices: number[]): { drawdown: number; duration: number }[] {
@@ -135,6 +155,9 @@ export function calculateRiskMetrics(
       var99: 0,
       cvar95: 0,
       cvar99: 0,
+      downsideDeviation: 0,
+      sortinoRatio: 0,
+      tailLossRatio95: 0,
       maxDrawdown: 0,
       avgDrawdown: 0,
       drawdownDuration: 0,
@@ -146,14 +169,15 @@ export function calculateRiskMetrics(
   }
 
   const returns = calculateReturns(prices);
+  const tailRiskReturns = sanitizeReturnsForTailRisk(returns);
 
   // VaR
-  const var95 = calculateVaR(returns, 0.95);
-  const var99 = calculateVaR(returns, 0.99);
+  const var95 = calculateVaR(tailRiskReturns, 0.95);
+  const var99 = calculateVaR(tailRiskReturns, 0.99);
 
   // CVaR
-  const cvar95 = calculateCVaR(returns, 0.95);
-  const cvar99 = calculateCVaR(returns, 0.99);
+  const cvar95 = calculateCVaR(tailRiskReturns, 0.95);
+  const cvar99 = calculateCVaR(tailRiskReturns, 0.99);
 
   // Drawdowns
   const drawdowns = calculateDrawdowns(prices);
@@ -165,6 +189,14 @@ export function calculateRiskMetrics(
   const mean = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
   const variance = returns.length > 0 ? returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length : 0;
   const volatility = Math.sqrt(variance * 252);
+  const downsideVariance =
+    returns.length > 0
+      ? returns.reduce((sum, value) => sum + Math.pow(Math.min(value, 0), 2), 0) / returns.length
+      : 0;
+  const downsideDeviation = Math.sqrt(downsideVariance * 252);
+  const annualizedMeanReturn = mean * 252;
+  const sortinoRatio = downsideDeviation > 0 ? annualizedMeanReturn / downsideDeviation : 0;
+  const tailLossRatio95 = var95 > 0 ? cvar95 / var95 : 0;
 
   // Beta and tracking error
   let beta = 0;
@@ -196,6 +228,9 @@ export function calculateRiskMetrics(
     var99,
     cvar95,
     cvar99,
+    downsideDeviation,
+    sortinoRatio,
+    tailLossRatio95,
     maxDrawdown,
     avgDrawdown,
     drawdownDuration: maxDuration,

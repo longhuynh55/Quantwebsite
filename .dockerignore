@@ -2,7 +2,7 @@ node_modules
 .next
 .git
 .gitignore
-npm-debug.log*
+pnpm-debug.log*
 dev_smoke*.log
 README.md
 docs

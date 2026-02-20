@@ -9,9 +9,11 @@ import {
 } from "@/lib/data";
 import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } from "@/lib/dataPolicy";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 
 const RATE_LIMIT_MAX = 100;
 const MIN_DATA_QUALITY_RATIO = 0.95;
+const marketOverviewApiLogger = createLogger("api.market_overview");
 
 interface StockReturn {
   symbol: string;
@@ -105,10 +107,17 @@ function getRecentMarketTrend(indexData: OHLCV[], days: number): { date: string;
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("market");
+  const logger = marketOverviewApiLogger.child({ traceId });
   // Rate limiting check
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/market-overview", clientId), RATE_LIMIT_MAX, 60000);
   if (!rateLimit.allowed) {
+    logger.warn("rate_limit.blocked", {
+      remaining: rateLimit.remaining,
+      resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+    });
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
@@ -257,7 +266,10 @@ export async function GET(request: Request) {
       excludedMissingPrevCount,
     });
   } catch (error) {
-    console.error("API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ error: "Failed to load market data" }, { status: 500 });
   }
 }

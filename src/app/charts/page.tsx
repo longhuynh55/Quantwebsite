@@ -21,7 +21,7 @@ import {
   ErrorState,
   NoResultsState,
 } from "@/components/ui";
-import { showSuccess, showError } from "@/components/ui/toast";
+import { showError } from "@/components/ui/toast";
 import { CandlestickChart, TimeRangeSelector, OHLCVData } from "@/components/charts";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import {
@@ -122,7 +122,6 @@ function ChartsContent() {
           if (result.data && result.data.length > 0) {
             setData(result.data);
             setStockMeta(result.metadata || null);
-            showSuccess("Chart loaded", `Loaded ${result.data.length} data points for ${sym}`);
           } else if (result.error) {
             setError(result.error);
             setData([]);
@@ -235,6 +234,9 @@ function ChartsContent() {
   useEffect(() => {
     if (!symbol) return;
     setFundSearch("");
+    setFundPeriod("latest");
+    setFundamentals(null);
+    setFundError(null);
     loadFundamentals(symbol, "latest");
   }, [symbol, loadFundamentals]);
 

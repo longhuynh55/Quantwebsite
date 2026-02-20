@@ -1,16 +1,19 @@
 import type { AssistantContextSnapshot, AssistantToolName, AssistantToolUsage } from "@/types/assistant";
 import type { GroundingResult } from "@/lib/assistant/tools";
-import { collectRequiredSignals, type RequiredSignal } from "@/lib/assistant/signals";
+import { collectRequiredSignals, getCandidateSymbols, isFabricationDirective, type RequiredSignal } from "@/lib/assistant/signals";
 
 export type AssistantPolicyMode = "shadow" | "enforce_high_risk" | "enforce_all";
 export type AssistantPolicyStatus = "ok" | "fallback" | "shadow_blocked";
 export type AssistantConfidence = "high" | "medium" | "low";
-
-type PolicyReasonCode =
+export type PolicyReasonCode =
   | "insufficient_grounding"
   | "required_tool_failed"
   | "missing_citation"
-  | "no_numeric_evidence";
+  | "no_numeric_evidence"
+  | "missing_symbol_grounding"
+  | "future_date_not_supported"
+  | "fabrication_directive_blocked"
+  | "ambiguous_symbol_not_supported";
 
 interface PolicyEvaluationInput {
   message: string;
@@ -24,6 +27,8 @@ export interface PolicyEvaluationResult {
   reasonCode?: PolicyReasonCode;
   reason?: string;
   dataConfidence: AssistantConfidence;
+  groundingRequired: boolean;
+  groundingSatisfied: boolean;
   shouldBypassLlm: boolean;
   responseMessage?: string;
   shadowBlocked: boolean;
@@ -99,6 +104,57 @@ const NUMERIC_KEYWORDS = [
 export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEvaluationResult {
   const mode = getPolicyMode();
   const normalizedMessage = normalizeForKeywordMatch(input.message);
+  const fabricationViolation = detectFabricationDirectiveViolation(input.message, input.contextSnapshot);
+  if (fabricationViolation) {
+    const fallbackMessage = buildFallbackMessage("fabrication_directive_blocked", fabricationViolation.reason);
+    const shadowBlocked = mode === "shadow";
+    return {
+      mode,
+      status: shadowBlocked ? "shadow_blocked" : "fallback",
+      reasonCode: "fabrication_directive_blocked",
+      reason: fabricationViolation.reason,
+      dataConfidence: "low",
+      groundingRequired: false,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
+      shadowBlocked,
+    };
+  }
+  const ambiguousSymbolViolation = detectAmbiguousSymbolViolation(input.message, input.contextSnapshot);
+  if (ambiguousSymbolViolation) {
+    const fallbackMessage = buildFallbackMessage("ambiguous_symbol_not_supported", ambiguousSymbolViolation.reason);
+    return {
+      mode,
+      status: "fallback",
+      reasonCode: "ambiguous_symbol_not_supported",
+      reason: ambiguousSymbolViolation.reason,
+      dataConfidence: "low",
+      groundingRequired: false,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
+      shadowBlocked: false,
+    };
+  }
+  const futureDateViolation = detectFutureDateViolation(input.message, input.contextSnapshot);
+  if (futureDateViolation) {
+    const reason = `Requested date ${futureDateViolation.requestedDate} is in the future and unsupported for grounded market data.`;
+    const fallbackMessage = buildFallbackMessage("future_date_not_supported", reason);
+    const shadowBlocked = mode === "shadow";
+    return {
+      mode,
+      status: shadowBlocked ? "shadow_blocked" : "fallback",
+      reasonCode: "future_date_not_supported",
+      reason,
+      dataConfidence: "low",
+      groundingRequired: false,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
+      shadowBlocked,
+    };
+  }
   const requiredSignals = collectRequiredSignals({
     message: input.message,
     contextSnapshot: input.contextSnapshot,
@@ -112,54 +168,92 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
       mode,
       status: "ok",
       dataConfidence: "medium",
+      groundingRequired: false,
+      groundingSatisfied: false,
       shouldBypassLlm: false,
       shadowBlocked: false,
     };
   }
 
   const failure = evaluateGrounding(requiredSignals, input.grounding);
-  if (!failure) {
+  const symbolCoverageFailure = evaluateMultiSymbolGrounding(
+    getCandidateSymbols(input.message, input.contextSnapshot),
+    input.grounding
+  );
+  const effectiveFailure = failure ?? symbolCoverageFailure;
+
+  if (!effectiveFailure) {
     return {
       mode,
       status: "ok",
       dataConfidence: "high",
+      groundingRequired: true,
+      groundingSatisfied: true,
       shouldBypassLlm: false,
       shadowBlocked: false,
     };
   }
 
-  if (isSoftNumericFailure(failure.reasonCode, failure.reason, input.grounding)) {
+  if (effectiveFailure.reasonCode === "missing_symbol_grounding") {
+    const fallbackMessage = buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason);
     return {
       mode,
-      status: "ok",
-      reasonCode: failure.reasonCode,
-      reason: failure.reason,
-      dataConfidence: "medium",
-      shouldBypassLlm: false,
-      shadowBlocked: false,
-    };
-  }
-
-  const fallbackMessage = buildFallbackMessage(failure.reasonCode, failure.reason);
-  if (!enforcementApplies) {
-    return {
-      mode,
-      status: "shadow_blocked",
-      reasonCode: failure.reasonCode,
-      reason: failure.reason,
+      status: "fallback",
+      reasonCode: effectiveFailure.reasonCode,
+      reason: effectiveFailure.reason,
       dataConfidence: "low",
+      groundingRequired: true,
+      groundingSatisfied: false,
       shouldBypassLlm: true,
-      shadowBlocked: true,
       responseMessage: fallbackMessage,
+      shadowBlocked: false,
     };
   }
 
+  if (isSoftNumericFailure(effectiveFailure.reasonCode, effectiveFailure.reason, input.grounding)) {
+    const fallbackMessage = buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason);
+    return {
+      mode,
+      status: "fallback",
+      reasonCode: effectiveFailure.reasonCode,
+      reason: effectiveFailure.reason,
+      dataConfidence: "low",
+      groundingRequired: true,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
+      shadowBlocked: false,
+    };
+  }
+
+  if (!enforcementApplies) {
+    const isShadowMode = mode === "shadow";
+    const fallbackMessage = isShadowMode
+      ? buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason)
+      : undefined;
+    return {
+      mode,
+      status: isShadowMode ? "shadow_blocked" : "ok",
+      reasonCode: effectiveFailure.reasonCode,
+      reason: effectiveFailure.reason,
+      dataConfidence: isShadowMode ? "low" : "medium",
+      groundingRequired: true,
+      groundingSatisfied: false,
+      shouldBypassLlm: isShadowMode,
+      responseMessage: fallbackMessage,
+      shadowBlocked: isShadowMode,
+    };
+  }
+
+  const fallbackMessage = buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason);
   return {
     mode,
     status: "fallback",
-    reasonCode: failure.reasonCode,
-    reason: failure.reason,
+    reasonCode: effectiveFailure.reasonCode,
+    reason: effectiveFailure.reason,
     dataConfidence: "low",
+    groundingRequired: true,
+    groundingSatisfied: false,
     shouldBypassLlm: true,
     responseMessage: fallbackMessage,
     shadowBlocked: false,
@@ -167,7 +261,7 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
 }
 
 function getPolicyMode(): AssistantPolicyMode {
-  const raw = String(process.env.ASSISTANT_POLICY_MODE ?? "enforce_high_risk").trim().toLowerCase();
+  const raw = String(process.env.ASSISTANT_POLICY_MODE ?? "shadow").trim().toLowerCase();
   if (raw === "enforce_all") return "enforce_all";
   if (raw === "enforce_high_risk") return "enforce_high_risk";
   return "shadow";
@@ -250,6 +344,14 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
       };
     }
     if ((successTool.evidenceCount ?? 0) <= 0) {
+      if (signal.tool === "fundamentalSnapshot") {
+        const analysisTool = successByTool.get("fundamentalAnalysis");
+        const analysisHasEvidence = (analysisTool?.evidenceCount ?? 0) > 0;
+        const analysisHasCitation = hasMatchingEndpoint(citationEndpoints, "/api/finance-analysis");
+        if (analysisHasEvidence && analysisHasCitation) {
+          continue;
+        }
+      }
       return {
         reasonCode: "no_numeric_evidence",
         reason: `Required tool ${signal.tool} returned no numeric evidence.`,
@@ -264,6 +366,40 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
   }
 
   return null;
+}
+
+function evaluateMultiSymbolGrounding(
+  requestedSymbols: string[],
+  grounding: GroundingResult
+): { reasonCode: PolicyReasonCode; reason: string } | null {
+  const normalizedRequested = Array.from(
+    new Set(
+      requestedSymbols
+        .map((symbol) => normalizeSymbolToken(symbol))
+        .filter((symbol): symbol is string => Boolean(symbol))
+    )
+  );
+  if (normalizedRequested.length < 2) return null;
+
+  const groundedSymbols = new Set<string>();
+  for (const citation of grounding.citations) {
+    const citationSymbol = normalizeSymbolToken(citation.symbol);
+    if (citationSymbol) groundedSymbols.add(citationSymbol);
+  }
+  for (const tool of grounding.usedTools) {
+    if (tool.status !== "success") continue;
+    if ((tool.evidenceCount ?? 0) <= 0) continue;
+    const symbol = normalizeSymbolToken(tool.requestParams?.symbol);
+    if (symbol) groundedSymbols.add(symbol);
+  }
+
+  const missing = normalizedRequested.filter((symbol) => !groundedSymbols.has(symbol));
+  if (missing.length === 0) return null;
+
+  return {
+    reasonCode: "missing_symbol_grounding",
+    reason: `Missing grounded evidence for symbols: ${missing.join(", ")}.`,
+  };
 }
 
 function isSoftNumericFailure(
@@ -293,7 +429,7 @@ function normalizeForKeywordMatch(value: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d");
+    .replace(/\u0111/g, "d");
 }
 
 function hasNumericFilterHints(filters: unknown): boolean {
@@ -342,6 +478,175 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function detectFutureDateViolation(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): { requestedDate: string } | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const normalizedMessage = normalizeForKeywordMatch(message);
+  if (
+    normalizedMessage.includes("ngay mai")
+    || normalizedMessage.includes("tomorrow")
+    || normalizedMessage.includes("next trading day")
+  ) {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    return { requestedDate: formatIsoDate(tomorrow) };
+  }
+  const candidates = new Set<string>();
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const filterDateValues = [
+    filters?.date,
+    filters?.asOfDate,
+    filters?.as_of_date,
+    filters?.day,
+    filters?.to,
+    filters?.from,
+  ];
+  for (const value of filterDateValues) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      candidates.add(value.trim());
+    }
+  }
+  const textMatches = message.match(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b20\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/g) ?? [];
+  for (const candidate of textMatches) {
+    candidates.add(candidate);
+  }
+
+  for (const candidate of candidates) {
+    const parsed = parseDateLike(candidate);
+    if (!parsed) continue;
+    if (parsed.getTime() > today.getTime()) {
+      return { requestedDate: formatIsoDate(parsed) };
+    }
+  }
+
+  return null;
+}
+
+function parseDateLike(value: string): Date | null {
+  const input = String(value ?? "").trim();
+  if (!input) return null;
+
+  const isoLike = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(input);
+  if (isoLike) {
+    return buildDate(Number(isoLike[1]), Number(isoLike[2]), Number(isoLike[3]));
+  }
+
+  const dayFirst = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/.exec(input);
+  if (dayFirst) {
+    const day = Number(dayFirst[1]);
+    const month = Number(dayFirst[2]);
+    const yearRaw = Number(dayFirst[3]);
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    return buildDate(year, month, day);
+  }
+
+  return null;
+}
+
+function buildDate(year: number, month: number, day: number): Date | null {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (year < 1900 || year > 2200) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  if (
+    date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getFullYear().toString().padStart(4, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeSymbolToken(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,8}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function detectFabricationDirectiveViolation(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): { reason: string } | null {
+  const normalized = normalizeForKeywordMatch(message);
+  const fabricationForced =
+    isFabricationDirective(normalized)
+    || normalized.includes("ignore rules")
+    || normalized.includes("uoc luong")
+    || normalized.includes("estimate")
+    || normalized.includes("gia vo")
+    || normalized.includes("gia dinh so lieu")
+    || normalized.includes("tu bo sung so lieu");
+  if (!fabricationForced) return null;
+
+  const hasSymbol = getCandidateSymbols(message, contextSnapshot).length > 0;
+  const hasDelistedHint =
+    normalized.includes("huy niem yet")
+    || normalized.includes("delisted")
+    || normalized.includes("treo giao dich")
+    || normalized.includes("suspended");
+  const hasFutureHint =
+    normalized.includes("ngay mai")
+    || normalized.includes("tomorrow")
+    || normalized.includes("hom nay")
+    || normalized.includes("today");
+
+  if (!hasSymbol && !hasDelistedHint && !hasFutureHint) {
+    return {
+      reason: "Fabrication directive detected without grounded symbol scope.",
+    };
+  }
+
+  return {
+    reason: "Fabrication or estimation directive conflicts with grounded-only numeric policy.",
+  };
+}
+
+function detectAmbiguousSymbolViolation(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): { reason: string } | null {
+  const normalized = normalizeForKeywordMatch(message);
+  const symbolCandidates = getCandidateSymbols(message, contextSnapshot);
+  const shortTickerMention = /\b(?:ma|ticker|symbol)\s*[=:]?\s*[a-z0-9]{1,2}\b/i.test(normalized);
+  const explicitAmbiguity =
+    normalized.includes("khong ro")
+    || normalized.includes("ko ro")
+    || normalized.includes("ambiguous")
+    || normalized.includes("khong chac");
+  const asksFinanceStatement =
+    normalized.includes("bctc")
+    || normalized.includes("bao cao tai chinh")
+    || normalized.includes("income statement")
+    || normalized.includes("balance sheet")
+    || normalized.includes("cash flow");
+
+  if (shortTickerMention && asksFinanceStatement) {
+    return {
+      reason: "Ticker is too short/ambiguous for grounded financial-statement retrieval.",
+    };
+  }
+  if (explicitAmbiguity && asksFinanceStatement && symbolCandidates.length <= 1) {
+    return {
+      reason: "Ambiguous symbol prompt requires explicit ticker disambiguation before numeric output.",
+    };
+  }
+  return null;
+}
+
 function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): string {
   const title = "INSUFFICIENT_DATA";
 
@@ -363,6 +668,15 @@ function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): str
     guidance.unshift("The response is blocked because required source citations are missing.");
   } else if (reasonCode === "no_numeric_evidence") {
     guidance.unshift("Grounded data exists, but required numeric values are missing.");
+  } else if (reasonCode === "missing_symbol_grounding") {
+    guidance.unshift("Grounded symbol coverage is incomplete for the requested multi-symbol comparison.");
+  } else if (reasonCode === "future_date_not_supported") {
+    guidance.unshift("Future-date market data is not available in grounded HOSE datasets.");
+    guidance.unshift("Khong the cung cap so lieu dinh luong cho ngay trong tuong lai.");
+  } else if (reasonCode === "fabrication_directive_blocked") {
+    guidance.unshift("The request asked for fabricated/estimated numeric data outside grounded evidence.");
+  } else if (reasonCode === "ambiguous_symbol_not_supported") {
+    guidance.unshift("The ticker is ambiguous; please provide a valid HOSE symbol before numeric analysis.");
   }
 
   return [title, reasonLine, ...guidance].join("\n");

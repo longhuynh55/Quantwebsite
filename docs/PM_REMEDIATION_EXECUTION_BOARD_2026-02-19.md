@@ -6,6 +6,15 @@
 - Hard rule: no `QA PASS` means PM cannot approve.
 - Cadence: update board after each QA run; PM decision is recorded immediately after QA verdict.
 
+## Latest Program Update (2026-02-19, Accuracy-Centric Track)
+- New deliverable published: `docs/ASSISTANT_ACCURACY_CENTRIC_EVAL_RUBRIC_V1.md`.
+- Scope includes rubric, scenario groups, pass thresholds, and oracle mapping for top-k by day and comparison accuracy checks.
+- Execution order for the new track:
+  1. ENG-1 completes oracle harness alignment (O1-O8).
+  2. ENG-3 links routing matrix coverage to S1-S6 scenarios.
+  3. ENG-2 finalizes per-symbol grounding fail-closed behavior.
+  4. QA runs `G2-ACC-FINAL`; PM approves only on full `QA PASS`.
+
 ## Locked Process (Mandatory)
 1. Engineer delivers task output and implementation references.
 2. QA runs mandatory gates and writes PASS/FAIL evidence.

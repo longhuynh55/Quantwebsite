@@ -9,6 +9,7 @@ import {
 import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } from "@/lib/dataPolicy";
 import { calculateFactorExposures, rankByFactor, FactorExposure } from "@/lib/quant/factors";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 
 const VALID_FACTORS = ["momentum", "value", "volatility", "size"] as const;
 type ValidFactor = typeof VALID_FACTORS[number];
@@ -21,6 +22,7 @@ const RATE_LIMIT_MAX = 30; // 30 requests per minute (computationally expensive)
 const MIN_FACTOR_DATA_POINTS = 253; // Needed for 12-1 momentum (t-252 vs t-21)
 const MIN_DATA_QUALITY_RATIO = 0.95;
 const PREFERRED_BENCHMARKS = [DEFAULT_BENCHMARK_SYMBOL, "VN100", "VN30"];
+const factorsApiLogger = createLogger("api.factors");
 
 function getDataQualityError(dataset: "stockMetadata" | "ohlcv" | "index"): string | null {
   if (hasSufficientDataQuality(dataset, MIN_DATA_QUALITY_RATIO)) {
@@ -39,10 +41,17 @@ function getDataQualityError(dataset: "stockMetadata" | "ohlcv" | "index"): stri
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("factors");
+  const logger = factorsApiLogger.child({ traceId });
   // Rate limiting check
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/factors", clientId), RATE_LIMIT_MAX, 60000);
   if (!rateLimit.allowed) {
+    logger.warn("rate_limit.blocked", {
+      remaining: rateLimit.remaining,
+      resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+    });
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
@@ -120,15 +129,12 @@ export async function GET(request: Request) {
     const exposures: FactorExposure[] = [];
     const sortedUniverse = [...metadata].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-    let evaluated = 0;
     let excludedInactiveCount = 0;
     let excludedInsufficientDataCount = 0;
     let excludedNotInBenchmarkCalendarCount = 0;
     let excludedStaleCount = 0;
 
     for (const stock of sortedUniverse) {
-      if (evaluated >= limit) break;
-
       if (stock.status.toUpperCase() !== "ACTIVE") {
         excludedInactiveCount += 1;
         continue;
@@ -154,7 +160,6 @@ export async function GET(request: Request) {
       }
 
       exposures.push(calculateFactorExposures(stock.symbol, data));
-      evaluated += 1;
     }
 
     if (exposures.length === 0) {
@@ -165,11 +170,9 @@ export async function GET(request: Request) {
     }
 
     const sorted = rankByFactor(exposures, factor as keyof Omit<FactorExposure, "symbol" | "overall">);
-    const topCount = Math.min(10, Math.floor(sorted.length / 2));
-    const bottomCount = Math.min(10, Math.floor(sorted.length / 2));
-
-    const topStocks = topCount > 0 ? sorted.slice(0, topCount) : [];
-    const bottomStocks = bottomCount > 0 ? sorted.slice(-bottomCount).reverse() : [];
+    const sideLimit = Math.min(limit, Math.floor(sorted.length / 2));
+    const topStocks = sideLimit > 0 ? sorted.slice(0, sideLimit) : sorted.slice(0, Math.min(limit, sorted.length));
+    const bottomStocks = sideLimit > 0 ? sorted.slice(-sideLimit).reverse() : [];
 
     return NextResponse.json({
       factor,
@@ -184,7 +187,12 @@ export async function GET(request: Request) {
       excludedStaleCount,
     });
   } catch (error) {
-    console.error("Factors API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      factor,
+      limit,
+    });
     return NextResponse.json({ error: "Failed to calculate factors" }, { status: 500 });
   }
 }

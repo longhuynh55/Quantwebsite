@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X, Trash2, Bot, AlertCircle, ShieldCheck, Database, ScrollText, PanelTop, Table2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAssistantStore } from '@/lib/stores/assistantStore';
-import { ChatMessage } from './ChatMessage';
+import { MemoizedChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { QuickActions } from './QuickActions';
 import { TypingIndicator } from './TypingIndicator';
@@ -36,15 +36,58 @@ export function AiAssistantPanel() {
   } = useAssistantStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const inFlightRequestsRef = useRef(0);
+  const lastFocusedElementRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<AssistantUiError | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const pathname = usePathname();
+  const renderedMessages = useMemo(() => messages.slice(-30), [messages]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (scrollRafRef.current !== null) {
+      window.cancelAnimationFrame(scrollRafRef.current);
     }
-  }, [messages, isLoading]);
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollRafRef.current = null;
+    });
+
+    return () => {
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    }
+  }, [renderedMessages, isLoading]);
+
+  // Focus management for modal dialog.
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmClear(false);
+      if (lastFocusedElementRef.current) {
+        lastFocusedElementRef.current.focus();
+      }
+      return;
+    }
+
+    lastFocusedElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const focusTimer = window.setTimeout(() => {
+      const input = panelRef.current?.querySelector<HTMLTextAreaElement>('[data-assistant-input="true"]');
+      if (input) {
+        input.focus();
+        return;
+      }
+      panelRef.current?.focus();
+    }, 25);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [isOpen]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -150,13 +193,10 @@ export function AiAssistantPanel() {
     const startedAt = Date.now();
     const contextSnapshot = buildContextSnapshot();
     const storeMessages = useAssistantStore.getState().messages;
-    const conversationHistory = [
-      ...storeMessages.slice(-9).map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-      { role: 'user' as const, content: trimmedContent },
-    ];
+    const conversationHistory = storeMessages.slice(-10).map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
     logUiEvent('info', 'assistant.request.started', {
       requestId,
       page: contextSnapshot.page,
@@ -168,6 +208,7 @@ export function AiAssistantPanel() {
     addMessage({ role: 'user', content: trimmedContent });
 
     // Set loading state
+    inFlightRequestsRef.current += 1;
     setLoading(true);
 
     try {
@@ -240,7 +281,8 @@ export function AiAssistantPanel() {
         recoveryHint: 'Check your connection, then retry. If the problem persists, share the request ID with engineering.',
       });
     } finally {
-      setLoading(false);
+      inFlightRequestsRef.current = Math.max(0, inFlightRequestsRef.current - 1);
+      setLoading(inFlightRequestsRef.current > 0);
     }
   }, [addMessage, setLoading, buildContextSnapshot, buildPreferences, uiMode]);
 
@@ -255,11 +297,59 @@ export function AiAssistantPanel() {
   };
 
   const handleClearChat = () => {
-    if (window.confirm('Are you sure you want to clear the chat history?')) {
-      clearMessages();
-      setError(null);
-    }
+    setConfirmClear(true);
   };
+
+  const confirmClearChat = () => {
+    clearMessages();
+    setError(null);
+    setConfirmClear(false);
+  };
+
+  const cancelClearChat = () => {
+    setConfirmClear(false);
+  };
+
+  const handlePanelKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!isOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePanel();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const focusableNodes = panel.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const focusableElements = Array.from(focusableNodes).filter((node) => {
+      if (node.getAttribute('aria-hidden') === 'true') return false;
+      return node.offsetParent !== null || node === document.activeElement;
+    });
+
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusableElements[0];
+    const last = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement as HTMLElement | null;
+
+    if (event.shiftKey && activeElement === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, [isOpen, closePanel]);
 
   if (!isOpen) return null;
 
@@ -269,10 +359,17 @@ export function AiAssistantPanel() {
       <div
         className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 lg:hidden"
         onClick={closePanel}
+        aria-hidden="true"
       />
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="assistant-panel-title"
+        tabIndex={-1}
+        onKeyDown={handlePanelKeyDown}
         className={cn(
           'fixed z-50',
           'bg-white dark:bg-gray-900',
@@ -293,7 +390,7 @@ export function AiAssistantPanel() {
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-semibold text-white">AI Assistant</h2>
+              <h2 id="assistant-panel-title" className="font-semibold text-white">AI Assistant</h2>
               <p className="text-xs text-white/80">Grounded Vietnamese Stock Market Copilot</p>
               <div className="mt-1.5 inline-flex items-center rounded-lg bg-white/15 p-0.5 border border-white/20">
                 <button
@@ -350,6 +447,20 @@ export function AiAssistantPanel() {
           </div>
         </div>
 
+        {confirmClear && (
+          <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+            <p className="text-sm">Clear all chat messages?</p>
+            <div className="mt-2 flex gap-2">
+              <Button size="sm" variant="outline" onClick={cancelClearChat}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="destructive" onClick={confirmClearChat}>
+                Clear chat
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto" role="log" aria-live="polite" aria-label="Assistant conversation">
           {/* Welcome Message */}
@@ -391,8 +502,8 @@ export function AiAssistantPanel() {
           {messages.length === 0 && <QuickActions onAction={sendMessage} disabled={isLoading} />}
 
           {/* Messages */}
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+          {renderedMessages.map((message) => (
+            <MemoizedChatMessage key={message.id} message={message} />
           ))}
 
           {/* Typing Indicator */}
@@ -400,7 +511,11 @@ export function AiAssistantPanel() {
 
           {/* Error Display */}
           {error && (
-            <div className="mx-4 my-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mx-4 my-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2"
+            >
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-red-700 dark:text-red-300">{error.message}</p>

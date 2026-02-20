@@ -7,7 +7,7 @@ import type {
   PeerMultiplesRow,
   SensitivityResult,
 } from "@/lib/finance/contracts";
-import { loadFinancialPeriods, readNumericByAliases, safeRatio } from "@/lib/finance/data";
+import { loadFinancialPeriods, readNumericByAliases, safeRatio, yoy as buildYoy } from "@/lib/finance/data";
 import { loadOHLCVForSymbol, loadStockMetadata } from "@/lib/data";
 
 const VAL_ALIASES = {
@@ -19,7 +19,12 @@ const VAL_ALIASES = {
   cash: ["cash_and_cash_equivalents", "cash_and_cash_equivalents_at_the_end_of_period", "cash"],
   shortInvestments: ["short_term_investments", "trading_securities"],
   equity: ["owner_s_equity", "equity", "capital_and_reserves"],
-  shares: ["common_shares", "paid_in_capital", "capital"],
+  sharesOutstanding: [
+    "shares_outstanding",
+    "total_shares_outstanding",
+    "weighted_average_shares_outstanding",
+    "weighted_average_number_of_shares",
+  ],
 } as const;
 
 function clamp(value: number, min: number, max: number): number {
@@ -53,15 +58,11 @@ function getTtmFcf(rows: FinancialPeriodStatements[]): number | null {
 }
 
 function inferGrowthRate(rows: FinancialPeriodStatements[]): number {
-  const revenues = rows.map((row) => readNumericByAliases(row.is, [...VAL_ALIASES.revenue]));
-  const yoy: number[] = [];
-  for (let i = 1; i < revenues.length; i += 1) {
-    const current = revenues[i];
-    const previous = revenues[i - 1];
-    if (current === null || previous === null || previous === 0) continue;
-    yoy.push((current - previous) / Math.abs(previous));
-  }
-  const base = avg(yoy) ?? 0.08;
+  const revenues = rows.map((row) => ({
+    period: row.period,
+    value: readNumericByAliases(row.is, [...VAL_ALIASES.revenue]),
+  }));
+  const base = avg(buildYoy(revenues).map((point) => point.value)) ?? 0.08;
   return clamp(base, -0.1, 0.3);
 }
 
@@ -86,10 +87,10 @@ function inferNetDebt(latest: FinancialPeriodStatements | undefined): number {
   return liabilities - cash - shortInvestments;
 }
 
-function inferShares(latest: FinancialPeriodStatements | undefined): number {
-  if (!latest?.bs) return 1;
-  const raw = readNumericByAliases(latest.bs, [...VAL_ALIASES.shares]);
-  if (raw === null || raw <= 0) return 1;
+function inferSharesOutstanding(latest: FinancialPeriodStatements | undefined): number | null {
+  if (!latest?.bs) return null;
+  const raw = readNumericByAliases(latest.bs, [...VAL_ALIASES.sharesOutstanding]);
+  if (raw === null || raw <= 0) return null;
   return raw;
 }
 
@@ -150,7 +151,8 @@ export async function buildDcfValuation(symbol: string): Promise<DcfResult> {
   const growth = inferGrowthRate(rows);
   const margin = inferFcfMargin(rows);
   const netDebt = inferNetDebt(latest);
-  const shares = inferShares(latest);
+  const shares = inferSharesOutstanding(latest);
+  const sharesOutstanding = shares ?? 1;
 
   const assumptions: DcfAssumptions = {
     forecastYears: 5,
@@ -159,7 +161,7 @@ export async function buildDcfValuation(symbol: string): Promise<DcfResult> {
     wacc: 0.12,
     terminalGrowth: 0.03,
     netDebt,
-    sharesOutstanding: shares,
+    sharesOutstanding,
   };
 
   const baseRevenue = revenueTtm ?? Math.max((fcfTtm ?? 0) / Math.max(margin, 0.01), 1);
@@ -191,8 +193,8 @@ export async function buildDcfValuation(symbol: string): Promise<DcfResult> {
   if (currentPrice === null) {
     warnings.push("Current market price is unavailable from OHLCV data.");
   }
-  if (assumptions.sharesOutstanding === 1) {
-    warnings.push("Shares outstanding is inferred fallback; per-share valuation precision is limited.");
+  if (shares === null) {
+    warnings.push("Missing shares_outstanding field; per-share valuation uses fallback denominator and is low-confidence.");
   }
 
   return {
@@ -261,15 +263,15 @@ async function buildPeerRow(symbol: string): Promise<PeerMultiplesRow> {
   const latest = rows[rows.length - 1];
   const ttmNetIncome = sum(rows.slice(-4).map((row) => readNumericByAliases(row.is, [...VAL_ALIASES.netIncome])));
   const equity = latest ? readNumericByAliases(latest.bs, [...VAL_ALIASES.equity]) : null;
-  const shares = inferShares(latest);
+  const shares = inferSharesOutstanding(latest);
 
   const prices = await loadOHLCVForSymbol(symbol);
   const price = prices.length > 0 ? prices[prices.length - 1].close : null;
-  const eps = safeRatio(ttmNetIncome, shares);
-  const bvps = safeRatio(equity, shares);
+  const eps = shares !== null ? safeRatio(ttmNetIncome, shares) : null;
+  const bvps = shares !== null ? safeRatio(equity, shares) : null;
   const pe = price !== null && eps !== null && eps > 0 ? price / eps : null;
   const pb = price !== null && bvps !== null && bvps > 0 ? price / bvps : null;
-  const marketCapApprox = price !== null ? price * shares : null;
+  const marketCapApprox = price !== null && shares !== null ? price * shares : null;
 
   return {
     symbol,
@@ -315,4 +317,3 @@ export async function buildPeerMultiples(symbol: string): Promise<PeerMultiplesR
     warnings,
   };
 }
-

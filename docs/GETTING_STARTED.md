@@ -1,4 +1,4 @@
-# Getting Started Guide
+﻿# Getting Started Guide
 
 This guide will help you set up the QuantVN platform from scratch, configure your data, and start analyzing the Vietnamese stock market.
 
@@ -20,7 +20,7 @@ This guide will help you set up the QuantVN platform from scratch, configure you
 | Requirement | Minimum | Recommended |
 |-------------|---------|-------------|
 | Node.js | 18.17.0 | 20.x LTS |
-| npm | 9.0.0 | 10.x |
+| pnpm | 10.0.0 | 10.x |
 | RAM | 4 GB | 8 GB+ |
 | Disk Space | 500 MB | 1 GB+ |
 
@@ -32,7 +32,7 @@ This guide will help you set up the QuantVN platform from scratch, configure you
 3. Verify installation:
    ```bash
    node --version
-   npm --version
+   pnpm --version
    ```
 
 **Using nvm (Node Version Manager):**
@@ -52,10 +52,10 @@ nvm use 20
 cd quant-website
 
 # Install dependencies
-npm install
+pnpm install
 
 # Verify installation
-npm list --depth=0
+pnpm list --depth 0
 ```
 
 ---
@@ -69,7 +69,7 @@ The application reads CSV files from `public/data/` (or `DATA_DIR` if set). Pref
 If you have raw files in `../data`, generate the runtime files:
 
 ```bash
-npm run data:prepare:2018_2025
+pnpm run data:prepare:2018_2025
 ```
 
 This command also writes integrity manifests:
@@ -79,13 +79,13 @@ This command also writes integrity manifests:
 Optional DuckDB export (uses Node `duckdb` binding when available, otherwise Docker fallback):
 
 ```bash
-npm run data:export:duckdb
+pnpm run data:export:duckdb
 ```
 
 If Docker is unavailable locally, install optional binding first:
 
 ```bash
-npm install duckdb
+pnpm install duckdb
 ```
 
 ### File 1: Stock Metadata (`stock_metadata_2018_2025.csv`, fallback: `HOSE_VERIFIED_2020_2025.csv`)
@@ -282,7 +282,7 @@ Styling is configured via Tailwind CSS 4. The configuration is in `postcss.confi
 Start the development server with hot-reload:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 The application will be available at [http://localhost:3000](http://localhost:3000).
@@ -293,10 +293,10 @@ Build and run for production:
 
 ```bash
 # Build the application
-npm run build
+pnpm run build
 
 # Start the production server
-npm run start
+pnpm run start
 ```
 
 ### Linting
@@ -304,7 +304,7 @@ npm run start
 Run ESLint to check code quality:
 
 ```bash
-npm run lint
+pnpm run lint
 ```
 
 ### Data Health Checks (Recommended)
@@ -403,7 +403,7 @@ curl "http://localhost:3000/api/health/data?refresh=true"
 ```bash
 # Clear node_modules and reinstall
 rm -rf node_modules package-lock.json
-npm install
+pnpm install
 ```
 
 ### Issue: Slow Data Loading
@@ -413,7 +413,7 @@ npm install
 - API responses are slow
 
 **Solution:**
-1. Prefer prepared runtime files: `npm run data:prepare:2018_2025`
+1. Prefer prepared runtime files: `pnpm run data:prepare:2018_2025`
 2. Consider implementing data pagination
 3. Check available system memory
 
@@ -437,10 +437,10 @@ npm install
 **Solution:**
 ```bash
 # Check TypeScript errors
-npx tsc --noEmit
+pnpm exec tsc --noEmit
 
 # Regenerate type definitions
-npm run build
+pnpm run build
 ```
 
 ### Issue: Port 3000 Already in Use
@@ -451,7 +451,7 @@ npm run build
 **Solution:**
 ```bash
 # Use a different port
-PORT=3001 npm run dev
+PORT=3001 pnpm run dev
 
 # Or kill the process using port 3000
 # Windows
@@ -471,7 +471,7 @@ kill -9 <PID>
 **Solution:**
 ```bash
 # Increase Node.js memory limit
-NODE_OPTIONS="--max-old-space-size=4096" npm run build
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 ```
 
 ---
@@ -509,3 +509,4 @@ If you encounter issues not covered in this guide:
    - Expected behavior
    - Actual behavior
    - Environment details (OS, Node version, browser)
+

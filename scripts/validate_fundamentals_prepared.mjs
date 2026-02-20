@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -98,7 +98,7 @@ async function main() {
     const parsed = await readCsv(filePath);
     if (parsed.errors.length > 0) {
       const top = parsed.errors.slice(0, 3).map((e) => `${e.code}@row${e.row ?? "?"}`).join(", ");
-      fail(`${stmt.key} parse errors=${parsed.errors.length} (${top}). Run npm run data:prepare:2018_2025 to repair.`);
+      fail(`${stmt.key} parse errors=${parsed.errors.length} (${top}). Run pnpm run data:prepare:2018_2025 to repair.`);
       continue;
     }
 
@@ -162,4 +162,5 @@ main().catch((err) => {
   console.error(`[validate] ERROR: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });
+
 

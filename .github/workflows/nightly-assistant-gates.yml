@@ -46,6 +46,7 @@ jobs:
           HEALTH_WARMUP_SECONDS: "5"
           HEALTH_MAX_ATTEMPTS: "30"
           HEALTH_RETRY_INTERVAL_SECONDS: "2"
+          HEALTH_REQUEST_TIMEOUT_MS: "10000"
         run: |
           sleep "${HEALTH_WARMUP_SECONDS}"
           node <<'EOF'
@@ -53,13 +54,24 @@ jobs:
           const label = process.env.HEALTH_LABEL || "health";
           const maxAttempts = Number(process.env.HEALTH_MAX_ATTEMPTS || 30);
           const retryIntervalMs = Number(process.env.HEALTH_RETRY_INTERVAL_SECONDS || 2) * 1000;
+          const requestTimeoutMs = Number(process.env.HEALTH_REQUEST_TIMEOUT_MS || 10000);
 
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
           (async () => {
+            if (!url) {
+              console.error(JSON.stringify({ probe: label, status: "failed", reason: "missing_health_url" }));
+              process.exit(1);
+            }
+
             for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
               try {
-                const response = await fetch(url);
+                const response = await fetch(url, {
+                  signal: controller.signal,
+                  headers: { Accept: "application/json" },
+                });
                 const body = await response.json().catch(() => null);
                 if (response.ok && body?.ok) {
                   console.log(JSON.stringify({ probe: label, status: "ok", attempt }));
@@ -68,6 +80,8 @@ jobs:
                 console.error(JSON.stringify({ probe: label, status: "retry", attempt, httpStatus: response.status, body }));
               } catch (error) {
                 console.error(JSON.stringify({ probe: label, status: "retry", attempt, error: String(error) }));
+              } finally {
+                clearTimeout(timeout);
               }
 
               if (attempt < maxAttempts) {

@@ -10,9 +10,12 @@ import {
   type FinanceAnalysisType,
 } from "@/lib/finance";
 import { getCoverage } from "@/lib/finance/data";
+import { getAvailablePeriods } from "@/lib/fundamentals";
+import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 
 const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const RATE_LIMIT_MAX = 45;
+const financeAnalysisApiLogger = createLogger("api.finance_analysis");
 
 const TYPE_SET = new Set<FinanceAnalysisType>([
   "fundamental",
@@ -28,6 +31,24 @@ function parseType(raw: string | null): FinanceAnalysisType | null {
   if (value === "") return "fundamental";
   if (TYPE_SET.has(value as FinanceAnalysisType)) return value as FinanceAnalysisType;
   return null;
+}
+
+function parsePeriod(raw: string | null): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || value.toLowerCase() === "latest") return null;
+  const matchA = /^(\d{4})Q([1-4])$/i.exec(value);
+  if (matchA) return `${matchA[1]}Q${matchA[2]}`;
+  const matchB = /^Q([1-4])[\s/-]*(\d{4})$/i.exec(value);
+  if (matchB) return `${matchB[2]}Q${matchB[1]}`;
+  return null;
+}
+
+function parseLookback(raw: string | null): number {
+  const value = (raw ?? "").trim();
+  if (!value) return 8;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 8;
+  return Math.min(20, parsed);
 }
 
 function buildCitations(symbol: string, type: FinanceAnalysisType) {
@@ -76,9 +97,16 @@ function deriveConfidence(
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("finance");
+  const logger = financeAnalysisApiLogger.child({ traceId });
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/finance-analysis", clientId), RATE_LIMIT_MAX, 60000);
   if (!rateLimit.allowed) {
+    logger.warn("rate_limit.blocked", {
+      remaining: rateLimit.remaining,
+      resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+    });
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
@@ -88,6 +116,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol")?.trim().toUpperCase();
   const type = parseType(searchParams.get("type"));
+  const requestedPeriod = parsePeriod(searchParams.get("period"));
+  const lookback = parseLookback(searchParams.get("lookback"));
 
   if (!symbol) {
     return NextResponse.json({ error: "symbol is required" }, { status: 400 });
@@ -101,9 +131,28 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   }
+  if (searchParams.get("period") && !requestedPeriod && searchParams.get("period")?.toLowerCase() !== "latest") {
+    return NextResponse.json({ error: 'Invalid period. Use "latest", "YYYYQn", or "Qn/YYYY".' }, { status: 400 });
+  }
 
   try {
-    const rows = await loadFinancialPeriods(symbol, 8);
+    const availablePeriods = await getAvailablePeriods(symbol);
+    if (availablePeriods.length === 0) {
+      return NextResponse.json({ error: "No financial data available for this symbol" }, { status: 404 });
+    }
+    if (requestedPeriod && !availablePeriods.includes(requestedPeriod)) {
+      return NextResponse.json(
+        {
+          error: `No financial data available for requested period ${requestedPeriod}.`,
+          symbol,
+          requestedPeriod,
+          availablePeriods,
+        },
+        { status: 404 }
+      );
+    }
+
+    const rows = await loadFinancialPeriods(symbol, lookback, { endPeriod: requestedPeriod ?? undefined });
     if (rows.length === 0) {
       return NextResponse.json({ error: "No financial data available for this symbol" }, { status: 404 });
     }
@@ -133,6 +182,10 @@ export async function GET(request: Request) {
       return NextResponse.json({
         symbol,
         type,
+        request: {
+          requestedPeriod: requestedPeriod ?? "latest",
+          lookback,
+        },
         data,
         coverage: {
           ...coverage,
@@ -155,6 +208,10 @@ export async function GET(request: Request) {
       return NextResponse.json({
         symbol,
         type,
+        request: {
+          requestedPeriod: requestedPeriod ?? "latest",
+          lookback,
+        },
         data,
         coverage: {
           ...coverage,
@@ -173,6 +230,10 @@ export async function GET(request: Request) {
       return NextResponse.json({
         symbol,
         type,
+        request: {
+          requestedPeriod: requestedPeriod ?? "latest",
+          lookback,
+        },
         data,
         coverage: {
           ...coverage,
@@ -191,6 +252,10 @@ export async function GET(request: Request) {
       return NextResponse.json({
         symbol,
         type,
+        request: {
+          requestedPeriod: requestedPeriod ?? "latest",
+          lookback,
+        },
         data,
         coverage: {
           ...coverage,
@@ -208,6 +273,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       symbol,
       type,
+      request: {
+        requestedPeriod: requestedPeriod ?? "latest",
+        lookback,
+      },
       data,
       coverage: {
         ...coverage,
@@ -218,7 +287,14 @@ export async function GET(request: Request) {
       citations: buildCitations(symbol, type),
     });
   } catch (error) {
-    console.error("Finance analysis API error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      symbol,
+      type,
+      requestedPeriod: requestedPeriod ?? "latest",
+      lookback,
+    });
     const message = error instanceof Error ? error.message : "Failed to run finance analysis";
     if (String(message).toLowerCase().includes("file not found")) {
       return NextResponse.json({ error: message }, { status: 503 });

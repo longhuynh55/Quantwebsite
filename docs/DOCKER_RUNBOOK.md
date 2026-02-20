@@ -1,4 +1,4 @@
-# Docker Runbook: Testing, Debug, Production
+﻿# Docker Runbook: Testing, Debug, Production
 
 Tai lieu nay mo ta quy trinh chuan de chay ung dung bang Docker cho 3 nhu cau:
 - Testing (smoke test)
@@ -23,13 +23,13 @@ Copy-Item .\\env.glm.example .\\.env.glm
 - Neu ban cap nhat raw data (2018-2025) o thu muc `../data`, hay chay prepare de tao file runtime truoc khi run Docker:
 
 ```bash
-npm run data:prepare:2018_2025
+pnpm run data:prepare:2018_2025
 ```
 
 De dam bao fundamentals (BCT/BCTT/LCTT) doc duoc chinh xac (CSV khong bi lech dong/cot), nen chay them validator:
 
 ```bash
-npm run data:validate:fundamentals
+pnpm run data:validate:fundamentals
 ```
 
 Neu ban can checklist day du cho data backend + health + assistant grounding, xem them:
@@ -59,7 +59,7 @@ File cau hinh:
 ### 3.1 Startup dev
 
 ```bash
-npm run docker:up
+pnpm run docker:up
 ```
 
 Kiem tra trang thai:
@@ -74,13 +74,13 @@ Ky vong:
 ### 3.2 Chay smoke test
 
 ```bash
-npm run docker:smoke
+pnpm run docker:smoke
 ```
 
 Neu frontend dang duoc cap nhat va ban chi muon verify backend API:
 
 ```bash
-npm run docker:smoke:api
+pnpm run docker:smoke:api
 ```
 
 Smoke se kiem tra:
@@ -104,19 +104,19 @@ Ky vong:
 QA se chay nhieu check hon smoke (validate data invariants, test nhieu strategy/method, va verify cac page quan trong).
 
 ```bash
-npm run docker:qa
+pnpm run docker:qa
 ```
 
 Neu chi muon verify backend API:
 
 ```bash
-npm run docker:qa:api
+pnpm run docker:qa:api
 ```
 
 ### 3.4 Dung moi truong
 
 ```bash
-npm run docker:down
+pnpm run docker:down
 ```
 
 ## 4. Quy trinh Debug
@@ -124,7 +124,7 @@ npm run docker:down
 ### 4.1 Theo doi log runtime
 
 ```bash
-npm run docker:logs
+pnpm run docker:logs
 ```
 
 Tap trung kiem tra:
@@ -144,7 +144,7 @@ curl "http://localhost:3010/api/market-overview"
 Hoac goi lai smoke de tai hien loi:
 
 ```bash
-npm run docker:smoke
+pnpm run docker:smoke
 ```
 
 ### 4.3 Restart an toan khi app treo
@@ -160,7 +160,7 @@ Khong dung kill process node toan cuc tren may host.
 ### 5.1 Build + run production container
 
 ```bash
-npm run docker:up:prod
+pnpm run docker:up:prod
 ```
 
 Ky vong:
@@ -170,13 +170,13 @@ Ky vong:
 ### 5.2 Smoke test production runtime
 
 ```bash
-npm run docker:smoke:prod
+pnpm run docker:smoke:prod
 ```
 
 Neu chi muon verify backend API trong production profile:
 
 ```bash
-npm run docker:smoke:prod:api
+pnpm run docker:smoke:prod:api
 ```
 
 Ky vong:
@@ -186,37 +186,37 @@ Ky vong:
 ### 5.3 QA test production runtime (deep)
 
 ```bash
-npm run docker:qa:prod
+pnpm run docker:qa:prod
 ```
 
 Neu chi muon verify backend API:
 
 ```bash
-npm run docker:qa:prod:api
+pnpm run docker:qa:prod:api
 ```
 
 ### 5.4 Theo doi log production
 
 ```bash
-npm run docker:logs:prod
+pnpm run docker:logs:prod
 ```
 
 ### 5.5 Dung toan bo service
 
 ```bash
-npm run docker:down
+pnpm run docker:down
 ```
 
 ## 6. Checklist release de xuat
 
 Truoc khi chot release:
-1. `npm run docker:up`
-2. `npm run docker:smoke`
-3. `npm run docker:qa`
-4. `npm run docker:up:prod`
-5. `npm run docker:smoke:prod`
-6. `npm run docker:qa:prod`
-7. `npm run docker:down`
+1. `pnpm run docker:up`
+2. `pnpm run docker:smoke`
+3. `pnpm run docker:qa`
+4. `pnpm run docker:up:prod`
+5. `pnpm run docker:smoke:prod`
+6. `pnpm run docker:qa:prod`
+7. `pnpm run docker:down`
 
 Chi release khi ca `dev smoke/qa` va `prod smoke/qa` deu pass.
 
@@ -263,8 +263,8 @@ Neu muon data loader fail-fast khi parse/quality co van de:
   - `DATA_DUCKDB_PATH` de override duong dan file DuckDB
   - `DATA_BACKEND_STRICT=true` de fail-fast neu chon `duckdb` nhung thieu artifact/binding
   - Luu y: profile `prod` trong `docker-compose.yml` hien default `DATA_BACKEND=duckdb` + `DATA_BACKEND_STRICT=true` (can co `public/data/quant_data.duckdb` + Node `duckdb` binding)
-  - `DATA_EXPORT_DUCKDB=true` de auto-export DuckDB artifact khi chay `npm run data:prepare:2018_2025`
-  - `npm run data:export:duckdb` uu tien Node `duckdb` binding, neu khong co se fallback sang Docker image `duckdb/duckdb`
+  - `DATA_EXPORT_DUCKDB=true` de auto-export DuckDB artifact khi chay `pnpm run data:prepare:2018_2025`
+  - `pnpm run data:export:duckdb` uu tien Node `duckdb` binding, neu khong co se fallback sang Docker image `duckdb/duckdb`
   - `INSTALL_DUCKDB_BINDING=true` (default trong `docker-compose.yml`) de tu dong cai Node `duckdb` binding trong `app` / `app-prod`; dat `false` neu muon bo qua cai binding
   - API check nhanh:
     - `curl http://localhost:3010/api/health/data`
@@ -280,7 +280,8 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 - App uu tien `ASSISTANT_TOOL_BASE_URL`; neu khong co se fallback theo request origin (vi du `http://localhost:3010`) roi moi toi dev fallback.
 - Cau hinh model OpenRouter mac dinh:
   - `OPENROUTER_MODEL=openai/gpt-oss-120b:free` (primary)
-  - `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-20b:free` (secondary)
+  - `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-120b` (secondary)
+  - `OPENROUTER_TERTIARY_MODEL=openai/gpt-oss-20b:free` (tertiary)
   - `ASSISTANT_OPENROUTER_ONLY=true` (dang bat mac dinh trong compose) de chi dung chain OpenRouter.
 - Neu model bi timeout som, tang timeout request:
   - `GLM_REQUEST_TIMEOUT_MS` (GLM primary)
@@ -299,7 +300,7 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 - Sua xong build lai:
 
 ```bash
-npm run docker:up:prod
+pnpm run docker:up:prod
 ```
 
 ## 8. Lenh tat bang Makefile (tuy chon)
@@ -313,3 +314,4 @@ make prod-up
 make prod-smoke
 make down
 ```
+

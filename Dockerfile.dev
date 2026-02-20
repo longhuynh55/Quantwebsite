@@ -1,14 +1,15 @@
-FROM node:20-bookworm-slim
+﻿FROM node:20-bookworm-slim
 
 WORKDIR /app
+RUN corepack enable
 
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 ARG INSTALL_DUCKDB_BINDING=false
-RUN npm ci --legacy-peer-deps \
-  && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then npm install duckdb --no-save --legacy-peer-deps; fi
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "--", "-p", "3000"]
+CMD ["pnpm", "run", "dev", "-p", "3000"]
+

@@ -16,16 +16,40 @@ import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 100;
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
 const RATE_LIMIT_MAX = 100; // 100 requests per minute
 const HOSE_EXCHANGE = "HOSE";
 const ONLY_HOSE_ERROR = 'Only "HOSE" exchange is supported.';
 const TRACE_ID_HEADER = "x-trace-id";
 const UNIVERSE_RANKING_METRICS = new Set(["close", "open", "high", "low", "volume"]);
 const UNIVERSE_RANKING_ORDERS = new Set(["asc", "desc"]);
+const METADATA_SORT_FIELDS = new Set([
+  "symbol",
+  "status",
+  "avgVolume",
+  "totalTradingDays",
+  "listingPhase",
+  "icbName4",
+]);
+const METADATA_SORT_DIRECTIONS = new Set(["asc", "desc"]);
 const stocksApiLogger = createLogger("api.stocks");
 
 type UniverseRankingMetric = "close" | "open" | "high" | "low" | "volume";
 type UniverseRankingOrder = "asc" | "desc";
+type MetadataSortField = "symbol" | "status" | "avgVolume" | "totalTradingDays" | "listingPhase" | "icbName4";
+type MetadataSortDirection = "asc" | "desc";
+
+type MetadataQueryFilters = {
+  status?: string;
+  listingPhase?: string;
+  industry?: string;
+  minAvgVolume?: number;
+  maxAvgVolume?: number;
+  minTradingDays?: number;
+  maxTradingDays?: number;
+};
 
 function buildSeriesStats(series: OHLCV[]) {
   if (series.length === 0) {
@@ -101,6 +125,108 @@ function parseUniverseRankingOrder(raw: string | null): UniverseRankingOrder | n
   if (!value) return null;
   if (!UNIVERSE_RANKING_ORDERS.has(value)) return null;
   return value as UniverseRankingOrder;
+}
+
+function parsePositiveIntegerParam(
+  raw: string | null,
+  fallback: number,
+  options: { min: number; max: number }
+): number | null {
+  if (raw === null || String(raw).trim() === "") return fallback;
+  const parsed = Number.parseInt(String(raw).trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < options.min || parsed > options.max) return null;
+  return parsed;
+}
+
+function parseOptionalNumericFilter(raw: string | null): number | null | undefined {
+  if (raw === null || String(raw).trim() === "") return undefined;
+  const parsed = Number(String(raw).trim());
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function parseMetadataSortField(raw: string | null): MetadataSortField {
+  const value = String(raw ?? "").trim();
+  if (!value || !METADATA_SORT_FIELDS.has(value)) return "symbol";
+  return value as MetadataSortField;
+}
+
+function parseMetadataSortDirection(raw: string | null): MetadataSortDirection {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value || !METADATA_SORT_DIRECTIONS.has(value)) return "asc";
+  return value as MetadataSortDirection;
+}
+
+function normalizeTextFilter(raw: string | null): string | undefined {
+  const value = String(raw ?? "").trim();
+  return value ? value : undefined;
+}
+
+function applyMetadataFilters(metadata: StockMetadata[], filters: MetadataQueryFilters): StockMetadata[] {
+  return metadata.filter((stock) => {
+    if (filters.status && stock.status.toUpperCase() !== filters.status.toUpperCase()) {
+      return false;
+    }
+    if (filters.listingPhase && stock.listingPhase.toUpperCase() !== filters.listingPhase.toUpperCase()) {
+      return false;
+    }
+    if (filters.industry) {
+      const industry = stock.icbName4 ?? "";
+      if (!normalizeForMatch(industry).includes(normalizeForMatch(filters.industry))) {
+        return false;
+      }
+    }
+    if (typeof filters.minAvgVolume === "number" && stock.avgVolume < filters.minAvgVolume) {
+      return false;
+    }
+    if (typeof filters.maxAvgVolume === "number" && stock.avgVolume > filters.maxAvgVolume) {
+      return false;
+    }
+    if (typeof filters.minTradingDays === "number" && stock.totalTradingDays < filters.minTradingDays) {
+      return false;
+    }
+    if (typeof filters.maxTradingDays === "number" && stock.totalTradingDays > filters.maxTradingDays) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function compareMetadata(
+  a: StockMetadata,
+  b: StockMetadata,
+  sortBy: MetadataSortField,
+  sortDir: MetadataSortDirection
+): number {
+  const direction = sortDir === "asc" ? 1 : -1;
+
+  if (sortBy === "avgVolume" || sortBy === "totalTradingDays") {
+    const left = sortBy === "avgVolume" ? a.avgVolume : a.totalTradingDays;
+    const right = sortBy === "avgVolume" ? b.avgVolume : b.totalTradingDays;
+    if (left !== right) return (left - right) * direction;
+    return a.symbol.localeCompare(b.symbol);
+  }
+
+  const left =
+    sortBy === "icbName4"
+      ? (a.icbName4 ?? "")
+      : sortBy === "listingPhase"
+        ? (a.listingPhase ?? "")
+        : sortBy === "status"
+          ? (a.status ?? "")
+          : (a.symbol ?? "");
+  const right =
+    sortBy === "icbName4"
+      ? (b.icbName4 ?? "")
+      : sortBy === "listingPhase"
+        ? (b.listingPhase ?? "")
+        : sortBy === "status"
+          ? (b.status ?? "")
+          : (b.symbol ?? "");
+
+  const diff = left.localeCompare(right);
+  if (diff !== 0) return diff * direction;
+  return a.symbol.localeCompare(b.symbol);
 }
 
 function normalizeForMatch(value: string): string {
@@ -212,6 +338,28 @@ export async function GET(request: Request) {
   const limitStrRaw = searchParams.get("limit") ?? String(DEFAULT_LIMIT);
   const limitStr = String(limitStrRaw).trim();
   const limitAll = limitStr.toLowerCase() === "all";
+  const pageRaw = searchParams.get("page");
+  const pageSizeRaw = searchParams.get("pageSize");
+  const page = limitAll
+    ? DEFAULT_PAGE
+    : parsePositiveIntegerParam(pageRaw, DEFAULT_PAGE, { min: 1, max: 1000 });
+  const pageSize = limitAll
+    ? DEFAULT_PAGE_SIZE
+    : parsePositiveIntegerParam(pageSizeRaw, DEFAULT_PAGE_SIZE, { min: 1, max: MAX_PAGE_SIZE });
+  const statusFilter = normalizeTextFilter(searchParams.get("status"));
+  const listingPhaseFilter = normalizeTextFilter(searchParams.get("listingPhase"));
+  const industryFilter = normalizeTextFilter(searchParams.get("industry"));
+  const minAvgVolume = parseOptionalNumericFilter(searchParams.get("minAvgVolume"));
+  const maxAvgVolume = parseOptionalNumericFilter(searchParams.get("maxAvgVolume"));
+  const minTradingDays = parseOptionalNumericFilter(searchParams.get("minTradingDays"));
+  const maxTradingDays = parseOptionalNumericFilter(searchParams.get("maxTradingDays"));
+  const sortBy = parseMetadataSortField(searchParams.get("sortBy"));
+  const sortDir = parseMetadataSortDirection(searchParams.get("sortDir"));
+  const hasServerPagination = !limitAll && (
+    pageRaw !== null || pageSizeRaw !== null || searchParams.has("sortBy") || searchParams.has("sortDir")
+    || statusFilter !== undefined || listingPhaseFilter !== undefined || industryFilter !== undefined
+    || minAvgVolume !== undefined || maxAvgVolume !== undefined || minTradingDays !== undefined || maxTradingDays !== undefined
+  );
   const requestedDate = dateRaw ? parseFlexibleDate(dateRaw) : null;
   const fromDate = fromRaw ? parseFlexibleDate(fromRaw) : null;
   const toDate = toRaw ? parseFlexibleDate(toRaw) : null;
@@ -226,6 +374,28 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+  }
+  if (!limitAll && (page === null || pageSize === null)) {
+    return jsonResponse(traceId, { error: `page must be 1-1000 and pageSize must be 1-${MAX_PAGE_SIZE}.` }, { status: 400 });
+  }
+  const effectivePage = page ?? DEFAULT_PAGE;
+  const effectivePageSize = pageSize ?? DEFAULT_PAGE_SIZE;
+  if (minAvgVolume === null || maxAvgVolume === null || minTradingDays === null || maxTradingDays === null) {
+    return jsonResponse(traceId, { error: "Numeric filters must be valid numbers." }, { status: 400 });
+  }
+  if (
+    typeof minAvgVolume === "number"
+    && typeof maxAvgVolume === "number"
+    && minAvgVolume > maxAvgVolume
+  ) {
+    return jsonResponse(traceId, { error: '"minAvgVolume" must be less than or equal to "maxAvgVolume".' }, { status: 400 });
+  }
+  if (
+    typeof minTradingDays === "number"
+    && typeof maxTradingDays === "number"
+    && minTradingDays > maxTradingDays
+  ) {
+    return jsonResponse(traceId, { error: '"minTradingDays" must be less than or equal to "maxTradingDays".' }, { status: 400 });
   }
   if (exchangeInput.provided && exchange !== HOSE_EXCHANGE) {
     return jsonResponse(traceId, { error: ONLY_HOSE_ERROR }, { status: 400 });
@@ -370,8 +540,30 @@ export async function GET(request: Request) {
         return jsonResponse(traceId, { stocks: [], total: 0 });
       }
       const filtered = metadata.filter((s) => s.symbol.includes(normalized));
-      const slice = limitAll ? filtered : filtered.slice(0, limit!);
-      return jsonResponse(traceId, { stocks: slice, total: filtered.length });
+      const refined = applyMetadataFilters(filtered, {
+        status: statusFilter,
+        listingPhase: listingPhaseFilter,
+        industry: industryFilter,
+        minAvgVolume: typeof minAvgVolume === "number" ? minAvgVolume : undefined,
+        maxAvgVolume: typeof maxAvgVolume === "number" ? maxAvgVolume : undefined,
+        minTradingDays: typeof minTradingDays === "number" ? minTradingDays : undefined,
+        maxTradingDays: typeof maxTradingDays === "number" ? maxTradingDays : undefined,
+      }).sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
+      if (hasServerPagination) {
+        const offset = (effectivePage - 1) * effectivePageSize;
+        const slice = refined.slice(offset, offset + effectivePageSize);
+        return jsonResponse(traceId, {
+          stocks: slice,
+          total: refined.length,
+          page: effectivePage,
+          pageSize: effectivePageSize,
+          totalPages: Math.max(1, Math.ceil(refined.length / effectivePageSize)),
+          sortBy,
+          sortDir,
+        });
+      }
+      const slice = limitAll ? refined : refined.slice(0, limit!);
+      return jsonResponse(traceId, { stocks: slice, total: refined.length });
     }
 
     if (dateRaw || searchParams.has("exchange") || searchParams.has("icb")) {
@@ -471,8 +663,32 @@ export async function GET(request: Request) {
       });
     }
 
-    const slice = limitAll ? metadata : metadata.slice(0, limit!);
-    return jsonResponse(traceId, { stocks: slice, total: metadata.length });
+    const filteredMetadata = applyMetadataFilters(metadata, {
+      status: statusFilter,
+      listingPhase: listingPhaseFilter,
+      industry: industryFilter,
+      minAvgVolume: typeof minAvgVolume === "number" ? minAvgVolume : undefined,
+      maxAvgVolume: typeof maxAvgVolume === "number" ? maxAvgVolume : undefined,
+      minTradingDays: typeof minTradingDays === "number" ? minTradingDays : undefined,
+      maxTradingDays: typeof maxTradingDays === "number" ? maxTradingDays : undefined,
+    }).sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
+
+    if (hasServerPagination) {
+      const offset = (effectivePage - 1) * effectivePageSize;
+      const slice = filteredMetadata.slice(offset, offset + effectivePageSize);
+      return jsonResponse(traceId, {
+        stocks: slice,
+        total: filteredMetadata.length,
+        page: effectivePage,
+        pageSize: effectivePageSize,
+        totalPages: Math.max(1, Math.ceil(filteredMetadata.length / effectivePageSize)),
+        sortBy,
+        sortDir,
+      });
+    }
+
+    const slice = limitAll ? filteredMetadata : filteredMetadata.slice(0, limit!);
+    return jsonResponse(traceId, { stocks: slice, total: filteredMetadata.length });
   } catch (error) {
     logger.error("request.failed", {
       ...toErrorMeta(error),

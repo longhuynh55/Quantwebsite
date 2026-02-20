@@ -2,6 +2,8 @@ const baseUrl = process.env.ASSISTANT_EVAL_BASE_URL ?? process.env.SMOKE_BASE_UR
 const timeoutMs = Number(process.env.ASSISTANT_POLICY_MATRIX_TIMEOUT_MS ?? 45000);
 const maxRetries = Number(process.env.ASSISTANT_POLICY_MATRIX_MAX_RETRIES ?? 1);
 const retryBackoffMs = Number(process.env.ASSISTANT_POLICY_MATRIX_RETRY_BACKOFF_MS ?? 300);
+const maxRetryDelayMs = Number(process.env.ASSISTANT_POLICY_MATRIX_MAX_RETRY_DELAY_MS ?? 5000);
+const retryJitterMs = Number(process.env.ASSISTANT_POLICY_MATRIX_RETRY_JITTER_MS ?? 120);
 const reportPath =
   process.env.ASSISTANT_POLICY_MATRIX_REPORT_PATH ?? "artifacts/assistant-policy-matrix-report.json";
 const evalAuthToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
@@ -159,6 +161,28 @@ function check(name, ok, failures, message) {
   return ok;
 }
 
+function parseRetryAfterMs(response) {
+  const raw = response?.headers?.get?.("retry-after");
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const retryAt = Date.parse(text);
+  if (!Number.isFinite(retryAt)) return null;
+  const delta = retryAt - Date.now();
+  return delta > 0 ? delta : 0;
+}
+
+function computeRetryDelayMs(attemptIndex, response = null) {
+  const retryAfterMs = parseRetryAfterMs(response);
+  const baseDelay = Number.isFinite(retryAfterMs)
+    ? retryAfterMs
+    : retryBackoffMs * (2 ** Math.max(0, attemptIndex));
+  const jitter = retryJitterMs > 0 ? Math.floor(Math.random() * (retryJitterMs + 1)) : 0;
+  return Math.min(maxRetryDelayMs, Math.max(0, Math.round(baseDelay + jitter)));
+}
+
 async function callAssistantWithRetry(input) {
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -191,7 +215,7 @@ async function callAssistantWithRetry(input) {
 
       const latencyMs = Date.now() - startedAt;
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
-        await sleep(retryBackoffMs * (attempt + 1));
+        await sleep(computeRetryDelayMs(attempt, response));
         continue;
       }
 
@@ -213,7 +237,7 @@ async function callAssistantWithRetry(input) {
           error: error instanceof Error ? error.message : String(error),
         };
       }
-      await sleep(retryBackoffMs * (attempt + 1));
+      await sleep(computeRetryDelayMs(attempt));
     } finally {
       clearTimeout(timer);
     }
@@ -409,6 +433,13 @@ async function run() {
     passedCases: passedTurns,
     failedCases: scenarios.length - passedTurns,
     gatesConfig,
+    retryConfig: {
+      maxRetries,
+      baseBackoffMs: retryBackoffMs,
+      maxRetryDelayMs,
+      retryJitterMs,
+      timeoutMs,
+    },
     rates: {
       turnPassRate,
       policyPassRate,

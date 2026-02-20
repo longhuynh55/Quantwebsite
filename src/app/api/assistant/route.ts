@@ -600,14 +600,15 @@ function buildGroundedFallbackMessage(facts: string[], usedTools: AssistantToolU
 
 function detectNonHoseScopeGuard(
   usedTools: AssistantToolUsage[]
-): { requestedExchange: string } | null {
+): { requestedExchange: string; tool: AssistantToolUsage["name"] } | null {
   for (const tool of usedTools) {
-    if (tool.name !== "stockSnapshot" || tool.status !== "success") continue;
+    if (tool.status !== "success") continue;
+    if (tool.name !== "stockSnapshot" && tool.name !== "valuationRanking" && tool.name !== "icbSnapshot") continue;
     const requestedExchange = String(tool.requestParams?.requestedExchange ?? "")
       .trim()
       .toUpperCase();
     if (!requestedExchange || requestedExchange === "HOSE") continue;
-    return { requestedExchange };
+    return { requestedExchange, tool: tool.name };
   }
   return null;
 }

@@ -26,7 +26,7 @@ const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
 const MIN_SYMBOLS = 2;
 const MAX_SYMBOLS = 50;
 
-const ALLOWED_METHODS = ["mean_variance", "risk_parity", "equal_weight"];
+const ALLOWED_METHODS = ["mean_variance", "risk_parity", "equal_weight", "min_variance"];
 const DEFAULT_METHOD = "mean_variance";
 const RATE_LIMIT_MAX = 30; // 30 requests per minute (computationally expensive)
 const MIN_DATA_QUALITY_RATIO = 0.95;

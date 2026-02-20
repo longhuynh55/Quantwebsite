@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataQualityReport, hasSufficientDataQuality, loadOHLCVForSymbol, loadIndexData } from "@/lib/data";
 import { calculateRiskMetrics, calculateDrawdown, calculateRollingVolatility } from "@/lib/quant/risk";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 
 // Valid symbol format: 1-10 uppercase letters or digits
 const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
@@ -9,6 +10,7 @@ const VALID_BENCHMARKS = ["VNINDEX", "VN100", "VN30"];
 const DEFAULT_BENCHMARK = "VNINDEX";
 const RATE_LIMIT_MAX = 60; // 60 requests per minute
 const MIN_DATA_QUALITY_RATIO = 0.95;
+const riskApiLogger = createLogger("api.risk");
 
 function getDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -34,10 +36,17 @@ function getDataQualityError(dataset: "ohlcv" | "index"): string | null {
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("risk");
+  const logger = riskApiLogger.child({ traceId });
   // Rate limiting check
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/risk", clientId), RATE_LIMIT_MAX, 60000);
   if (!rateLimit.allowed) {
+    logger.warn("rate_limit.blocked", {
+      remaining: rateLimit.remaining,
+      resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+    });
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
@@ -136,6 +145,10 @@ export async function GET(request: Request) {
 
     const drawdownAnalysis = calculateDrawdown(assetPrices);
     const rollingVol = calculateRollingVolatility(assetPrices, 21);
+    const latestDrawdown = drawdownAnalysis.drawdowns[drawdownAnalysis.drawdowns.length - 1] ?? {
+      drawdown: 0,
+      duration: 0,
+    };
 
     // Safely build drawdown array
     const startIndex = Math.max(0, sortedAssetData.length - 252);
@@ -155,11 +168,21 @@ export async function GET(request: Request) {
       symbol,
       benchmark,
       metrics: riskMetrics,
+      analysis: {
+        currentDrawdown: latestDrawdown.drawdown,
+        currentDrawdownDuration: latestDrawdown.duration,
+        isUnderwater: latestDrawdown.drawdown > 0,
+      },
       drawdowns,
       rollingVolatility,
     });
   } catch (error) {
-    console.error("Risk API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      symbol,
+      benchmark,
+    });
     return NextResponse.json({ error: "Failed to calculate risk metrics" }, { status: 500 });
   }
 }

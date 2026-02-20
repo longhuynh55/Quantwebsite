@@ -44,6 +44,10 @@ export interface FundamentalAnalysisResult {
     loansToCustomers: RatioPoint[];
     depositsFromCustomers: RatioPoint[];
   };
+  incomeStatement: {
+    revenue: RatioPoint[];
+    netIncome: RatioPoint[];
+  };
   liquidity: {
     currentRatio: RatioPoint[];
     quickRatio: RatioPoint[];

@@ -1,4 +1,4 @@
-# Enhanced Financial AI Agent - Architecture & Research
+﻿# Enhanced Financial AI Agent - Architecture & Research
 
 ## Overview
 
@@ -32,36 +32,36 @@ This document compiles research findings and architecture design for enhancing Q
 
 | Task | Description | Prompt Approach | Feasibility |
 |------|-------------|-----------------|-------------|
-| **1. Liquidity Ratios** | Current ratio, Quick ratio, Cash ratio | Direct calculation from data | ✅ High |
-| **2. Leverage Analysis** | Debt-to-Equity, Interest Coverage | Formula + trend analysis | ✅ High |
-| **3. Efficiency Metrics** | Asset/Inventory/Receivables turnover | Multi-period calculation | ✅ High |
-| **4. Red Flags Detection** | High debt, declining liquidity, negative equity | Pattern matching prompts | ⚠️ Medium |
-| **5. Peer Comparison** | Industry benchmarking | Requires peer data | ✅ High |
+| **1. Liquidity Ratios** | Current ratio, Quick ratio, Cash ratio | Direct calculation from data | âœ… High |
+| **2. Leverage Analysis** | Debt-to-Equity, Interest Coverage | Formula + trend analysis | âœ… High |
+| **3. Efficiency Metrics** | Asset/Inventory/Receivables turnover | Multi-period calculation | âœ… High |
+| **4. Red Flags Detection** | High debt, declining liquidity, negative equity | Pattern matching prompts | âš ï¸ Medium |
+| **5. Peer Comparison** | Industry benchmarking | Requires peer data | âœ… High |
 
 #### Income Statement Analysis
 
 | Task | Description | Prompt Approach | Feasibility |
 |------|-------------|-----------------|-------------|
-| **6. Revenue Growth** | YoY, QoQ, CAGR analysis | Time series prompts | ✅ High |
-| **7. Profit Margins** | Gross, Operating, Net margins | Direct calculation | ✅ High |
-| **8. EPS Analysis** | Basic/Diluted EPS, P/E ratio | Formula + comparison | ✅ High |
-| **9. Expense Ratios** | OpEx as % of revenue | Category breakdown | ✅ High |
-| **10. Quality of Earnings** | Cash flow vs net income | Accrual analysis | ⚠️ Medium |
+| **6. Revenue Growth** | YoY, QoQ, CAGR analysis | Time series prompts | âœ… High |
+| **7. Profit Margins** | Gross, Operating, Net margins | Direct calculation | âœ… High |
+| **8. EPS Analysis** | Basic/Diluted EPS, P/E ratio | Formula + comparison | âœ… High |
+| **9. Expense Ratios** | OpEx as % of revenue | Category breakdown | âœ… High |
+| **10. Quality of Earnings** | Cash flow vs net income | Accrual analysis | âš ï¸ Medium |
 
 #### Cash Flow Analysis
 
 | Task | Description | Prompt Approach | Feasibility |
 |------|-------------|-----------------|-------------|
-| **11. OCF Quality** | Operating cash consistency | Trend + volatility | ✅ High |
-| **12. Free Cash Flow** | OCF - CapEx | Direct calculation | ✅ High |
-| **13. Cash vs Net Income** | Accrual vs cash earnings | Reconciliation | ✅ High |
+| **11. OCF Quality** | Operating cash consistency | Trend + volatility | âœ… High |
+| **12. Free Cash Flow** | OCF - CapEx | Direct calculation | âœ… High |
+| **13. Cash vs Net Income** | Accrual vs cash earnings | Reconciliation | âœ… High |
 
 #### Comprehensive Analysis
 
 | Task | Description | Prompt Approach | Feasibility |
 |------|-------------|-----------------|-------------|
-| **14. Financial Health Score** | 0-100 composite score | Weighted formula | ✅ High |
-| **15. VAS Adjustment** | Vietnamese accounting adjustments | Domain rules | ⚠️ Medium |
+| **14. Financial Health Score** | 0-100 composite score | Weighted formula | âœ… High |
+| **15. VAS Adjustment** | Vietnamese accounting adjustments | Domain rules | âš ï¸ Medium |
 
 ### 1.3 Prompt Templates
 
@@ -218,35 +218,35 @@ Build a DCF valuation model for {company_name} ({symbol}) with the following dat
 
 ```
 Stock_Analysis_VCB_2024-02-14.xlsx
-│
-├── Sheet 1: Executive Summary
-│   ├── Company header (Name, Symbol, Exchange)
-│   ├── Key Metrics Table (Price, P/E, Market Cap, etc.)
-│   ├── AI-Generated Analysis (2-3 paragraphs)
-│   └── Recommendation Box
-│
-├── Sheet 2: Technical Analysis
-│   ├── Price Summary (52-week high/low, current)
-│   ├── Indicators Table (RSI, MACD, SMA, Bollinger)
-│   ├── Trend Assessment
-│   └── Support/Resistance Levels
-│
-├── Sheet 3: Financial Statements
-│   ├── Balance Sheet (5 years)
-│   ├── Income Statement (5 years)
-│   ├── Cash Flow (5 years)
-│   └── Key Ratios Table
-│
-├── Sheet 4: Price History
-│   ├── Date | Open | High | Low | Close | Volume
-│   └── (Up to 1000 rows)
-│
-└── Sheet 5: AI Insights
-    ├── Financial Health Score (0-100)
-    ├── Red Flags Detected
-    ├── Positive Indicators
-    ├── Peer Comparison Summary
-    └── Investment Thesis
+â”‚
+â”œâ”€â”€ Sheet 1: Executive Summary
+â”‚   â”œâ”€â”€ Company header (Name, Symbol, Exchange)
+â”‚   â”œâ”€â”€ Key Metrics Table (Price, P/E, Market Cap, etc.)
+â”‚   â”œâ”€â”€ AI-Generated Analysis (2-3 paragraphs)
+â”‚   â””â”€â”€ Recommendation Box
+â”‚
+â”œâ”€â”€ Sheet 2: Technical Analysis
+â”‚   â”œâ”€â”€ Price Summary (52-week high/low, current)
+â”‚   â”œâ”€â”€ Indicators Table (RSI, MACD, SMA, Bollinger)
+â”‚   â”œâ”€â”€ Trend Assessment
+â”‚   â””â”€â”€ Support/Resistance Levels
+â”‚
+â”œâ”€â”€ Sheet 3: Financial Statements
+â”‚   â”œâ”€â”€ Balance Sheet (5 years)
+â”‚   â”œâ”€â”€ Income Statement (5 years)
+â”‚   â”œâ”€â”€ Cash Flow (5 years)
+â”‚   â””â”€â”€ Key Ratios Table
+â”‚
+â”œâ”€â”€ Sheet 4: Price History
+â”‚   â”œâ”€â”€ Date | Open | High | Low | Close | Volume
+â”‚   â””â”€â”€ (Up to 1000 rows)
+â”‚
+â””â”€â”€ Sheet 5: AI Insights
+    â”œâ”€â”€ Financial Health Score (0-100)
+    â”œâ”€â”€ Red Flags Detected
+    â”œâ”€â”€ Positive Indicators
+    â”œâ”€â”€ Peer Comparison Summary
+    â””â”€â”€ Investment Thesis
 ```
 
 ### 3.4 ExcelJS Implementation Pattern
@@ -292,51 +292,51 @@ async function generateStockReport(data, aiInsights) {
 
 #### Workflow 1: Full Stock Analysis
 ```
-Step 1: Data Gathering     → Fetch financial statements from Vietstock
-Step 2: Ratio Calculation  → Calculate key ratios (liquidity, leverage, etc.)
-Step 3: Trend Analysis     → Multi-period comparison
-Step 4: Red Flag Detection → Identify financial warning signs
-Step 5: Peer Comparison    → Compare with industry benchmarks
-Step 6: Summary Generation → AI-generated executive summary
+Step 1: Data Gathering     â†’ Fetch financial statements from Vietstock
+Step 2: Ratio Calculation  â†’ Calculate key ratios (liquidity, leverage, etc.)
+Step 3: Trend Analysis     â†’ Multi-period comparison
+Step 4: Red Flag Detection â†’ Identify financial warning signs
+Step 5: Peer Comparison    â†’ Compare with industry benchmarks
+Step 6: Summary Generation â†’ AI-generated executive summary
 ```
 
 #### Workflow 2: DCF Valuation
 ```
-Step 1: Company Selection  → User selects stock to value
-Step 2: Data Collection    → Fetch historical financials
-Step 3: FCF Projection     → AI-assisted growth assumptions
-Step 4: WACC Calculation   → Calculate cost of capital
-Step 5: Terminal Value     → Choose method, set assumptions
-Step 6: Valuation Summary  → Calculate fair value
-Step 7: Sensitivity        → Generate sensitivity matrix
+Step 1: Company Selection  â†’ User selects stock to value
+Step 2: Data Collection    â†’ Fetch historical financials
+Step 3: FCF Projection     â†’ AI-assisted growth assumptions
+Step 4: WACC Calculation   â†’ Calculate cost of capital
+Step 5: Terminal Value     â†’ Choose method, set assumptions
+Step 6: Valuation Summary  â†’ Calculate fair value
+Step 7: Sensitivity        â†’ Generate sensitivity matrix
 ```
 
 #### Workflow 3: Portfolio Health Check
 ```
-Step 1: Portfolio Import   → User inputs holdings
-Step 2: Risk Analysis      → VaR, drawdown, correlation
-Step 3: Diversification    → Sector/asset allocation analysis
-Step 4: Performance        → Factor attribution
-Step 5: Recommendations    → AI rebalancing suggestions
+Step 1: Portfolio Import   â†’ User inputs holdings
+Step 2: Risk Analysis      â†’ VaR, drawdown, correlation
+Step 3: Diversification    â†’ Sector/asset allocation analysis
+Step 4: Performance        â†’ Factor attribution
+Step 5: Recommendations    â†’ AI rebalancing suggestions
 ```
 
 #### Workflow 4: Backtest Validation
 ```
-Step 1: Strategy Selection → Choose from preset strategies
-Step 2: Parameter Setup    → Configure strategy parameters
-Step 3: Historical Run     → Execute backtest
-Step 4: Metrics            → Calculate risk-adjusted returns
-Step 5: Comparison         → Compare vs benchmark (VN-Index)
-Step 6: Report Generation  → Export results to Excel
+Step 1: Strategy Selection â†’ Choose from preset strategies
+Step 2: Parameter Setup    â†’ Configure strategy parameters
+Step 3: Historical Run     â†’ Execute backtest
+Step 4: Metrics            â†’ Calculate risk-adjusted returns
+Step 5: Comparison         â†’ Compare vs benchmark (VN-Index)
+Step 6: Report Generation  â†’ Export results to Excel
 ```
 
 #### Workflow 5: Sector Comparison
 ```
-Step 1: Sector Selection   → Choose industry/sector
-Step 2: Stock Screening    → Apply filter criteria
-Step 3: Data Collection    → Fetch financials for all stocks
-Step 4: Comparative Analysis → Rank by key metrics
-Step 5: Top Picks          → AI recommendations
+Step 1: Sector Selection   â†’ Choose industry/sector
+Step 2: Stock Screening    â†’ Apply filter criteria
+Step 3: Data Collection    â†’ Fetch financials for all stocks
+Step 4: Comparative Analysis â†’ Rank by key metrics
+Step 5: Top Picks          â†’ AI recommendations
 ```
 
 ### 4.2 Workflow Engine Architecture
@@ -368,23 +368,23 @@ class WorkflowEngine {
 ### 4.3 UI: Workflow Progress Component
 
 ```
-┌─────────────────────────────────────────────┐
-│  Full Stock Analysis - VCB                  │
-├─────────────────────────────────────────────┤
-│  ✓ Step 1: Data Gathering          100%    │
-│    Completed in 2.3s                        │
-│                                             │
-│  ● Step 2: Ratio Calculation        67%    │
-│    Processing balance sheet metrics...      │
-│    ████████████████░░░░░░░░                 │
-│                                             │
-│  ○ Step 3: Trend Analysis           0%     │
-│    Waiting...                               │
-│                                             │
-│  ○ Step 4: Red Flag Detection      0%     │
-│  ○ Step 5: Peer Comparison         0%     │
-│  ○ Step 6: Summary Generation      0%     │
-└─────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  Full Stock Analysis - VCB                  â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚  âœ“ Step 1: Data Gathering          100%    â”‚
+â”‚    Completed in 2.3s                        â”‚
+â”‚                                             â”‚
+â”‚  â— Step 2: Ratio Calculation        67%    â”‚
+â”‚    Processing balance sheet metrics...      â”‚
+â”‚    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘                 â”‚
+â”‚                                             â”‚
+â”‚  â—‹ Step 3: Trend Analysis           0%     â”‚
+â”‚    Waiting...                               â”‚
+â”‚                                             â”‚
+â”‚  â—‹ Step 4: Red Flag Detection      0%     â”‚
+â”‚  â—‹ Step 5: Peer Comparison         0%     â”‚
+â”‚  â—‹ Step 6: Summary Generation      0%     â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
@@ -393,61 +393,61 @@ class WorkflowEngine {
 
 ```
 src/
-├── types/
-│   └── assistant.ts              # Message, Context, Workflow types
-│
-├── lib/
-│   ├── stores/
-│   │   └── assistantStore.ts     # Zustand state management
-│   │
-│   ├── financial-analysis/
-│   │   ├── analysis-engine.ts    # Main analysis logic
-│   │   ├── prompts.ts            # Prompt templates
-│   │   └── types.ts              # Analysis result types
-│   │
-│   ├── financial-modeling/
-│   │   ├── dcf-engine.ts         # DCF model builder
-│   │   ├── prompts.ts            # Modeling prompts
-│   │   └── valuation.ts          # Valuation helpers
-│   │
-│   ├── excel-reports/
-│   │   ├── report-generator.ts   # ExcelJS generator
-│   │   ├── templates.ts          # Report templates
-│   │   └── types.ts              # Report types
-│   │
-│   └── workflows/
-│       ├── types.ts              # Workflow types
-│       ├── workflow-engine.ts    # Step orchestration
-│       └── presets.ts            # Predefined workflows
-│
-├── components/
-│   ├── assistant/
-│   │   ├── AiAssistantPanel.tsx  # Main chat panel
-│   │   ├── ChatMessage.tsx       # Message bubble
-│   │   ├── ChatInput.tsx         # Input field
-│   │   ├── QuickActions.tsx      # Quick action buttons
-│   │   ├── AnalysisMode.tsx      # Analysis type selector
-│   │   └── ReportExport.tsx      # Export controls
-│   │
-│   └── workflows/
-│       └── WorkflowProgress.tsx  # Progress display
-│
-└── app/
-    └── api/
-        ├── assistant/
-        │   └── route.ts          # GLM chat API
-        │
-        ├── analysis/
-        │   └── [type]/
-        │       └── route.ts      # Financial analysis API
-        │
-        └── reports/
-            ├── stock-analysis/
-            │   └── route.ts      # Stock analysis Excel
-            ├── portfolio-summary/
-            │   └── route.ts      # Portfolio Excel
-            └── backtest-results/
-                └── route.ts      # Backtest Excel
+â”œâ”€â”€ types/
+â”‚   â””â”€â”€ assistant.ts              # Message, Context, Workflow types
+â”‚
+â”œâ”€â”€ lib/
+â”‚   â”œâ”€â”€ stores/
+â”‚   â”‚   â””â”€â”€ assistantStore.ts     # Zustand state management
+â”‚   â”‚
+â”‚   â”œâ”€â”€ financial-analysis/
+â”‚   â”‚   â”œâ”€â”€ analysis-engine.ts    # Main analysis logic
+â”‚   â”‚   â”œâ”€â”€ prompts.ts            # Prompt templates
+â”‚   â”‚   â””â”€â”€ types.ts              # Analysis result types
+â”‚   â”‚
+â”‚   â”œâ”€â”€ financial-modeling/
+â”‚   â”‚   â”œâ”€â”€ dcf-engine.ts         # DCF model builder
+â”‚   â”‚   â”œâ”€â”€ prompts.ts            # Modeling prompts
+â”‚   â”‚   â””â”€â”€ valuation.ts          # Valuation helpers
+â”‚   â”‚
+â”‚   â”œâ”€â”€ excel-reports/
+â”‚   â”‚   â”œâ”€â”€ report-generator.ts   # ExcelJS generator
+â”‚   â”‚   â”œâ”€â”€ templates.ts          # Report templates
+â”‚   â”‚   â””â”€â”€ types.ts              # Report types
+â”‚   â”‚
+â”‚   â””â”€â”€ workflows/
+â”‚       â”œâ”€â”€ types.ts              # Workflow types
+â”‚       â”œâ”€â”€ workflow-engine.ts    # Step orchestration
+â”‚       â””â”€â”€ presets.ts            # Predefined workflows
+â”‚
+â”œâ”€â”€ components/
+â”‚   â”œâ”€â”€ assistant/
+â”‚   â”‚   â”œâ”€â”€ AiAssistantPanel.tsx  # Main chat panel
+â”‚   â”‚   â”œâ”€â”€ ChatMessage.tsx       # Message bubble
+â”‚   â”‚   â”œâ”€â”€ ChatInput.tsx         # Input field
+â”‚   â”‚   â”œâ”€â”€ QuickActions.tsx      # Quick action buttons
+â”‚   â”‚   â”œâ”€â”€ AnalysisMode.tsx      # Analysis type selector
+â”‚   â”‚   â””â”€â”€ ReportExport.tsx      # Export controls
+â”‚   â”‚
+â”‚   â””â”€â”€ workflows/
+â”‚       â””â”€â”€ WorkflowProgress.tsx  # Progress display
+â”‚
+â””â”€â”€ app/
+    â””â”€â”€ api/
+        â”œâ”€â”€ assistant/
+        â”‚   â””â”€â”€ route.ts          # GLM chat API
+        â”‚
+        â”œâ”€â”€ analysis/
+        â”‚   â””â”€â”€ [type]/
+        â”‚       â””â”€â”€ route.ts      # Financial analysis API
+        â”‚
+        â””â”€â”€ reports/
+            â”œâ”€â”€ stock-analysis/
+            â”‚   â””â”€â”€ route.ts      # Stock analysis Excel
+            â”œâ”€â”€ portfolio-summary/
+            â”‚   â””â”€â”€ route.ts      # Portfolio Excel
+            â””â”€â”€ backtest-results/
+                â””â”€â”€ route.ts      # Backtest Excel
 ```
 
 ---
@@ -496,8 +496,8 @@ src/
 ## 7. Dependencies
 
 ```bash
-npm install exceljs
-npm install zustand  # (likely already installed)
+pnpm install exceljs
+pnpm install zustand  # (likely already installed)
 ```
 
 ---
@@ -558,3 +558,4 @@ You are an expert quantitative finance AI assistant for QuantVN, a Vietnamese st
 
 *Document created: 2024-02-14*
 *For QuantVN Thesis Project*
+

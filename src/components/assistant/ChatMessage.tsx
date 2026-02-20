@@ -2,9 +2,9 @@
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { AssistantCitation, AssistantMessageBlock, AssistantToolUsage, Message } from '@/types/assistant';
-import { User, Bot, Wrench, AlertTriangle, CheckCircle2, Clock3, ShieldAlert, ChevronDown, FileDown } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { AssistantCitation, AssistantMessageBlock, AssistantSemanticCheckItem, AssistantToolUsage, Message } from '@/types/assistant';
+import { User, Bot, Wrench, AlertTriangle, CheckCircle2, Clock3, ShieldAlert, ChevronDown, FileDown, ListChecks } from 'lucide-react';
+import { memo, useMemo, type ReactNode } from 'react';
 
 interface ChatMessageProps {
   message: Message;
@@ -127,6 +127,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
   );
 }
 
+export const MemoizedChatMessage = memo(ChatMessage);
+
 function CitationCard({ citation }: { citation: AssistantCitation }) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 p-2.5">
@@ -181,11 +183,13 @@ function ResponseTrace({
 }) {
   if (!meta && (!usedTools || usedTools.length === 0)) return null;
   const groundingMissing = meta?.groundingRequired === true && meta?.groundingSatisfied === false;
+  const semanticSummary = summarizeSemanticChecklist(meta?.semantic?.checklist);
   const shouldAutoOpen =
     policyStatus === "fallback" ||
     policyStatus === "shadow_blocked" ||
     meta?.fallbackUsed === true ||
-    groundingMissing;
+    groundingMissing ||
+    semanticSummary.blockedGuards > 0;
   const recoveryHint = buildTraceRecoveryHint(policyStatus, groundingMissing, meta?.fallbackUsed === true);
 
   return (
@@ -210,6 +214,44 @@ function ResponseTrace({
             {typeof meta.citationCount === 'number' && <span>Citations: {meta.citationCount}</span>}
             {typeof meta.groundedFactsCount === 'number' && <span>Facts: {meta.groundedFactsCount}</span>}
             {meta.requestId && <span className="col-span-2 break-all">Request ID: {meta.requestId}</span>}
+          </div>
+        )}
+        {meta?.semantic && (
+          <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/70 dark:bg-gray-900/35 p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 inline-flex items-center gap-1">
+                <ListChecks className="w-3.5 h-3.5" />
+                Semantic Gate
+              </p>
+              <Badge
+                variant={semanticSummary.blockedGuards > 0 ? "destructive" : "secondary"}
+                className="text-[10px] uppercase tracking-wide"
+              >
+                {meta.semantic.phase}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+              <span>Version: {String(meta.semantic.version || "n/a")}</span>
+              <span>Checks: {semanticSummary.total}</span>
+              <span>Pass rate: {formatSemanticPercent(meta.semantic.passRate, semanticSummary.passRate)}</span>
+              <span>Guard pass: {formatSemanticPercent(meta.semantic.guardPassRate, semanticSummary.guardPassRate)}</span>
+            </div>
+            {Array.isArray(meta.semantic.checklist) && meta.semantic.checklist.length > 0 && (
+              <div className="space-y-1">
+                {meta.semantic.checklist.slice(0, 4).map((item) => (
+                  <div key={`semantic-${item.id}`} className="text-[11px] text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                    <SemanticStatusIcon status={item.status} />
+                    <span className="font-medium">{item.label}</span>
+                    {item.guard && <span className="uppercase tracking-wide text-[10px] text-gray-500 dark:text-gray-400">guard</span>}
+                  </div>
+                ))}
+                {meta.semantic.checklist.length > 4 && (
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                    +{meta.semantic.checklist.length - 4} more checks
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
         {recoveryHint && (
@@ -251,6 +293,55 @@ function ToolStatusIcon({ status }: { status: AssistantToolUsage['status'] }) {
   if (status === 'success') return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300 mt-0.5" />;
   if (status === 'error') return <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-300 mt-0.5" />;
   return <ShieldAlert className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-0.5" />;
+}
+
+function SemanticStatusIcon({ status }: { status: AssistantSemanticCheckItem["status"] }) {
+  if (status === "pass") return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300 mt-0.5" />;
+  if (status === "warn") return <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 mt-0.5" />;
+  if (status === "fail") return <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-300 mt-0.5" />;
+  return <Clock3 className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-0.5" />;
+}
+
+function summarizeSemanticChecklist(checklist?: AssistantSemanticCheckItem[]) {
+  if (!Array.isArray(checklist) || checklist.length === 0) {
+    return {
+      total: 0,
+      passRate: null as number | null,
+      guardPassRate: null as number | null,
+      blockedGuards: 0,
+    };
+  }
+
+  let passed = 0;
+  let guardPassed = 0;
+  let guardEvaluated = 0;
+  let blockedGuards = 0;
+  for (const item of checklist) {
+    const status = item?.status;
+    if (status === "pass") passed += 1;
+    if (item?.guard === true) {
+      if (status === "pass") {
+        guardPassed += 1;
+        guardEvaluated += 1;
+      } else if (status === "warn" || status === "fail") {
+        guardEvaluated += 1;
+        blockedGuards += 1;
+      }
+    }
+  }
+
+  return {
+    total: checklist.length,
+    passRate: checklist.length > 0 ? passed / checklist.length : null,
+    guardPassRate: guardEvaluated > 0 ? guardPassed / guardEvaluated : null,
+    blockedGuards,
+  };
+}
+
+function formatSemanticPercent(primary?: number, fallback?: number | null): string {
+  const raw = Number.isFinite(primary) ? Number(primary) : Number.isFinite(fallback) ? Number(fallback) : NaN;
+  if (!Number.isFinite(raw)) return "n/a";
+  return `${(raw * 100).toFixed(1)}%`;
 }
 
 function formatPolicyReason(reason: string): string {
@@ -701,7 +792,7 @@ type ContentBlock =
   | { type: 'code'; code: string };
 
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
-  const blocks = parseContentBlocks(content);
+  const blocks = useMemo(() => parseContentBlocks(content), [content]);
 
   return (
     <div className="space-y-2 break-words text-sm leading-relaxed">

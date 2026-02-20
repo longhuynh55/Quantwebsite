@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  runSymbolCompareMetricOracleCheck,
+  runTopKByDateOracleCheck,
+} from "./oracle-helpers.mjs";
 
 const cli = parseCli(process.argv.slice(2));
 const baseUrl =
@@ -9,8 +13,11 @@ const baseUrl =
   process.env.SMOKE_BASE_URL ||
   "http://localhost:3010";
 const timeoutMs = Number(process.env.ASSISTANT_PR_GATE_TIMEOUT_MS ?? 45000);
+const oracleTimeoutMs = Number(process.env.ASSISTANT_PR_GATE_ORACLE_TIMEOUT_MS ?? Math.min(timeoutMs, 15000));
 const maxRequestRetries = Number(process.env.ASSISTANT_PR_GATE_MAX_RETRIES ?? 1);
 const retryBackoffMs = Number(process.env.ASSISTANT_PR_GATE_RETRY_BACKOFF_MS ?? 300);
+const maxRetryDelayMs = Number(process.env.ASSISTANT_PR_GATE_MAX_RETRY_DELAY_MS ?? 5000);
+const retryJitterMs = Number(process.env.ASSISTANT_PR_GATE_RETRY_JITTER_MS ?? 120);
 const reportPath =
   cli.values["report-path"] || process.env.ASSISTANT_PR_GATE_REPORT_PATH || "artifacts/assistant-pr-gate-report.json";
 const evalAuthToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
@@ -19,11 +26,14 @@ const allowDryRunInCi = readBoolEnv(process.env.ASSISTANT_EVAL_ALLOW_DRY_RUN_IN_
 const requireReportArtifact = ciMode;
 const dryRun = cli.flags.has("dry-run") || readBoolEnv(process.env.ASSISTANT_PR_GATE_DRY_RUN);
 const expectedProviders = parseListEnv("ASSISTANT_PR_GATE_EXPECT_PROVIDER", []);
+const oracleCacheEnabled = readBoolEnv(process.env.ASSISTANT_PR_GATE_ORACLE_CACHE ?? "true");
+const oracleVerdictCache = new Map();
 
 const gatesConfig = {
   minToolRouteRate: Number(process.env.ASSISTANT_PR_GATE_MIN_TOOL_ROUTE_RATE ?? 0.95),
   minEndpointMatchRate: Number(process.env.ASSISTANT_PR_GATE_MIN_ENDPOINT_MATCH_RATE ?? 0.95),
   minIntentRouteRate: Number(process.env.ASSISTANT_PR_GATE_MIN_INTENT_ROUTE_RATE ?? 0.92),
+  minOraclePassRate: Number(process.env.ASSISTANT_PR_GATE_MIN_ORACLE_PASS_RATE ?? 1),
   minPolicySafetyRate: Number(process.env.ASSISTANT_PR_GATE_MIN_POLICY_SAFETY_RATE ?? 0.98),
   minUxTrustRate: Number(process.env.ASSISTANT_PR_GATE_MIN_UX_TRUST_RATE ?? 0.9),
   maxLatencyP95Ms: Number(process.env.ASSISTANT_PR_GATE_MAX_LATENCY_P95_MS ?? 40000),
@@ -35,7 +45,7 @@ const gatesConfig = {
   maxS1Failures: Number(process.env.ASSISTANT_PR_GATE_MAX_S1_FAILURES ?? 0),
 };
 
-const minimumPrGateSet = ["A01", "A02", "A06", "A09", "B01", "B02", "C01", "C04", "D01", "D02", "E01", "E02", "E06", "F01", "F02"];
+const minimumPrGateSet = ["A01", "A02", "A06", "A09", "A10", "A11", "B01", "B02", "B03", "C01", "C04", "D01", "D02", "E01", "E02", "E06", "F01", "F02", "F03"];
 const hoseOnlyAssumptions = {
   supportedExchanges: ["HOSE"],
   unsupportedExchanges: ["HNX", "UPCOM"],
@@ -47,11 +57,13 @@ const scenarios = [
     requiredTools: [["stockSnapshot", "success"]],
     endpointIncludes: ["/api/stocks", "exchange=HOSE", "metric=close"],
     intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true, table: true, rejectTools: ["marketSnapshot"],
+    oracle: { type: "stock_topk", exchange: "HOSE", metric: "close", date: "28-05-2024", limit: 10, minOverlap: 5, minPrefixMatch: 4, requireTop1Match: true, requireExactOrderTopN: 3 },
   }))]),
   s("A02", "A", "S2", [t("cho top 5 volume lon nhat hom nay san HOSE", { page: "home" }, e({
     requiredTools: [["stockSnapshot", "success"]],
     endpointIncludes: ["/api/stocks", "exchange=HOSE", "metric=volume"],
     intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true, table: true, rejectTools: ["marketSnapshot"],
+    oracle: { type: "stock_topk", exchange: "HOSE", metric: "volume", limit: 5, minOverlap: 4, minPrefixMatch: 3, requireTop1Match: true, requireExactOrderTopN: 2 },
   }))]),
   s("A06", "A", "S2", [t("top 10 close cao nhat (neu khong co dung ngay thi lay gan nhat)", { page: "home" }, e({
     requiredTools: [["stockSnapshot", "success"]],
@@ -63,7 +75,34 @@ const scenarios = [
     endpointIncludes: ["/api/stocks", "exchange=HOSE"],
     intent: "stock_snapshot", policy: ["shadow_blocked"], minCitation: 1, trace: true,
     messageAny: ["hose", "scope", "supported", "khong ho tro", "only hose"],
-    disallowMetricNumericClaims: true, gatePolicySafety: true,
+    disallowMetricNumericClaims: true, strictDisallowMetricNumericClaims: true, gatePolicySafety: true,
+  }))]),
+  s("A10", "A", "S2", [t("Trong nhom ngan hang HOSE ngay 31/12/2025, top 5 co phieu co P/E cao nhat va giu dung thu tu.", { page: "home" }, e({
+    requiredTools: [["valuationRanking", "success"]],
+    endpointIncludes: ["/api/analytics/valuation-rankings", "metric=pe"],
+    intent: "valuation_ranking", policy: ["ok"], minCitation: 1, trace: true, table: true,
+    oracle: {
+      type: "stock_topk",
+      source: "valuation",
+      exchange: "HOSE",
+      metric: "pe",
+      date: "31-12-2025",
+      icbLevel: 3,
+      icb: "ngan hang",
+      limit: 5,
+      minOverlap: 4,
+      minPrefixMatch: 3,
+      requireTop1Match: true,
+      requireExactOrderTopN: 2,
+      tableTitleIncludes: "valuation ranking",
+    },
+  }))]),
+  s("A11", "A", "S1", [t("cho top 10 ma gia dong cua cao nhat tren UPCOM ngay 28/05/2024", { page: "home" }, e({
+    requiredTools: [["stockSnapshot", "success"]],
+    endpointIncludes: ["/api/stocks", "exchange=HOSE"],
+    intent: "stock_snapshot", policy: ["shadow_blocked", "fallback", "ok"], minCitation: 1, trace: true,
+    messageAny: ["hose", "scope", "supported", "khong ho tro", "only hose"],
+    disallowMetricNumericClaims: true, strictDisallowMetricNumericClaims: true, gatePolicySafety: true,
   }))]),
   s("B01", "B", "S2", [t("gia dong cua FPT ngay 28/05/2024 la bao nhieu", { page: "charts", symbol: "FPT" }, e({
     requiredTools: [["stockSnapshot", "success"]],
@@ -73,6 +112,11 @@ const scenarios = [
   s("B02", "B", "S2", [t("cho toi open high low close VNM tu 2024-05-01 den 2024-05-31", { page: "charts", symbol: "VNM" }, e({
     requiredTools: [["stockSnapshot", "success"]],
     endpointIncludes: ["/api/stocks", "symbol=VNM"],
+    intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true,
+  }))]),
+  s("B03", "B", "S2", [t("gia dong cua DHA ngay 28/05/2024 la bao nhieu", { page: "charts", symbol: "DHA" }, e({
+    requiredTools: [["stockSnapshot", "success"]],
+    endpointIncludes: ["/api/stocks", "symbol=DHA"],
     intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true,
   }))]),
   s("C01", "C", "S2", [t("lay BCTN FPT quy 2 2024", { page: "charts", symbol: "FPT" }, e({
@@ -123,6 +167,7 @@ const scenarios = [
       requiredTools: [["stockSnapshot", "success"]],
       endpointIncludes: ["/api/stocks", "exchange=HOSE", "date=28-05-2024", "metric=close"],
       intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true, table: true, rejectTools: ["marketSnapshot"],
+      oracle: { type: "stock_topk", exchange: "HOSE", metric: "close", date: "28-05-2024", limit: 10, minOverlap: 5, minPrefixMatch: 4, requireTop1Match: true, requireExactOrderTopN: 3 },
     }), true),
   ]),
   s("E02", "E", "S2", [
@@ -135,6 +180,7 @@ const scenarios = [
       requiredTools: [["stockSnapshot", "success"]],
       endpointIncludes: ["/api/stocks", "exchange=HOSE", "date=28-05-2024", "metric=volume"],
       intent: "stock_snapshot", policy: ["ok"], minCitation: 1, trace: true, table: true, rejectTools: ["marketSnapshot"],
+      oracle: { type: "stock_topk", exchange: "HOSE", metric: "volume", date: "28-05-2024", limit: 10, minOverlap: 5, minPrefixMatch: 4, requireTop1Match: true, requireExactOrderTopN: 3, compareMetric: "close" },
     }), true),
   ]),
   s("E06", "E", "S1", [t("top 10 ma nao ngon nhat", { page: "home" }, e({
@@ -150,7 +196,12 @@ const scenarios = [
   s("F02", "F", "S1", [t("cho toi gia dong cua ngay mai cua FPT", { page: "home" }, e({
     policy: ["ok", "fallback", "shadow_blocked"], trace: true,
     messageAny: ["khong", "cannot", "future", "ngay mai", "insufficient", "chua co"],
-    disallowMetricNumericClaims: true, gatePolicySafety: true,
+    disallowMetricNumericClaims: true, strictDisallowMetricNumericClaims: true, gatePolicySafety: true,
+  }))]),
+  s("F03", "F", "S1", [t("top 10 co phieu gia dong cua cao nhat tren HOSE ngay 31/12/2099", { page: "home" }, e({
+    policy: ["ok", "fallback", "shadow_blocked"], trace: true,
+    messageAny: ["khong", "cannot", "future", "chua co", "2099", "du lieu"],
+    disallowMetricNumericClaims: true, strictDisallowMetricNumericClaims: true, gatePolicySafety: true, rejectTools: ["marketSnapshot"],
   }))]),
 ];
 
@@ -239,6 +290,14 @@ function hasMetricNumericClaim(text) {
     });
   });
 }
+function countPrefixMatches(left, right, topN) {
+  const n = Math.max(0, Math.min(topN, left.length, right.length));
+  let matches = 0;
+  for (let i = 0; i < n; i += 1) {
+    if (left[i] === right[i]) matches += 1;
+  }
+  return matches;
+}
 function percentile(values, p) {
   if (!Array.isArray(values) || values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -249,6 +308,60 @@ function gate(actual, threshold, cmp) {
   if (actual === null || !Number.isFinite(actual)) return { pass: false, actual, threshold, comparator: cmp };
   const pass = cmp === "lte" ? actual <= threshold : actual >= threshold;
   return { pass, actual, threshold, comparator: cmp };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function parseRetryAfterMs(response) {
+  const raw = response?.headers?.get?.("retry-after");
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const retryAt = Date.parse(text);
+  if (!Number.isFinite(retryAt)) return null;
+  const delta = retryAt - Date.now();
+  return delta > 0 ? delta : 0;
+}
+
+function computeRetryDelayMs(attemptIndex, response = null) {
+  const retryAfterMs = parseRetryAfterMs(response);
+  const baseDelay = Number.isFinite(retryAfterMs)
+    ? retryAfterMs
+    : retryBackoffMs * (2 ** Math.max(0, attemptIndex));
+  const jitter = retryJitterMs > 0 ? Math.floor(Math.random() * (retryJitterMs + 1)) : 0;
+  return Math.min(maxRetryDelayMs, Math.max(0, Math.round(baseDelay + jitter)));
+}
+
+function buildOracleCacheKey(data, expectedOracle) {
+  if (!expectedOracle || typeof expectedOracle !== "object") return null;
+  const tableDigest = Array.isArray(data?.messageBlocks)
+    ? data.messageBlocks
+      .filter((block) => block?.type === "table")
+      .map((block) => {
+        const title = String(block?.title ?? "");
+        const columns = Array.isArray(block?.columns) ? block.columns.join("|") : "";
+        const rows = Array.isArray(block?.rows)
+          ? block.rows
+            .slice(0, 12)
+            .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "")).join("|") : String(row ?? "")))
+            .join("||")
+          : "";
+        return `${title}::${columns}::${rows}`;
+      })
+      .join("###")
+    : "";
+  return JSON.stringify({
+    expectedOracle,
+    tableDigest,
+  });
 }
 
 async function callAssistant({ message, contextSnapshot, conversationHistory }) {
@@ -292,16 +405,181 @@ async function callAssistantWithRetry(input) {
   let lastError = null;
   for (let attempt = 0; attempt <= maxRequestRetries; attempt += 1) {
     try {
-      return await callAssistant(input);
+      const call = await callAssistant(input);
+      if (isRetryableStatus(call.response?.status) && attempt < maxRequestRetries) {
+        await sleep(computeRetryDelayMs(attempt, call.response));
+        continue;
+      }
+      return call;
     } catch (error) {
       lastError = error;
       if (attempt >= maxRequestRetries || !isRetryableCallError(error)) {
         throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, retryBackoffMs * (attempt + 1)));
+      await sleep(computeRetryDelayMs(attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error("assistant call failed");
+}
+
+async function evaluateOracleCheck(data, expectedOracle) {
+  if (!expectedOracle || typeof expectedOracle !== "object") {
+    return { executed: false, pass: true, checks: 0, passed: 0, details: "not_configured", cacheHit: false };
+  }
+  const oracleType = String(expectedOracle.type ?? "").trim().toLowerCase();
+  if (oracleType !== "stock_topk" && oracleType !== "symbol_compare") {
+    return { executed: false, pass: true, checks: 0, passed: 0, details: "unsupported_oracle_type", cacheHit: false };
+  }
+  const cacheKey = oracleCacheEnabled ? buildOracleCacheKey(data, expectedOracle) : null;
+  if (cacheKey && oracleVerdictCache.has(cacheKey)) {
+    return {
+      ...oracleVerdictCache.get(cacheKey),
+      cacheHit: true,
+    };
+  }
+  const finalize = (value) => {
+    const normalized = { ...value, cacheHit: false };
+    if (cacheKey) {
+      oracleVerdictCache.set(cacheKey, normalized);
+    }
+    return normalized;
+  };
+
+  if (oracleType === "symbol_compare") {
+    const verdict = await runSymbolCompareMetricOracleCheck({
+      baseUrl,
+      assistant: data,
+      spec: {
+        source: expectedOracle.source ?? "stocks",
+        metric: expectedOracle.metric ?? "close",
+        date: expectedOracle.date,
+        leftSymbol: expectedOracle.leftSymbol,
+        rightSymbol: expectedOracle.rightSymbol,
+        operator: expectedOracle.operator ?? "gt",
+        tableTitleIncludes: expectedOracle.tableTitleIncludes,
+      },
+      timeoutMs: oracleTimeoutMs,
+    });
+    return finalize({
+      executed: true,
+      pass: verdict.ok,
+      checks: 1,
+      passed: verdict.ok ? 1 : 0,
+      details: verdict.reason,
+      evidence: verdict.evidence ?? null,
+    });
+  }
+
+  const limit = Math.max(1, Number(expectedOracle.limit ?? 10));
+  const compareTopN = Math.max(1, Number(expectedOracle.compareTopN ?? limit));
+  const minOverlap = Math.max(1, Number(expectedOracle.minOverlap ?? 1));
+  const minPrefixMatch = Math.max(0, Number(expectedOracle.minPrefixMatch ?? 0));
+  const requireExactOrderTopN = Math.max(0, Number(expectedOracle.requireExactOrderTopN ?? 0));
+  const primaryVerdict = await runTopKByDateOracleCheck({
+    baseUrl,
+    assistant: data,
+    spec: {
+      source: expectedOracle.source ?? "stocks",
+      metric: expectedOracle.metric ?? "close",
+      order: expectedOracle.order ?? "desc",
+      date: expectedOracle.date,
+      exchange: expectedOracle.exchange,
+      icbLevel: expectedOracle.icbLevel,
+      icb: expectedOracle.icb,
+      limit,
+      compareTopN,
+      minPrefixMatch: minOverlap,
+      compareMode: "set",
+      requireExactOrderTopN,
+      tableTitleIncludes: expectedOracle.tableTitleIncludes ?? "stock ranking",
+    },
+    timeoutMs: oracleTimeoutMs,
+  });
+
+  const observedSymbols = Array.isArray(primaryVerdict.evidence?.observedTopSymbols)
+    ? primaryVerdict.evidence.observedTopSymbols
+    : [];
+  const oracleSymbols = Array.isArray(primaryVerdict.evidence?.oracleTopSymbols)
+    ? primaryVerdict.evidence.oracleTopSymbols
+    : [];
+  const checks = [];
+  const overlapScore = Number(primaryVerdict.evidence?.overlap ?? 0);
+  const prefixScore = Number(primaryVerdict.evidence?.prefixMatches ?? countPrefixMatches(observedSymbols, oracleSymbols, compareTopN));
+  checks.push({
+    id: "overlap",
+    ok: overlapScore >= minOverlap,
+    detail: `overlap=${overlapScore}/${compareTopN}, min=${minOverlap}, verdict=${primaryVerdict.reason}`,
+  });
+
+  if (minPrefixMatch > 0) {
+    checks.push({
+      id: "prefix_order",
+      ok: prefixScore >= minPrefixMatch,
+      detail: `prefix_matches=${prefixScore}/${compareTopN}, min=${minPrefixMatch}`,
+    });
+  }
+
+  if (requireExactOrderTopN > 0) {
+    const exactMatches = countPrefixMatches(observedSymbols, oracleSymbols, requireExactOrderTopN);
+    checks.push({
+      id: "exact_order",
+      ok: exactMatches >= requireExactOrderTopN,
+      detail: `exact_matches=${exactMatches}/${requireExactOrderTopN}`,
+    });
+  }
+
+  if (expectedOracle.requireTop1Match === true) {
+    const assistantTop1 = observedSymbols[0] ?? null;
+    const oracleTop1 = oracleSymbols[0] ?? null;
+    checks.push({
+      id: "top1",
+      ok: assistantTop1 !== null && assistantTop1 === oracleTop1,
+      detail: `assistant_top1=${assistantTop1 ?? "n/a"}, oracle_top1=${oracleTop1 ?? "n/a"}`,
+    });
+  }
+
+  if (typeof expectedOracle.compareMetric === "string" && expectedOracle.compareMetric.trim().length > 0) {
+    const compareVerdict = await runTopKByDateOracleCheck({
+      baseUrl,
+      assistant: data,
+      spec: {
+        source: expectedOracle.source ?? "stocks",
+        metric: expectedOracle.compareMetric,
+        order: expectedOracle.order ?? "desc",
+        date: expectedOracle.date,
+        exchange: expectedOracle.exchange,
+        icbLevel: expectedOracle.icbLevel,
+        icb: expectedOracle.icb,
+        limit,
+        compareTopN,
+        minPrefixMatch: 1,
+        compareMode: "set",
+        tableTitleIncludes: expectedOracle.tableTitleIncludes ?? "stock ranking",
+      },
+      timeoutMs: oracleTimeoutMs,
+    });
+    const overlapRequested = Number(primaryVerdict.evidence?.overlap ?? 0);
+    const overlapCompare = Number(compareVerdict.evidence?.overlap ?? 0);
+    checks.push({
+      id: "compare_metric",
+      ok: overlapRequested >= overlapCompare,
+      detail: `requested_overlap=${overlapRequested}, compare_overlap=${overlapCompare}, compare_metric=${expectedOracle.compareMetric}`,
+    });
+  }
+
+  const passed = checks.filter((item) => item.ok).length;
+  return finalize({
+    executed: true,
+    pass: passed === checks.length,
+    checks: checks.length,
+    passed,
+    details: checks.map((item) => `${item.id}:${item.ok ? "pass" : "fail"}(${item.detail})`).join("; "),
+    assistantSymbols: observedSymbols.slice(0, 10),
+    oracleSymbols: oracleSymbols.slice(0, 10),
+    oracleQuery: String(primaryVerdict.evidence?.endpoint ?? ""),
+    checksList: checks,
+    evidence: primaryVerdict.evidence ?? null,
+  });
 }
 
 function evaluate(data, expected) {
@@ -345,7 +623,14 @@ function evaluate(data, expected) {
     const hasGrounding =
       (Array.isArray(data?.citations) && data.citations.length > 0)
       && (Array.isArray(data?.usedTools) && data.usedTools.some((tool) => tool?.status === "success"));
-    check("safety", !metricClaim || hasGrounding, "metric-like numeric claim detected without grounding", true);
+    const strictGuard = expected.strictDisallowMetricNumericClaims === true;
+    const numericGuardOk = strictGuard ? !metricClaim : (!metricClaim || hasGrounding);
+    check(
+      "safety",
+      numericGuardOk,
+      strictGuard ? "metric-like numeric claim detected in strict guard response" : "metric-like numeric claim detected without grounding",
+      true
+    );
   }
   for (const toolName of expected.rejectTools ?? []) {
     const unexpected = hasTool(data?.usedTools, toolName, "success");
@@ -418,6 +703,10 @@ async function writeReport(report) {
 
 async function runDry() {
   const turns = scenarios.reduce((a, b) => a + b.turns.length, 0);
+  const oracleConfiguredTurns = scenarios.reduce(
+    (acc, scenario) => acc + scenario.turns.filter((turn) => Boolean(turn?.expected?.oracle)).length,
+    0
+  );
   const report = {
     schemaVersion: "assistant-pr-gate-m1-2026-02-18",
     runAt: new Date().toISOString(),
@@ -433,9 +722,16 @@ async function runDry() {
       ASSISTANT_EVAL_AUTH_TOKEN_CONFIGURED: evalAuthToken.length > 0,
       expectedProviders: Array.from(expectedProviders).sort(),
       gates: gatesConfig,
+      oracleTimeoutMs,
+      oracleCacheEnabled,
     },
     BA: { status: "skipped", note: "Dry-run only validates matrix and gate config." },
-    QA: { status: "skipped", note: "No live routing/policy/perf checks in dry-run.", gateConfig: gatesConfig },
+    QA: {
+      status: "skipped",
+      note: "No live routing/policy/perf/oracle checks in dry-run.",
+      gateConfig: gatesConfig,
+      oracle: { configuredTurns: oracleConfiguredTurns, cacheEnabled: oracleCacheEnabled },
+    },
     UX: { status: "skipped", note: "No live citation/trace/format/context checks in dry-run." },
   };
   report.selfCritique = buildSelfCritique({ failedTurns: 0 }, true);
@@ -453,7 +749,7 @@ async function runLive() {
   const results = [];
   const checks = {
     response: createCounter(), routingTool: createCounter(), routingEndpoint: createCounter(), routingIntent: createCounter(),
-    policyStatus: createCounter(), uxCitation: createCounter(), uxTrace: createCounter(), uxFormat: createCounter(), uxMessage: createCounter(), safety: createCounter(), toolBudget: createCounter(),
+    policyStatus: createCounter(), uxCitation: createCounter(), uxTrace: createCounter(), uxFormat: createCounter(), uxMessage: createCounter(), safety: createCounter(), toolBudget: createCounter(), oracle: createCounter(),
   };
   const policySafety = createCounter();
   const latencies = [];
@@ -463,6 +759,8 @@ async function runLive() {
   let contextCarryTotal = 0;
   let contextCarryPassed = 0;
   let s1Failures = 0;
+  let oracleCacheHits = 0;
+  let oracleCacheMisses = 0;
 
   for (const scenario of scenarios) {
     const history = [];
@@ -477,6 +775,23 @@ async function runLive() {
         const ev = evaluate(call.data, turn.expected ?? {});
         for (const key of Object.keys(ev.checks)) mergeCount(checks[key], ev.checks[key]);
         mergeCount(policySafety, ev.policySafety);
+        let oracle = { executed: false, pass: true, checks: 0, passed: 0, details: "not_configured" };
+        try {
+          oracle = await evaluateOracleCheck(call.data, turn.expected?.oracle);
+          if (oracle.executed) {
+            if (oracle.cacheHit === true) oracleCacheHits += 1;
+            else oracleCacheMisses += 1;
+            addCount(checks.oracle, oracle.pass);
+            if (!oracle.pass) {
+              ev.fails.push(`oracle mismatch: ${oracle.details}`);
+            }
+          }
+        } catch (oracleError) {
+          const oracleMsg = oracleError instanceof Error ? oracleError.message : String(oracleError);
+          addCount(checks.oracle, false);
+          oracle = { executed: true, pass: false, checks: 1, passed: 0, details: `oracle exception: ${oracleMsg}` };
+          ev.fails.push(`oracle exception: ${oracleMsg}`);
+        }
 
         const tc = countToolCalls(call.data?.usedTools);
         toolCalls.push(tc);
@@ -498,6 +813,7 @@ async function runLive() {
           providerUsed: call.data?.meta?.providerUsed ?? null,
           fallbackUsed: call.data?.meta?.fallbackUsed === true,
           queryIntent: call.data?.meta?.queryIntent ?? null, queryPlanSummary: call.data?.meta?.queryPlanSummary ?? null,
+          oracle,
           tools: summarizeTools(call.data?.usedTools), failures: responseOk ? ev.fails : [`assistant HTTP/status failure: ${call.response.status}`],
         };
         if (call.data?.success === true && typeof call.data?.message === "string") {
@@ -533,6 +849,7 @@ async function runLive() {
   const uxMessage = toSummary(checks.uxMessage);
   const policySafetySummary = toSummary(policySafety);
   const toolBudget = toSummary(checks.toolBudget);
+  const oracleSummary = toSummary(checks.oracle);
 
   const uxTrustTotal = uxCitation.total + uxTrace.total + uxFormat.total + uxMessage.total;
   const uxTrustPassed = uxCitation.passed + uxTrace.passed + uxFormat.passed + uxMessage.passed;
@@ -573,6 +890,9 @@ async function runLive() {
   };
   const gUx = { uxTrustRate: gate(uxTrustRate, gatesConfig.minUxTrustRate, "gte") };
   const gS1 = { s1Failures: gate(s1Failures, gatesConfig.maxS1Failures, "lte") };
+  const gOracle = checks.oracle.total > 0
+    ? { oraclePassRate: gate(oracleSummary.passRate, gatesConfig.minOraclePassRate, "gte") }
+    : { oraclePassRate: { pass: true, actual: null, threshold: gatesConfig.minOraclePassRate, comparator: "gte", skipped: true } };
 
   const passRouting = gRouting.toolRouteRate.pass && gRouting.endpointMatchRate.pass && gRouting.intentRouteRate.pass;
   const passPolicy = gPolicy.policySafetyRate.pass;
@@ -583,7 +903,8 @@ async function runLive() {
     gPerf.expectedProviderRate.pass;
   const passUx = gUx.uxTrustRate.pass;
   const passS1 = gS1.s1Failures.pass;
-  const passAllGates = passRouting && passPolicy && passPerf && passUx && passS1;
+  const passOracle = gOracle.oraclePassRate.pass;
+  const passAllGates = passRouting && passPolicy && passPerf && passUx && passS1 && passOracle;
   const overallStatus = failedTurns === 0 && passAllGates ? "pass" : "fail";
 
   const report = {
@@ -603,6 +924,8 @@ async function runLive() {
       ASSISTANT_EVAL_AUTH_TOKEN_CONFIGURED: evalAuthToken.length > 0,
       expectedProviders: Array.from(expectedProviders).sort(),
       gates: gatesConfig,
+      oracleTimeoutMs,
+      oracleCacheEnabled,
     },
     BA: {
       status: passedScenarios === scenarios.length ? "pass" : "fail",
@@ -619,6 +942,28 @@ async function runLive() {
       status: passAllGates ? "pass" : "fail",
       routingChecks: { tool: routingTool, endpoint: routingEndpoint, intent: routingIntent },
       policySafetyChecks: { policyStatus, safety, aggregate: policySafetySummary },
+      oracleChecks: {
+        aggregate: oracleSummary,
+        cache: {
+          enabled: oracleCacheEnabled,
+          hits: oracleCacheHits,
+          misses: oracleCacheMisses,
+          hitRate: oracleCacheHits + oracleCacheMisses > 0
+            ? oracleCacheHits / (oracleCacheHits + oracleCacheMisses)
+            : null,
+        },
+        configuredTurns: scenarios.reduce(
+          (acc, scenario) => acc + scenario.turns.filter((turn) => Boolean(turn?.expected?.oracle)).length,
+          0
+        ),
+        failedTurns: results
+          .filter((item) => item?.oracle?.executed === true && item?.oracle?.pass === false)
+          .map((item) => ({
+            scenarioId: item.scenarioId,
+            turn: item.turn,
+            detail: item.oracle?.details ?? "oracle failed",
+          })),
+      },
       performance: {
         latencyMs: { p50: latencyP50, p95: latencyP95, max: latencyMax, samples: latencies.length },
         toolCallsPerTurn: { p50: toolCallsP50, p95: toolCallsP95, max: toolCallsMax, samples: toolCalls.length, toolBudget },
@@ -641,14 +986,14 @@ async function runLive() {
           fallbackUsedCount: results.filter((item) => item.fallbackUsed === true).length,
         },
       },
-      gates: { routing: { pass: passRouting, details: gRouting }, policySafety: { pass: passPolicy, details: gPolicy }, performance: { pass: passPerf, details: gPerf }, s1: { pass: passS1, details: gS1 } },
+      gates: { routing: { pass: passRouting, details: gRouting }, policySafety: { pass: passPolicy, details: gPolicy }, oracle: { pass: passOracle, details: gOracle }, performance: { pass: passPerf, details: gPerf }, s1: { pass: passS1, details: gS1 } },
     },
     UX: {
       status: passUx ? "pass" : "fail",
       trustChecks: { citation: uxCitation, trace: uxTrace, format: uxFormat, message: uxMessage, aggregate: { total: uxTrustTotal, passed: uxTrustPassed, passRate: uxTrustRate } },
       contextCarry: { totalTurns: contextCarryTotal, passedTurns: contextCarryPassed, passRate: contextCarryRate },
     },
-    gates: { routing: { pass: passRouting, details: gRouting }, policySafety: { pass: passPolicy, details: gPolicy }, performance: { pass: passPerf, details: gPerf }, ux: { pass: passUx, details: gUx }, s1: { pass: passS1, details: gS1 }, all: { pass: passAllGates } },
+    gates: { routing: { pass: passRouting, details: gRouting }, policySafety: { pass: passPolicy, details: gPolicy }, oracle: { pass: passOracle, details: gOracle }, performance: { pass: passPerf, details: gPerf }, ux: { pass: passUx, details: gUx }, s1: { pass: passS1, details: gS1 }, all: { pass: passAllGates } },
     results,
   };
   report.selfCritique = buildSelfCritique(report.totals, false);
@@ -661,10 +1006,10 @@ async function runLive() {
   if (written) console.log(`REPORT_PATH=${written}`);
   console.log(`SUMMARY turns=${totalTurns} passed=${passedTurns} failed=${failedTurns} turn_pass_rate=${((report.totals.turnPassRate ?? 0) * 100).toFixed(2)}%`);
   console.log(`BA scenario_pass_rate=${((report.BA.summary.scenarioPassRate ?? 0) * 100).toFixed(2)}% hose_guard=${hoseGuardPass ? "PASS" : "FAIL"}`);
-  console.log(`QA routing_tool=${((routingTool.passRate ?? 0) * 100).toFixed(2)}% endpoint=${((routingEndpoint.passRate ?? 0) * 100).toFixed(2)}% intent=${((routingIntent.passRate ?? 0) * 100).toFixed(2)}% policy_safety=${((policySafetySummary.passRate ?? 0) * 100).toFixed(2)}%`);
+  console.log(`QA routing_tool=${((routingTool.passRate ?? 0) * 100).toFixed(2)}% endpoint=${((routingEndpoint.passRate ?? 0) * 100).toFixed(2)}% intent=${((routingIntent.passRate ?? 0) * 100).toFixed(2)}% policy_safety=${((policySafetySummary.passRate ?? 0) * 100).toFixed(2)}% oracle=${oracleSummary.passRate === null ? "n/a" : `${(oracleSummary.passRate * 100).toFixed(2)}%`}`);
   console.log(`UX trust=${((uxTrustRate ?? 0) * 100).toFixed(2)}% context_carry=${((contextCarryRate ?? 0) * 100).toFixed(2)}%`);
   console.log(`PERF latency_p95_ms=${latencyP95 ?? "n/a"} tool_calls_p95=${toolCallsP95 ?? "n/a"} tool_budget_rate=${((toolBudget.passRate ?? 0) * 100).toFixed(2)}% expected_provider_rate=${expectedProviderRate === null ? "n/a" : `${(expectedProviderRate * 100).toFixed(2)}%`}`);
-  console.log(`GATES routing=${passRouting ? "PASS" : "FAIL"} policy=${passPolicy ? "PASS" : "FAIL"} perf=${passPerf ? "PASS" : "FAIL"} ux=${passUx ? "PASS" : "FAIL"} s1=${passS1 ? "PASS" : "FAIL"}`);
+  console.log(`GATES routing=${passRouting ? "PASS" : "FAIL"} policy=${passPolicy ? "PASS" : "FAIL"} oracle=${passOracle ? "PASS" : "FAIL"} perf=${passPerf ? "PASS" : "FAIL"} ux=${passUx ? "PASS" : "FAIL"} s1=${passS1 ? "PASS" : "FAIL"}`);
   console.log(`HOSE_ONLY=true supported=${hoseOnlyAssumptions.supportedExchanges.join(",")}`);
   if (overallStatus !== "pass") process.exit(1);
 }

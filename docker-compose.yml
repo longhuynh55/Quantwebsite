@@ -1,4 +1,4 @@
-services:
+﻿services:
   app:
     build:
       context: .
@@ -7,9 +7,9 @@ services:
         INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     working_dir: /app
     command: >
-      sh -c "if [ ! -d node_modules/next ]; then npm ci --legacy-peer-deps; fi
-      && if [ \"${INSTALL_DUCKDB_BINDING:-true}\" = \"true\" ] && [ ! -d node_modules/duckdb ]; then npm install duckdb --no-save --legacy-peer-deps; fi
-      && npm run dev -- -p 3000"
+      sh -c "corepack enable
+      && if [ ! -d node_modules/next ]; then pnpm install --frozen-lockfile; fi
+      && pnpm run dev -p 3000"
     ports:
       - "3010:3000"
     env_file:
@@ -23,11 +23,12 @@ services:
       ASSISTANT_PROVIDER_PRIORITY: openrouter,glm,fallback
       ASSISTANT_OPENROUTER_ONLY: "true"
       ASSISTANT_BASELINE_ONLY: "false"
-      ASSISTANT_POLICY_MODE: enforce_high_risk
+      ASSISTANT_POLICY_MODE: shadow
+      ASSISTANT_QUERY_PLAN_STRICT: ${ASSISTANT_QUERY_PLAN_STRICT:-true}
       ASSISTANT_TOOL_TIMEOUT_MS: ${ASSISTANT_TOOL_TIMEOUT_MS:-30000}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b:free}
-      OPENROUTER_SECONDARY_MODEL: ${OPENROUTER_SECONDARY_MODEL:-openai/gpt-oss-20b:free}
-      OPENROUTER_TERTIARY_MODEL: ${OPENROUTER_TERTIARY_MODEL:-stepfun/step-3.5-flash:free}
+      OPENROUTER_SECONDARY_MODEL: ${OPENROUTER_SECONDARY_MODEL:-openai/gpt-oss-120b}
+      OPENROUTER_TERTIARY_MODEL: ${OPENROUTER_TERTIARY_MODEL:-openai/gpt-oss-20b:free}
       ASSISTANT_EVAL_RATE_LIMIT_MAX: "240"
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
       ASSISTANT_TOOL_BASE_URL: http://127.0.0.1:3000
@@ -66,6 +67,7 @@ services:
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
     volumes:
       - ./:/app:ro
+      - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
   qa:
@@ -80,6 +82,7 @@ services:
       DATA_DIR: /app/public/data
     volumes:
       - ./:/app:ro
+      - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
   app-prod:
@@ -97,23 +100,24 @@ services:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       DATA_DIR: /app/public/data
-      DATA_BACKEND: duckdb
-      DATA_BACKEND_STRICT: "true"
+      DATA_BACKEND: ${DATA_BACKEND:-auto}
+      DATA_BACKEND_STRICT: ${DATA_BACKEND_STRICT:-false}
       DATA_DUCKDB_PATH: /app/public/data/quant_data.duckdb
-      DATA_ALLOW_RAW_FALLBACK: "false"
+      DATA_ALLOW_RAW_FALLBACK: ${DATA_ALLOW_RAW_FALLBACK:-true}
       ASSISTANT_PROVIDER_PRIORITY: openrouter,glm,fallback
       ASSISTANT_OPENROUTER_ONLY: "true"
       ASSISTANT_BASELINE_ONLY: "false"
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b:free}
-      OPENROUTER_SECONDARY_MODEL: ${OPENROUTER_SECONDARY_MODEL:-openai/gpt-oss-20b:free}
-      OPENROUTER_TERTIARY_MODEL: ${OPENROUTER_TERTIARY_MODEL:-stepfun/step-3.5-flash:free}
+      OPENROUTER_SECONDARY_MODEL: ${OPENROUTER_SECONDARY_MODEL:-openai/gpt-oss-120b}
+      OPENROUTER_TERTIARY_MODEL: ${OPENROUTER_TERTIARY_MODEL:-openai/gpt-oss-20b:free}
       ASSISTANT_EVAL_RATE_LIMIT_MAX: "240"
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
       ASSISTANT_TOOL_BASE_URL: http://127.0.0.1:3000
       GLM_REQUEST_TIMEOUT_MS: ${GLM_REQUEST_TIMEOUT_MS:-90000}
       OPENROUTER_TIMEOUT_MS: ${OPENROUTER_TIMEOUT_MS:-90000}
       GLM_FALLBACK_TIMEOUT_MS: ${GLM_FALLBACK_TIMEOUT_MS:-90000}
-      ASSISTANT_POLICY_MODE: enforce_high_risk
+      ASSISTANT_POLICY_MODE: shadow
+      ASSISTANT_QUERY_PLAN_STRICT: ${ASSISTANT_QUERY_PLAN_STRICT:-true}
       ASSISTANT_TOOL_TIMEOUT_MS: ${ASSISTANT_TOOL_TIMEOUT_MS:-30000}
       INSTALL_DUCKDB_BINDING: ${INSTALL_DUCKDB_BINDING:-true}
     volumes:
@@ -146,6 +150,7 @@ services:
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
     volumes:
       - ./:/app:ro
+      - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
   qa-prod:
@@ -161,7 +166,9 @@ services:
       DATA_DIR: /app/public/data
     volumes:
       - ./:/app:ro
+      - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
 volumes:
   node_modules_cache:
+

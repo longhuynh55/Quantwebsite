@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,8 @@ interface ChatInputProps {
 export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputId = useId();
+  const helperId = `${inputId}-helper`;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -47,14 +49,20 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
     <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
       <div className="flex items-end gap-2">
         <div className="flex-1 relative">
+          <label htmlFor={inputId} className="sr-only">
+            Ask QuantVN assistant
+          </label>
           <textarea
+            id={inputId}
             ref={textareaRef}
+            data-assistant-input="true"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about Vietnamese stocks, strategies, or metrics..."
+            placeholder="Ask with symbol + metric + timeframe (e.g., VCB net income 2024Q4)..."
             disabled={disabled || isLoading}
             rows={1}
+            aria-describedby={helperId}
             className={cn(
               'w-full resize-none rounded-xl border border-gray-300 dark:border-gray-600',
               'bg-gray-50 dark:bg-gray-800 px-4 py-3 pr-12',
@@ -84,8 +92,8 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
           )}
         </Button>
       </div>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
-        Press Enter to send, Shift+Enter for new line
+      <p id={helperId} className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
+        Enter: send | Shift+Enter: new line
       </p>
     </div>
   );

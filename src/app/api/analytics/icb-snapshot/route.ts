@@ -46,6 +46,15 @@ export async function GET(request: Request) {
   if (!exchange) {
     return NextResponse.json({ error: "Invalid exchange format." }, { status: 400 });
   }
+  if (exchange !== "HOSE") {
+    return NextResponse.json(
+      {
+        error: "Unsupported exchange. Only HOSE is supported for this endpoint.",
+        requestedExchange: exchange,
+      },
+      { status: 400 }
+    );
+  }
   if (!icbLevel) {
     return NextResponse.json({ error: 'Invalid icbLevel. Use "2", "3", or "4".' }, { status: 400 });
   }

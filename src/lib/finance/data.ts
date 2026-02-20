@@ -7,13 +7,40 @@ import type { FinancialPeriodStatements, FinanceCoverage } from "@/lib/finance/c
 
 const MAX_PERIODS = 8;
 
-export async function loadFinancialPeriods(symbol: string, maxPeriods = MAX_PERIODS): Promise<FinancialPeriodStatements[]> {
+export interface LoadFinancialPeriodsOptions {
+  endPeriod?: string;
+}
+
+function comparePeriodAsc(a: string, b: string): number {
+  const ma = /^(\d{4})Q([1-4])$/.exec(a);
+  const mb = /^(\d{4})Q([1-4])$/.exec(b);
+  if (!ma || !mb) return a.localeCompare(b);
+  const ya = Number(ma[1]);
+  const yb = Number(mb[1]);
+  if (ya !== yb) return ya - yb;
+  return Number(ma[2]) - Number(mb[2]);
+}
+
+export async function loadFinancialPeriods(
+  symbol: string,
+  maxPeriods = MAX_PERIODS,
+  options?: LoadFinancialPeriodsOptions
+): Promise<FinancialPeriodStatements[]> {
   const periods = await getAvailablePeriods(symbol);
   if (periods.length === 0) {
     return [];
   }
 
-  const selected = periods.slice(-Math.max(1, maxPeriods));
+  const endPeriod = options?.endPeriod;
+  const scopedPeriods =
+    endPeriod && endPeriod.trim().length > 0
+      ? periods.filter((period) => comparePeriodAsc(period, endPeriod) <= 0)
+      : periods;
+  if (scopedPeriods.length === 0) {
+    return [];
+  }
+
+  const selected = scopedPeriods.slice(-Math.max(1, maxPeriods));
   const rows = await Promise.all(
     selected.map(async (period): Promise<FinancialPeriodStatements> => {
       const [bs, income, cf] = await Promise.all([
@@ -60,16 +87,45 @@ export function readNumericByAliases(
 
   const targetAliases = aliases.map(normalizeKey);
   const entries = Object.entries(fields);
+  const noisySuffixPattern = /(yoy|qoq|margin|ratio|pct|percent|growth|change)$/;
+  const noisyTokenPattern = /_(yoy|qoq|margin|ratio|pct|percent|growth|change|trend)(_|$)/;
+
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestValue: number | null = null;
 
   for (const [key, rawValue] of entries) {
-    const normalizedKey = normalizeKey(key);
-    if (!targetAliases.some((alias) => normalizedKey.includes(alias))) {
-      continue;
-    }
     const numeric = toNumber(rawValue);
-    if (numeric !== null) return numeric;
+    if (numeric === null) continue;
+    const normalizedKey = normalizeKey(key);
+
+    let entryBestScore = Number.NEGATIVE_INFINITY;
+    for (const alias of targetAliases) {
+      let score = Number.NEGATIVE_INFINITY;
+      if (normalizedKey === alias) {
+        score = 120;
+      } else if (normalizedKey === `${alias}_bn_vnd` || normalizedKey === `${alias}_mn_vnd`) {
+        score = 115;
+      } else if (normalizedKey.startsWith(`${alias}_`)) {
+        score = 90;
+      } else if (normalizedKey.includes(alias)) {
+        score = 60;
+      }
+
+      if (score > Number.NEGATIVE_INFINITY) {
+        if (noisySuffixPattern.test(normalizedKey) || noisyTokenPattern.test(normalizedKey)) {
+          score -= 80;
+        }
+        entryBestScore = Math.max(entryBestScore, score);
+      }
+    }
+
+    if (entryBestScore > bestScore) {
+      bestScore = entryBestScore;
+      bestValue = numeric;
+    }
   }
-  return null;
+
+  return bestScore > Number.NEGATIVE_INFINITY ? bestValue : null;
 }
 
 export function toNumber(value: FundamentalsValue | unknown): number | null {
@@ -94,17 +150,30 @@ export function safeRatio(numerator: number | null, denominator: number | null):
   return numerator / denominator;
 }
 
+function getPriorYearSameQuarter(period: string): string | null {
+  const match = /^(\d{4})Q([1-4])$/.exec(period.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const quarter = match[2];
+  if (!Number.isFinite(year)) return null;
+  return `${year - 1}Q${quarter}`;
+}
+
 export function yoy(points: Array<{ period: string; value: number | null }>): Array<{ period: string; value: number | null }> {
+  const byPeriod = new Map(points.map((point) => [point.period, point.value]));
   const out: Array<{ period: string; value: number | null }> = [];
-  for (let i = 0; i < points.length; i += 1) {
-    const current = points[i];
-    const previous = i > 0 ? points[i - 1] : null;
-    if (!previous || current.value === null || previous.value === null || previous.value === 0) {
+  for (const current of points) {
+    const previousPeriod = getPriorYearSameQuarter(current.period);
+    const previousValue = previousPeriod ? (byPeriod.get(previousPeriod) ?? null) : null;
+    if (
+      current.value === null
+      || previousValue === null
+      || previousValue === 0
+    ) {
       out.push({ period: current.period, value: null });
       continue;
     }
-    out.push({ period: current.period, value: (current.value - previous.value) / Math.abs(previous.value) });
+    out.push({ period: current.period, value: (current.value - previousValue) / Math.abs(previousValue) });
   }
   return out;
 }
-

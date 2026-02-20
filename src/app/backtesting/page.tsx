@@ -53,6 +53,44 @@ const PARAM_LABELS: Record<string, string> = {
   threshold: "Threshold",
 };
 
+const ADVANCED_CONFIG_PRESETS: Array<{
+  key: "low_cost" | "realistic" | "stress";
+  label: string;
+  executionModel: "next_open" | "same_close";
+  feeBps: string;
+  sellTaxBps: string;
+  slippageBps: string;
+  lotSize: string;
+}> = [
+  {
+    key: "low_cost",
+    label: "Low Cost",
+    executionModel: "same_close",
+    feeBps: "5",
+    sellTaxBps: "5",
+    slippageBps: "2",
+    lotSize: "1",
+  },
+  {
+    key: "realistic",
+    label: "Realistic",
+    executionModel: "next_open",
+    feeBps: "15",
+    sellTaxBps: "10",
+    slippageBps: "5",
+    lotSize: "1",
+  },
+  {
+    key: "stress",
+    label: "Stress",
+    executionModel: "next_open",
+    feeBps: "30",
+    sellTaxBps: "10",
+    slippageBps: "15",
+    lotSize: "1",
+  },
+];
+
 interface BacktestMetrics {
   totalReturn: number;
   netReturn: number;
@@ -125,8 +163,10 @@ export default function BacktestingPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     const defaults = STRATEGY_PARAM_DEFAULTS[strategy] || {};
@@ -136,6 +176,16 @@ export default function BacktestingPage() {
     }
     setStrategyParams(nextParams);
   }, [strategy]);
+
+  const applyAdvancedPreset = useCallback((presetKey: "low_cost" | "realistic" | "stress") => {
+    const preset = ADVANCED_CONFIG_PRESETS.find((item) => item.key === presetKey);
+    if (!preset) return;
+    setExecutionModel(preset.executionModel);
+    setFeeBps(preset.feeBps);
+    setSellTaxBps(preset.sellTaxBps);
+    setSlippageBps(preset.slippageBps);
+    setLotSize(preset.lotSize);
+  }, []);
 
   const dailyReturns = useMemo(() => {
     if (!result?.equityCurve || result.equityCurve.length < 2) return [];
@@ -155,15 +205,11 @@ export default function BacktestingPage() {
   }, [result?.equityCurve]);
 
   const runBacktest = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
     const trimmedSymbol = symbol.trim().toUpperCase();
     if (!trimmedSymbol) {
       const msg = "Please enter a symbol";
       setError(msg);
+      setStatusMessage("Backtest validation failed: missing symbol.");
       showError("Validation error", msg);
       return;
     }
@@ -172,6 +218,7 @@ export default function BacktestingPage() {
     if (!Number.isFinite(capitalNum) || capitalNum <= 0) {
       const msg = "Please enter a valid capital amount";
       setError(msg);
+      setStatusMessage("Backtest validation failed: invalid capital.");
       showError("Validation error", msg);
       return;
     }
@@ -189,6 +236,7 @@ export default function BacktestingPage() {
         if (!Number.isFinite(parsed)) {
           const msg = `Invalid value for ${PARAM_LABELS[key] ?? key}`;
           setError(msg);
+          setStatusMessage(`Backtest validation failed: invalid ${PARAM_LABELS[key] ?? key}.`);
           showError("Validation error", msg);
           return;
         }
@@ -202,6 +250,7 @@ export default function BacktestingPage() {
       if (!Number.isFinite(fee) || !Number.isFinite(tax) || !Number.isFinite(slippage) || !Number.isFinite(lots)) {
         const msg = "Advanced configuration contains invalid numeric values";
         setError(msg);
+        setStatusMessage("Backtest validation failed: invalid advanced configuration.");
         showError("Validation error", msg);
         return;
       }
@@ -214,16 +263,25 @@ export default function BacktestingPage() {
       payload.lotSize = lots;
     }
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
+
     setLoading(true);
     setError("");
     setResult(null);
+    setStatusMessage(`Running ${strategy} backtest for ${trimmedSymbol}...`);
 
     try {
       const response = await fetch("/api/backtesting", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
-        signal: abortControllerRef.current.signal,
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -236,6 +294,9 @@ export default function BacktestingPage() {
         equity: point.equity,
       }));
 
+      if (requestId !== requestSeqRef.current) {
+        return;
+      }
       setResult({
         ...data,
         symbol: trimmedSymbol,
@@ -243,23 +304,39 @@ export default function BacktestingPage() {
       });
 
       const netReturn = data?.metrics?.netReturn ?? data?.metrics?.totalReturn ?? 0;
+      setStatusMessage(`Backtest completed for ${trimmedSymbol}.`);
       showSuccess("Backtest complete", `${strategy} strategy on ${trimmedSymbol} returned ${formatPercent(netReturn)}`);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
+      if (requestId !== requestSeqRef.current) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : "Failed to run backtest";
       setError(errorMessage);
+      setStatusMessage(`Backtest failed for ${trimmedSymbol}.`);
       showError("Backtest failed", errorMessage);
       console.error("Backtest error:", err);
     } finally {
-      setLoading(false);
+      if (requestId === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [symbol, strategy, capital, configMode, strategyParams, executionModel, feeBps, sellTaxBps, slippageBps, lotSize]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   return (
     <PageTransition variant="slideUp">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Strategy Backtesting</h1>
           <p className="text-gray-600 dark:text-gray-400">Test trading strategies on historical HOSE data</p>
@@ -361,6 +438,19 @@ export default function BacktestingPage() {
 
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Execution & Costs</h3>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {ADVANCED_CONFIG_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.key}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyAdvancedPreset(preset.key)}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Execution Model</label>

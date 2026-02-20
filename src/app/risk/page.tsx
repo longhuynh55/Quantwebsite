@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -9,6 +9,7 @@ import {
   CardTitle,
   Button,
   Input,
+  Select,
   Badge,
   SkeletonStats,
   SkeletonChart,
@@ -25,6 +26,9 @@ interface RiskMetrics {
   var99: number;
   cvar95: number;
   cvar99: number;
+  downsideDeviation: number;
+  sortinoRatio: number;
+  tailLossRatio95: number;
   maxDrawdown: number;
   avgDrawdown: number;
   drawdownDuration: number;
@@ -32,6 +36,12 @@ interface RiskMetrics {
   beta: number;
   trackingError: number;
   informationRatio: number;
+}
+
+interface RiskAnalysis {
+  currentDrawdown: number;
+  currentDrawdownDuration: number;
+  isUnderwater: boolean;
 }
 
 interface DrawdownPoint {
@@ -48,6 +58,7 @@ interface RiskResult {
   symbol: string;
   benchmark: string;
   metrics: RiskMetrics;
+  analysis?: RiskAnalysis;
   drawdowns: DrawdownPoint[];
   rollingVolatility: VolatilityPoint[];
 }
@@ -55,18 +66,33 @@ interface RiskResult {
 export default function RiskPage() {
   const [symbol, setSymbol] = useState("AAA");
   const [searchInput, setSearchInput] = useState("AAA");
+  const [benchmark, setBenchmark] = useState("VNINDEX");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RiskResult | null>(null);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
 
-  // Fix stale closure: pass symbol directly instead of relying on state
-  const analyzeRiskForSymbol = useCallback(async (sym: string) => {
+  const analyzeRiskForSymbol = useCallback(async (sym: string, selectedBenchmark: string) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
+
     setLoading(true);
     setError("");
-    setResult(null);
+    setStatusMessage(`Analyzing risk metrics for ${sym} vs ${selectedBenchmark}...`);
 
     try {
-      const response = await fetch(`/api/risk?symbol=${encodeURIComponent(sym)}`);
+      const response = await fetch(
+        `/api/risk?symbol=${encodeURIComponent(sym)}&benchmark=${encodeURIComponent(selectedBenchmark)}`,
+        {
+        signal: abortControllerRef.current.signal,
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -79,15 +105,28 @@ export default function RiskPage() {
         throw new Error(data.error);
       }
 
+      if (requestId !== requestSeqRef.current) {
+        return;
+      }
       setResult(data);
-      showSuccess("Risk analysis complete", `Analyzed ${sym} - VaR 95%: ${formatPercent(data.metrics?.var95 ?? 0)}`);
+      setStatusMessage(`Risk metrics updated for ${sym} vs ${selectedBenchmark}.`);
+      showSuccess("Risk analysis complete", `Analyzed ${sym} vs ${selectedBenchmark} - VaR 95%: ${formatPercent(data.metrics?.var95 ?? 0)}`);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      if (requestId !== requestSeqRef.current) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : "Failed to analyze risk";
       setError(errorMessage);
+      setStatusMessage(`Risk analysis failed for ${sym} vs ${selectedBenchmark}.`);
       showError("Analysis failed", errorMessage);
       console.error("Risk analysis error:", err);
     } finally {
-      setLoading(false);
+      if (requestId === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -96,24 +135,29 @@ export default function RiskPage() {
     if (newSymbol) {
       setSymbol(newSymbol);
       // Pass symbol directly to avoid stale closure
-      analyzeRiskForSymbol(newSymbol);
+      analyzeRiskForSymbol(newSymbol, benchmark);
     }
-  }, [searchInput, analyzeRiskForSymbol]);
+  }, [searchInput, analyzeRiskForSymbol, benchmark]);
 
   const handleRetry = useCallback(() => {
     if (symbol) {
-      analyzeRiskForSymbol(symbol);
+      analyzeRiskForSymbol(symbol, benchmark);
     }
-  }, [symbol, analyzeRiskForSymbol]);
+  }, [symbol, benchmark, analyzeRiskForSymbol]);
 
   // Load initial data on mount
   useEffect(() => {
-    analyzeRiskForSymbol(symbol);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    analyzeRiskForSymbol("AAA", "VNINDEX");
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [analyzeRiskForSymbol]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
       <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Risk Management</h1>
@@ -127,6 +171,15 @@ export default function RiskPage() {
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             className="w-32"
             maxLength={10}
+          />
+          <Select
+            value={benchmark}
+            onChange={(e) => setBenchmark(e.target.value)}
+            options={[
+              { value: "VNINDEX", label: "VNINDEX" },
+              { value: "VN100", label: "VN100" },
+              { value: "VN30", label: "VN30" },
+            ]}
           />
           <Button onClick={handleSearch} disabled={loading}>
             <Search className="w-4 h-4 mr-2" />
@@ -159,7 +212,7 @@ export default function RiskPage() {
       {/* Results */}
       {result && !loading && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">VaR (95%)</p>
@@ -195,6 +248,30 @@ export default function RiskPage() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">Beta</p>
                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
                   {isFinite(result.metrics.beta) ? result.metrics.beta.toFixed(2) : "N/A"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Sortino Ratio</p>
+                <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {isFinite(result.metrics.sortinoRatio) ? result.metrics.sortinoRatio.toFixed(2) : "N/A"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Downside Dev</p>
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                  {formatPercent(result.metrics.downsideDeviation)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Tail Loss Ratio (95)</p>
+                <p className="text-xl font-bold text-rose-600 dark:text-rose-400">
+                  {isFinite(result.metrics.tailLossRatio95) ? result.metrics.tailLossRatio95.toFixed(2) : "N/A"}
                 </p>
               </CardContent>
             </Card>
@@ -321,6 +398,24 @@ export default function RiskPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-gray-400">Benchmark</span>
                     <Badge variant="outline">{result.benchmark}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Current Drawdown</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {formatPercent(result.analysis?.currentDrawdown ?? 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Current DD Duration</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {result.analysis?.currentDrawdownDuration ?? 0} days
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Underwater Status</span>
+                    <Badge variant={result.analysis?.isUnderwater ? "secondary" : "outline"}>
+                      {result.analysis?.isUnderwater ? "Underwater" : "Recovered"}
+                    </Badge>
                   </div>
                 </div>
               </CardContent>

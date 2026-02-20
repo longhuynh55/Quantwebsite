@@ -108,6 +108,19 @@ const FUNDAMENTAL_KEYWORDS = [
   "loi nhuan",
   "tai san",
 ];
+const FUNDAMENTAL_RATIO_KEYWORDS = [
+  "ocf",
+  "cfo",
+  "fcf",
+  "lnst",
+  "net margin",
+  "profit margin",
+  "d/e",
+  "debt/equity",
+  "debt to equity",
+  "accrual",
+  "quality of earnings",
+];
 const STOCK_UNIVERSE_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu", "hose", "hnx", "upcom", "thi truong"];
 const STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu"];
 const MARKET_OVERVIEW_KEYWORDS = ["market", "vnindex", "overview", "gainer", "loser"];
@@ -123,6 +136,28 @@ const NUMERIC_STOCK_METRIC_KEYWORDS = [
   "dong cua",
   "gia mo cua",
   "khoi luong",
+];
+const OHLCV_KEYWORDS = [
+  "ohlcv",
+  "ohlc",
+  "open high low close",
+  "candlestick",
+  "candle",
+  "nen",
+  "nen nhat",
+  "nen gia",
+];
+const AMBIGUOUS_METRIC_HINT_KEYWORDS = [
+  ...NUMERIC_STOCK_METRIC_KEYWORDS,
+  "pe",
+  "p/e",
+  "pb",
+  "p/b",
+  "ev/ebitda",
+  "ev ebitda",
+  "valuation",
+  "dinh gia",
+  "ratio",
 ];
 const STOCK_RANKING_ACTION_KEYWORDS = [
   "gainer",
@@ -158,10 +193,25 @@ export function buildAssistantQueryPlan(input: BuildAssistantQueryPlanInput): As
   });
   const symbols = getCandidateSymbols(input.message, input.contextSnapshot);
   const filters = extractFilters(input.message, input.contextSnapshot);
-  const intent = inferIntent(input.message, input.contextSnapshot, requiredSignals.map((item) => item.tool), symbols);
+  const requiredTools = requiredSignals.map((item) => item.tool);
+  const normalizedMessage = normalizeForKeywordMatch(input.message);
+  const ambiguousMetricFallback = shouldApplyAmbiguousMetricFallback(
+    normalizedMessage,
+    requiredTools,
+    symbols,
+    filters
+  );
+  const intent = inferIntent(
+    input.message,
+    input.contextSnapshot,
+    requiredTools,
+    symbols,
+    filters,
+    ambiguousMetricFallback
+  );
   const steps = buildSteps(requiredSignals.map((item) => item.tool), intent, symbols);
-  const confidence = resolvePlanConfidence(requiredSignals.length, symbols.length, filters);
-  const summary = buildSummary(intent, symbols, filters, steps);
+  const confidence = resolvePlanConfidence(requiredSignals.length, symbols.length, filters, ambiguousMetricFallback);
+  const summary = buildSummary(intent, symbols, filters, steps, ambiguousMetricFallback);
 
   return {
     intent,
@@ -179,10 +229,10 @@ function buildSteps(
   symbols: string[]
 ): AssistantQueryPlanStep[] {
   const desiredTools = new Set<AssistantToolName>(requiredTools);
+  const requiredSet = new Set(requiredTools);
 
   if (intent === "valuation_ranking") {
     desiredTools.add("valuationRanking");
-    desiredTools.add("icbSnapshot");
   } else if (intent === "icb_snapshot") {
     desiredTools.add("icbSnapshot");
   } else if (intent === "fundamentals") {
@@ -207,7 +257,6 @@ function buildSteps(
     desiredTools.add(symbols.length > 0 ? "stockSnapshot" : "marketSnapshot");
   }
 
-  const requiredSet = new Set(requiredTools);
   const orderedTools = STEP_PRIORITY.filter((tool) => desiredTools.has(tool));
   return orderedTools.map((tool) => ({
     tool,
@@ -233,11 +282,25 @@ function inferIntent(
   message: string,
   contextSnapshot: AssistantContextSnapshot | undefined,
   requiredTools: AssistantToolName[],
-  symbols: string[]
+  symbols: string[],
+  filters: AssistantQueryPlanFilters,
+  ambiguousMetricFallback: boolean
 ): AssistantQueryIntent {
   const normalized = normalizeForKeywordMatch(message);
-  const asksFundamentals = hasAnyKeyword(normalized, FUNDAMENTAL_KEYWORDS);
+  const asksFundamentals =
+    hasAnyKeyword(normalized, FUNDAMENTAL_KEYWORDS)
+    || hasAnyKeyword(normalized, FUNDAMENTAL_RATIO_KEYWORDS)
+    || hasFundamentalShorthandIntent(normalized)
+    || (/\bstatement\b/i.test(normalized) && symbols.length > 0)
+    || Boolean(filters.statement);
   const likelyUniverseStockSnapshot = isLikelyUniverseStockSnapshotQuery(normalized, contextSnapshot);
+  const symbolScopedStockSnapshot = isSymbolScopedStockSnapshotQuery(normalized, symbols, filters);
+  const hasRankingHint = hasRankingLikeHint(normalized, filters);
+  const asksBroadMarketOverview =
+    hasAnyKeyword(normalized, MARKET_OVERVIEW_KEYWORDS)
+    && !hasAnyKeyword(normalized, STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS)
+    && symbols.length === 0
+    && !Boolean(filters.date || filters.from || filters.to || filters.icb || filters.icbLevel);
   if (requiredTools.includes("dataHealth")) return "data_health";
   if (requiredTools.includes("valuationRanking")) return "valuation_ranking";
   if (requiredTools.includes("icbSnapshot")) return "icb_snapshot";
@@ -245,6 +308,8 @@ function inferIntent(
   if (requiredTools.includes("backtestSummary")) return "backtesting";
   if (requiredTools.includes("riskSnapshot")) return "risk";
   if (requiredTools.includes("factorSnapshot")) return "factor";
+  if (asksBroadMarketOverview && requiredTools.includes("marketSnapshot")) return "market";
+  if (symbolScopedStockSnapshot && !asksFundamentals) return "stock_snapshot";
   if (likelyUniverseStockSnapshot && !asksFundamentals) return "stock_snapshot";
   if (requiredTools.includes("stockSnapshot") && likelyUniverseStockSnapshot) return "stock_snapshot";
   if (requiredTools.includes("stockSnapshot") && !asksFundamentals) return "stock_snapshot";
@@ -257,7 +322,15 @@ function inferIntent(
   if (hasAnyKeyword(normalized, DATA_DEBUG_KEYWORDS)) return "data_health";
   if (hasAnyKeyword(normalized, ICB_KEYWORDS) && hasAnyKeyword(normalized, RANKING_KEYWORDS)) return "icb_snapshot";
   if (hasAnyKeyword(normalized, VALUATION_KEYWORDS) && hasAnyKeyword(normalized, RANKING_KEYWORDS)) return "valuation_ranking";
-  if (hasAnyKeyword(normalized, MARKET_KEYWORDS)) return "market";
+  if (hasRankingHint && !asksFundamentals && !hasAnyKeyword(normalized, ICB_KEYWORDS)) return "stock_snapshot";
+  if (
+    hasAnyKeyword(normalized, MARKET_KEYWORDS)
+    && !symbolScopedStockSnapshot
+    && !shouldApplyAmbiguousMetricFallback(normalized, requiredTools, symbols, filters)
+  ) {
+    return "market";
+  }
+  if (ambiguousMetricFallback) return "stock_snapshot";
   if (symbols.length > 0) return "stock_snapshot";
 
   if (contextSnapshot?.page === "factors") return "factor";
@@ -321,10 +394,20 @@ function hasNumericFilterValue(value: unknown): boolean {
   return false;
 }
 
+function hasRankingLikeHint(normalizedMessage: string, filters: AssistantQueryPlanFilters): boolean {
+  return (
+    hasAnyKeyword(normalizedMessage, RANKING_KEYWORDS)
+    || /\btop\s*\d{1,2}\b/.test(normalizedMessage)
+    || typeof filters.limit === "number"
+    || typeof filters.order === "string"
+  );
+}
+
 function resolvePlanConfidence(
   requiredSignalCount: number,
   symbolCount: number,
-  filters: AssistantQueryPlanFilters
+  filters: AssistantQueryPlanFilters,
+  ambiguousMetricFallback: boolean
 ): "high" | "medium" | "low" {
   const filterSignals = [
     filters.date,
@@ -335,12 +418,17 @@ function resolvePlanConfidence(
     filters.statement,
     filters.limit,
   ].filter((value) => value !== undefined && value !== null).length;
+  let baseConfidence: "high" | "medium" | "low";
   if (requiredSignalCount >= 2 || (requiredSignalCount >= 1 && (symbolCount > 0 || filterSignals > 0))) {
-    return "high";
+    baseConfidence = "high";
+  } else if (requiredSignalCount > 0 || symbolCount > 0 || filterSignals > 0) {
+    baseConfidence = "medium";
+  } else {
+    baseConfidence = "low";
   }
-  if (requiredSignalCount > 0 || symbolCount > 0 || filterSignals > 0) {
-    return "medium";
-  }
+
+  if (!ambiguousMetricFallback) return baseConfidence;
+  if (baseConfidence === "high") return "medium";
   return "low";
 }
 
@@ -348,9 +436,13 @@ function buildSummary(
   intent: AssistantQueryIntent,
   symbols: string[],
   filters: AssistantQueryPlanFilters,
-  steps: AssistantQueryPlanStep[]
+  steps: AssistantQueryPlanStep[],
+  ambiguousMetricFallback: boolean
 ): string {
   const parts: string[] = [`intent=${intent}`];
+  if (ambiguousMetricFallback) {
+    parts.push("fallback=ambiguous_metric");
+  }
   if (symbols.length > 0) {
     parts.push(`symbols=${symbols.join(",")}`);
   }
@@ -375,15 +467,97 @@ function buildSummary(
   return parts.join(" | ");
 }
 
+function shouldApplyAmbiguousMetricFallback(
+  normalizedMessage: string,
+  requiredTools: AssistantToolName[],
+  symbols: string[],
+  filters: AssistantQueryPlanFilters
+): boolean {
+  const hasMetricHint = hasAnyKeyword(normalizedMessage, AMBIGUOUS_METRIC_HINT_KEYWORDS) || Boolean(filters.metric);
+  if (!hasMetricHint) return false;
+
+  const strongTools = new Set<AssistantToolName>([
+    "dataHealth",
+    "valuationRanking",
+    "icbSnapshot",
+    "fundamentalSnapshot",
+    "fundamentalAnalysis",
+    "financialHealthScore",
+    "valuationDcf",
+    "peerMultiples",
+    "scenarioSensitivity",
+    "riskSnapshot",
+    "backtestSummary",
+    "factorSnapshot",
+  ]);
+  const hasStrongTool = requiredTools.some((tool) => strongTools.has(tool));
+  const hasSymbol = symbols.length > 0;
+  const hasRankingHint = hasRankingLikeHint(normalizedMessage, filters);
+  const hasUniverseHint =
+    hasAnyKeyword(normalizedMessage, STOCK_UNIVERSE_HINT_KEYWORDS)
+    || Boolean(filters.icb)
+    || Boolean(filters.icbLevel);
+  const hasStructuredScope = Boolean(
+    filters.date
+    || filters.from
+    || filters.to
+    || filters.icb
+    || filters.icbLevel
+    || filters.limit
+    || filters.order
+    || /\btop\s*\d{1,2}\b/.test(normalizedMessage)
+  );
+  const asksMarketOverview = hasAnyKeyword(normalizedMessage, MARKET_OVERVIEW_KEYWORDS);
+
+  return !hasStrongTool
+    && !hasSymbol
+    && !hasRankingHint
+    && !hasUniverseHint
+    && !hasStructuredScope
+    && !asksMarketOverview;
+}
+
+function isSymbolScopedStockSnapshotQuery(
+  normalizedMessage: string,
+  symbols: string[],
+  filters: AssistantQueryPlanFilters
+): boolean {
+  if (symbols.length === 0) return false;
+  const hasDateScope = Boolean(filters.date || filters.from || filters.to || extractDateInMessage(normalizedMessage));
+  const asksOhlcvSeries = hasAnyKeyword(normalizedMessage, OHLCV_KEYWORDS);
+  const asksStockMetric = hasAnyKeyword(normalizedMessage, NUMERIC_STOCK_METRIC_KEYWORDS);
+  return hasDateScope || asksOhlcvSeries || asksStockMetric;
+}
+
+function hasFundamentalShorthandIntent(normalized: string): boolean {
+  if (!normalized) return false;
+  const patterns: RegExp[] = [
+    /\bis\s*[+\/,|&-]\s*bs\s*[+\/,|&-]\s*cf\b/i,
+    /\bbs\s*[+\/,|&-]\s*is\s*[+\/,|&-]\s*cf\b/i,
+    /\bcf\s*[+\/,|&-]\s*is\s*[+\/,|&-]\s*bs\b/i,
+    /\b(?:bctc|bctn|bcdkt|lctt|kqkd)\b/i,
+    /\b(?:ocf|cfo|fcf|lnst)\b/i,
+    /\b(?:d\/e|debt\/equity|debt to equity)\b/i,
+    /\b(?:accrual|quality of earnings)\b/i,
+    /\b(?:statement\s+all|all\s+statement|3\s*statement)\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
 function extractFilters(message: string, contextSnapshot?: AssistantContextSnapshot): AssistantQueryPlanFilters {
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
   const normalizedMessage = normalizeForKeywordMatch(message);
+  const inferredRange = extractDateRangeInMessage(message);
 
   const date = normalizeDateLike(
-    filters?.date ?? filters?.asOfDate ?? filters?.as_of_date ?? filters?.day ?? extractDateInMessage(message)
+    filters?.date
+    ?? filters?.asOfDate
+    ?? filters?.as_of_date
+    ?? filters?.day
+    ?? (inferredRange ? null : extractDateInMessage(message))
   );
-  const from = normalizeDateLike(filters?.from);
-  const to = normalizeDateLike(filters?.to);
+  const from = normalizeDateLike(filters?.from ?? inferredRange?.from);
+  const to = normalizeDateLike(filters?.to ?? inferredRange?.to);
   const icbRaw = String(filters?.icb ?? filters?.industry ?? filters?.sector ?? "").trim();
   const icb = icbRaw.length > 0 ? icbRaw.slice(0, 80) : inferIcbHint(normalizedMessage);
   const icbLevel = extractIcbLevel(filters, normalizedMessage);
@@ -409,6 +583,15 @@ function extractDateInMessage(message: string): string | null {
   const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/);
   if (!match) return null;
   return match[1];
+}
+
+function extractDateRangeInMessage(message: string): { from: string; to: string } | null {
+  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/g) ?? [];
+  if (matches.length < 2) return null;
+  const from = matches[0];
+  const to = matches[1];
+  if (!from || !to) return null;
+  return { from, to };
 }
 
 function normalizeDateLike(value: unknown): string | null {

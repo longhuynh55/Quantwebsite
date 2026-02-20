@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 import {
   getAvailablePeriods,
   getFundamentalsLoadDiagnostics,
@@ -16,6 +17,7 @@ const VALID_PERIOD_REGEX = /^\d{4}Q[1-4]$/;
 type StatementParam = "all" | FundamentalsStatement;
 type DataConfidence = "high" | "medium" | "low";
 type StatementAvailability = Record<FundamentalsStatement, boolean>;
+const fundamentalsApiLogger = createLogger("api.fundamentals");
 
 function parseStatement(raw: string | null): StatementParam | null {
   const normalized = (raw ?? "").trim().toLowerCase();
@@ -28,8 +30,11 @@ function parsePeriod(raw: string | null): string | null {
   const period = (raw ?? "latest").trim();
   if (period.toLowerCase() === "latest") return "latest";
   const normalized = period.toUpperCase();
-  if (!VALID_PERIOD_REGEX.test(normalized)) return null;
-  return normalized;
+  if (VALID_PERIOD_REGEX.test(normalized)) return normalized;
+
+  const quarterFirst = /^Q([1-4])[\s/-]*(\d{4})$/i.exec(period);
+  if (quarterFirst) return `${quarterFirst[2]}Q${quarterFirst[1]}`;
+  return null;
 }
 
 function getRequestedStatements(statement: StatementParam): FundamentalsStatement[] {
@@ -57,9 +62,16 @@ function deriveConfidence(
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
+  const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("fundamentals");
+  const logger = fundamentalsApiLogger.child({ traceId });
   const clientId = getClientIdentifier(request);
   const rateLimit = checkRateLimit(createRateLimitKey("api/fundamentals", clientId), RATE_LIMIT_MAX, 60000);
   if (!rateLimit.allowed) {
+    logger.warn("rate_limit.blocked", {
+      remaining: rateLimit.remaining,
+      resetInMs: Math.max(0, rateLimit.resetTime - Date.now()),
+    });
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((rateLimit.resetTime - Date.now()) / 1000)) } }
@@ -81,7 +93,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid statement. Use "all", "bs", "is", or "cf".' }, { status: 400 });
   }
   if (!period) {
-    return NextResponse.json({ error: 'Invalid period. Use "latest" or "YYYYQn" (e.g., 2025Q4).' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid period. Use "latest", "YYYYQn" (e.g., 2025Q4), or "Qn/YYYY".' }, { status: 400 });
   }
 
   try {
@@ -195,7 +207,13 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error("API Error:", error);
+    logger.error("request.failed", {
+      ...toErrorMeta(error),
+      durationMs: Date.now() - startedAt,
+      symbol,
+      statement,
+      period,
+    });
     const message = error instanceof Error ? error.message : "Failed to load fundamentals";
     // Missing file / dataset -> service unavailable
     if (String(message).toLowerCase().includes("file not found")) {

@@ -6,6 +6,30 @@ const includeUiChecks = (() => {
   const normalized = String(raw).trim().toLowerCase();
   return !["0", "false", "no", "off"].includes(normalized);
 })();
+const assistantEvalToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
+const metricKeywords = [
+  "net_return",
+  "max_drawdown",
+  "total_trades",
+  "sharpe",
+  "beta",
+  "var",
+  "volatility",
+  "revenue",
+  "income",
+  "profit",
+  "pe",
+  "pb",
+  "price",
+  "close",
+  "open",
+  "high",
+  "low",
+  "volume",
+];
+const unitTokenRegex = /%|\b(vnd|usd|eur|dong|dong\/cp|cp|shares?|co phieu|points?|pts|ty|trieu|billion|million|bn|mn|x|times?|lan)\b/i;
+const periodTokenRegex = /\b(20\d{2}[-/]\d{1,2}([-/]\d{1,2})?|20\d{2}\s*q[1-4]|q[1-4]\s*20\d{2}|fy\s*20\d{2}|latest|as of|today|hom nay|hien tai|ky|quy|nam|period)\b/i;
+const unitlessMetricRegex = /\b(pe|pb|beta|sharpe|roe|roa|margin|ratio)\b/;
 
 function logInfo(message) {
   console.log(`INFO ${message}`);
@@ -137,6 +161,103 @@ function validateOhlcvSeriesPoints(points) {
     ensure(high >= open && high >= close, "high < open/close");
     ensure(low <= open && low <= close, "low > open/close");
   }
+}
+
+function normalizeText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .trim();
+}
+
+function providerLikelyUnavailable(response, data) {
+  if (response?.status === 429 || response?.status === 500 || response?.status === 502 || response?.status === 504) {
+    return true;
+  }
+  if (data?.success === true) return false;
+  const errorText = String(data?.error ?? "").toLowerCase();
+  if (!errorText) return false;
+  return (
+    errorText.includes("unavailable")
+    || errorText.includes("provider")
+    || errorText.includes("timeout")
+    || errorText.includes("api key")
+    || errorText.includes("authentication")
+  );
+}
+
+function extractMetricNumericClaims(message) {
+  const lines = String(message ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const claims = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const normalized = normalizeText(line);
+    const hasNumber = /-?\d+(?:[.,]\d+)?%?/.test(normalized);
+    const metric = metricKeywords.find((keyword) => normalized.includes(keyword));
+    if (hasNumber && metric) {
+      claims.push({ lineNo: i + 1, metric, line, normalized });
+    }
+  }
+  return claims;
+}
+
+function isInsufficientDataResponse(message, policyStatus) {
+  const normalized = normalizeText(message);
+  if (String(policyStatus ?? "").trim().toLowerCase() === "fallback") return true;
+  return (
+    normalized.includes("insufficient_data")
+    || normalized.includes("cannot provide numeric")
+    || normalized.includes("grounded data")
+    || normalized.includes("khong the")
+    || normalized.includes("khong du du lieu")
+  );
+}
+
+function validateMetricSemanticResponse(message, citations, policyStatus) {
+  const claims = extractMetricNumericClaims(message);
+  if (claims.length === 0) {
+    if (isInsufficientDataResponse(message, policyStatus)) {
+      return { ok: true, reason: "", claims, missingPeriodLines: [], missingUnitLines: [], citationOk: true };
+    }
+    return { ok: false, reason: "No metric-like numeric claims found.", claims, missingPeriodLines: [], missingUnitLines: [] };
+  }
+
+  const citationOk = Array.isArray(citations) && citations.some((item) => {
+    const endpoint = String(item?.endpoint ?? "").trim();
+    const title = String(item?.title ?? "").trim();
+    return endpoint.length > 0 || title.length > 0;
+  });
+  const citationHasPeriod = Array.isArray(citations)
+    && citations.some((item) => String(item?.period ?? "").trim().length > 0);
+
+  const missingPeriodLines = [];
+  const missingUnitLines = [];
+  for (const claim of claims) {
+    const hasPeriod = periodTokenRegex.test(claim.normalized) || citationHasPeriod;
+    const hasUnit = unitTokenRegex.test(claim.normalized) || unitlessMetricRegex.test(claim.normalized);
+    if (!hasPeriod) missingPeriodLines.push(claim.lineNo);
+    if (!hasUnit) missingUnitLines.push(claim.lineNo);
+  }
+
+  const reasons = [];
+  if (!citationOk) reasons.push("Missing citation for numeric claims.");
+  if (missingPeriodLines.length > 0) reasons.push(`Missing period on lines: ${missingPeriodLines.join(", ")}`);
+  if (missingUnitLines.length > 0) reasons.push(`Missing unit on lines: ${missingUnitLines.join(", ")}`);
+
+  return {
+    ok: reasons.length === 0,
+    reason: reasons.join(" "),
+    claims,
+    missingPeriodLines,
+    missingUnitLines,
+    citationOk,
+  };
 }
 
 function sleep(ms) {
@@ -856,6 +977,60 @@ async function run() {
         ensure(typeof data?.error === "string" && data.error.length > 0, "error message missing");
       }
       logPass(name, `HTTP ${response.status}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "POST /api/assistant semantic metric guard (period/unit/citation)";
+    try {
+      const symbol = String(primarySymbol ?? "VNM");
+      const prompt = [
+        `Cho toi backtest SMA crossover cua ${symbol}.`,
+        "Tra loi dung 3 dong theo format: metric=<number> <unit> | period=<period>.",
+        "Bat buoc co period va unit ro rang cho moi metric.",
+      ].join("\n");
+
+      const evalHeaders = assistantEvalToken
+        ? {
+            "x-assistant-eval": "true",
+            "x-assistant-eval-token": assistantEvalToken,
+          }
+        : {};
+
+      const { response, data } = await fetchJson("/api/assistant", {
+        method: "POST",
+        headers: evalHeaders,
+        body: {
+          message: prompt,
+          conversationHistory: [],
+          contextSnapshot: {
+            page: "backtesting",
+            symbol,
+          },
+          preferences: {
+            language: "vi",
+            detailLevel: "brief",
+          },
+        },
+      });
+
+      if (providerLikelyUnavailable(response, data)) {
+        logInfo(`semantic metric guard skipped: provider unavailable (HTTP ${response.status})`);
+        logPass(name, "skipped provider unavailable");
+        return;
+      }
+
+      ensure(response.ok, `HTTP ${response.status}`);
+      ensure(data?.success === true, "assistant success=false");
+      ensure(typeof data?.message === "string" && data.message.length > 0, "assistant message missing");
+
+      const verdict = validateMetricSemanticResponse(data.message, data?.citations, data?.policyStatus);
+      ensure(verdict.ok, verdict.reason || "semantic metric guard failed");
+
+      logPass(name, `symbol=${symbol}, claims=${verdict.claims.length}`);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));

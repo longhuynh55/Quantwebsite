@@ -1,4 +1,4 @@
-# Finance Chatbot Core Backend QA Plan
+﻿# Finance Chatbot Core Backend QA Plan
 
 ## Objectives
 
@@ -14,7 +14,7 @@
 - Production deployment should be strict/fail-fast:
   - `DATA_BACKEND=duckdb`, `DATA_BACKEND_STRICT=true`, `DATA_ALLOW_RAW_FALLBACK=false`
 - Assistant grounding safety net:
-  - The assistant can call `dataHealth` (maps to `/api/health/data`) when users report “không có dữ liệu” / “missing data”.
+  - The assistant can call `dataHealth` (maps to `/api/health/data`) when users report â€œkhÃ´ng cÃ³ dá»¯ liá»‡uâ€ / â€œmissing dataâ€.
   - This prevents incorrect refusal when datasets are actually present but a backend/config is miswired.
 - Timeouts for slow upstream models (OpenRouter free tier can be bursty):
   - `OPENROUTER_TIMEOUT_MS`, `OPENROUTER_SECONDARY_TIMEOUT_MS`, `OPENROUTER_TERTIARY_TIMEOUT_MS`
@@ -112,16 +112,16 @@
 - Scope: core financial calculations (risk scores, probabilities, returns, scenario charts) that must remain deterministic across date-stamped releases.
 - Strategy:
   - Bundle golden inputs + expected outputs (CSV/JSON) per calculation module.
-  - Use snapshot testing with tolerance thresholds (e.g., ±0.01%) for floating operations; convert to decimal if possible.
-  - Include multi-step flows (e.g., normalized sector exposure → aggregate portfolio signal) to ensure pipelines preserve intermediate metadata.
-- Execution: run with `npm run test:math` (custom script) before merge; integrate into `ci-deterministic-tests`.
+  - Use snapshot testing with tolerance thresholds (e.g., Â±0.01%) for floating operations; convert to decimal if possible.
+  - Include multi-step flows (e.g., normalized sector exposure â†’ aggregate portfolio signal) to ensure pipelines preserve intermediate metadata.
+- Execution: run with `pnpm run test:math` (custom script) before merge; integrate into `ci-deterministic-tests`.
 - Guardrails: log deviations beyond tolerance with contextual inputs for triage and store outputs in `artifacts/deterministic-violations/`.
 
 ### 3. Regression Dataset Tests
 
 - Scope: stored regression dataset (a canonical set of user prompts, historical filings, and expected response fingerprints) captured in `public/data/regression/finance-chatbot`.
 - Strategy:
-  - Run a lightweight headless assistant invocation against dataset entries (100–200 prompts) and compare key benchmarks: response categories, primary numeric citations, and hallucination flags.
+  - Run a lightweight headless assistant invocation against dataset entries (100â€“200 prompts) and compare key benchmarks: response categories, primary numeric citations, and hallucination flags.
   - Capture normalized embeddings + token-level alignments to catch drift in retrieval or scoring pipelines.
   - Automate dataset refresh: store new version indicator (`regression_dataset_vX.json`), update coverage when retraining retrieval models.
 - Execution: nightly regression job plus PR-level `ci-regression-dataset` job using `node scripts/regression-runner.mjs`.
@@ -135,7 +135,7 @@
   - Instrument environment variables for target TPS (e.g., 120 req/s) and warm caches (mock vector DB).
   - Include service mesh-level metrics (e.g., Postgres/Redis connection queues).
 - Execution: schedule `ci-load-latency` (weekly or pre-release) running against staging or synthetic env; use shorter `smoke-load` subset in PR to catch regressions.
-- KPIs: 95th percentile ≤ 600 ms, success rate ≥ 99.5%, CPU < 70% across backend nodes; fail if latency or errors exceed thresholds.
+- KPIs: 95th percentile â‰¤ 600 ms, success rate â‰¥ 99.5%, CPU < 70% across backend nodes; fail if latency or errors exceed thresholds.
 
 ### 5. Chaos & Failure Mode Tests
 
@@ -160,11 +160,11 @@
 
 | Metric | Target | Measurement |
 | --- | --- | --- |
-| Assistant Response Success Rate | ≥ 99.5% across API requests | Request counters from nginx/edge |
-| End-to-end Latency (95th percentile) | ≤ 600 ms on staging | k6 reports stored in `artifacts/k6` |
+| Assistant Response Success Rate | â‰¥ 99.5% across API requests | Request counters from nginx/edge |
+| End-to-end Latency (95th percentile) | â‰¤ 600 ms on staging | k6 reports stored in `artifacts/k6` |
 | Numeric Determinism | <2% tolerance deviation vs baseline | Deterministic test runners with artifact diff |
-| Contract Compliance | 100% schema match | `npm run contract-check` exit code |
-| Regression Match Score | ≥ 97% prompts match expected fingerprint | Dataset runner scoring per version |
+| Contract Compliance | 100% schema match | `pnpm run contract-check` exit code |
+| Regression Match Score | â‰¥ 97% prompts match expected fingerprint | Dataset runner scoring per version |
 | Chaos Recovery Time | < 2 min to restore fallback mode | Traces/alerts from incident window |
 
 - **SLO Enforcement:** tie to monitoring (Prometheus + Grafana) and on-call escalations; degrade to `QA freeze` on repeated violations.
@@ -173,8 +173,8 @@
 ## CI Pipeline Proposal
 
 1. **`ci-contract-deterministic` job** (runs on PR):
-   - Checkout, install deps, run `npm run lint`, `npx tsc --noEmit`.
-   - Run `npm run contract-check` (Zod/OpenAPI).
+   - Checkout, install deps, run `pnpm run lint`, `pnpm exec tsc --noEmit`.
+   - Run `pnpm run contract-check` (Zod/OpenAPI).
    - Execute deterministic numeric suite; store diff artifacts on failure.
    - Short regression subset using `scripts/regression-runner`.
 
@@ -200,3 +200,4 @@
 - Implement `scripts/regression-runner.mjs` if not present; ensure dataset stored under `public/data/regression`.
 - Wire telemetry (Prometheus counters, SLO dashboards) and update `docs/OBSERVABILITY_SLO.md`.
 - Automate artifact retention and funnel CI outputs into on-call Slack/GitHub Issues for tracer attachments.
+

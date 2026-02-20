@@ -1,3 +1,5 @@
+import { createLogger, hashText, type AppLogger } from '@/lib/logger';
+
 type LlmRole = 'system' | 'user' | 'assistant';
 
 export interface LlmMessage {
@@ -63,10 +65,26 @@ export interface AssistantGenerateFailure {
 
 export type AssistantGenerateResult = AssistantGenerateSuccess | AssistantGenerateFailure;
 
-export async function generateWithProviderFallback(messages: LlmMessage[]): Promise<AssistantGenerateResult> {
+const providersLogger = createLogger('assistant.providers');
+
+export async function generateWithProviderFallback(
+  messages: LlmMessage[],
+  options: { requestId?: string } = {}
+): Promise<AssistantGenerateResult> {
   const startedAt = Date.now();
+  const logger = providersLogger.child({ requestId: options.requestId ?? '' });
   const providers = getProviderChain();
+  logger.debug('chain.started', {
+    providerCount: providers.length,
+    providerNames: providers.map((provider) => provider.name),
+    providerSources: providers.map((provider) => provider.source),
+    messageCount: messages.length,
+    promptDigest: hashText(messages.map((msg) => `${msg.role}:${msg.content}`).join('\n')),
+  });
   if (providers.length === 0) {
+    logger.error('chain.configuration_missing', {
+      providerCount: 0,
+    });
     return {
       success: false,
       kind: 'configuration',
@@ -80,8 +98,19 @@ export async function generateWithProviderFallback(messages: LlmMessage[]): Prom
   const errors: ProviderErrorInfo[] = [];
   for (let index = 0; index < providers.length; index += 1) {
     const provider = providers[index];
-    const result = await callProviderWithRetry(provider, messages);
+    const providerStartedAt = Date.now();
+    const result = await callProviderWithRetry(provider, messages, logger);
     if (result.success) {
+      logger.info('provider.success', {
+        provider: provider.name,
+        source: provider.source,
+        model: provider.model,
+        attempts: result.attempts,
+        fallbackUsed: index > 0,
+        latencyMs: Date.now() - providerStartedAt,
+        outputChars: result.text.length,
+        outputDigest: hashText(result.text),
+      });
       return {
         success: true,
         text: result.text,
@@ -91,6 +120,15 @@ export async function generateWithProviderFallback(messages: LlmMessage[]): Prom
       };
     }
 
+    logger.warn('provider.failed', {
+      provider: provider.name,
+      source: provider.source,
+      model: provider.model,
+      kind: result.kind,
+      status: result.status,
+      attempts: result.attempts,
+      latencyMs: Date.now() - providerStartedAt,
+    });
     errors.push({
       provider: provider.name,
       kind: result.kind,
@@ -100,6 +138,11 @@ export async function generateWithProviderFallback(messages: LlmMessage[]): Prom
   }
 
   const finalKind = pickFinalFailureKind(errors);
+  logger.error('chain.failed', {
+    kind: finalKind,
+    providersTried: providers.length,
+    latencyMs: Date.now() - startedAt,
+  });
   return {
     success: false,
     kind: finalKind,
@@ -144,7 +187,7 @@ function getProviderChain(): ProviderConfig[] {
       retryBaseDelayMs: openRouterPrimaryRetryBaseDelay,
     });
 
-    const openRouterSecondaryModel = process.env.OPENROUTER_SECONDARY_MODEL?.trim() || 'openai/gpt-oss-20b:free';
+    const openRouterSecondaryModel = process.env.OPENROUTER_SECONDARY_MODEL?.trim() || 'openai/gpt-oss-120b';
     if (openRouterSecondaryModel && openRouterSecondaryModel !== openRouterPrimaryModel) {
       providers.push({
         source: 'openrouter',
@@ -164,7 +207,7 @@ function getProviderChain(): ProviderConfig[] {
     }
 
     const openRouterTertiaryModel =
-      process.env.OPENROUTER_TERTIARY_MODEL?.trim() || 'stepfun/step-3.5-flash:free';
+      process.env.OPENROUTER_TERTIARY_MODEL?.trim() || 'openai/gpt-oss-20b:free';
     if (
       openRouterTertiaryModel &&
       openRouterTertiaryModel !== openRouterPrimaryModel &&
@@ -232,7 +275,11 @@ function getProviderChain(): ProviderConfig[] {
   return sortProvidersByPriority(providers);
 }
 
-async function callProviderWithRetry(provider: ProviderConfig, messages: LlmMessage[]): Promise<ProviderCallResult> {
+async function callProviderWithRetry(
+  provider: ProviderConfig,
+  messages: LlmMessage[],
+  logger: AppLogger
+): Promise<ProviderCallResult> {
   let lastFailure: ProviderFailure = {
     success: false,
     kind: 'upstream',
@@ -253,6 +300,17 @@ async function callProviderWithRetry(provider: ProviderConfig, messages: LlmMess
     }
 
     const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, result.retryAfterMs);
+    logger.info('provider.retry_scheduled', {
+      provider: provider.name,
+      source: provider.source,
+      model: provider.model,
+      attempt: attempt + 1,
+      nextAttempt: attempt + 2,
+      maxAttempts: provider.maxRetries + 1,
+      kind: result.kind,
+      status: result.status,
+      delayMs,
+    });
     await sleep(delayMs);
   }
 
@@ -292,7 +350,7 @@ async function callProviderOnce(
         success: false,
         kind,
         status: response.status,
-        details: errorText,
+        details: summarizeProviderHttpError(response.status, errorText),
         retryAfterMs,
         attempts,
       };
@@ -326,7 +384,7 @@ async function callProviderOnce(
     return {
       success: false,
       kind: 'network',
-      details: error instanceof Error ? error.message : String(error),
+      details: summarizeProviderNetworkError(error),
       attempts,
     };
   } finally {
@@ -414,7 +472,7 @@ function buildOpenRouterHeaders(): Record<string, string> | undefined {
   const title = process.env.OPENROUTER_X_TITLE?.trim() || process.env.OPENROUTER_APP_NAME?.trim();
 
   if (referer) {
-    headers['HTTP-Referer'] = referer;
+    headers['Referer'] = referer;
   }
   if (title) {
     headers['X-Title'] = title;
@@ -452,4 +510,54 @@ function trimTrailingSlash(url: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function summarizeProviderHttpError(status: number, rawBody: string): string {
+  const trimmed = String(rawBody ?? "").trim();
+  if (!trimmed) return `http_${status}`;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const rootError = parsed.error;
+    if (rootError && typeof rootError === "object" && !Array.isArray(rootError)) {
+      const errorRecord = rootError as Record<string, unknown>;
+      const code = normalizeProviderCode(errorRecord.code);
+      const type = normalizeProviderCode(errorRecord.type);
+      const message = normalizeProviderCode(errorRecord.message);
+      const suffix = [code, type, message].filter(Boolean).join(":");
+      if (suffix) return `http_${status}:${suffix}`;
+    }
+
+    const code = normalizeProviderCode(parsed.code);
+    const type = normalizeProviderCode(parsed.type);
+    const message = normalizeProviderCode(parsed.message);
+    const suffix = [code, type, message].filter(Boolean).join(":");
+    if (suffix) return `http_${status}:${suffix}`;
+  } catch {
+    // Ignore parse failures and fall back to digest-style summary.
+  }
+
+  return `http_${status}:body_hash=${hashText(trimmed)}`;
+}
+
+function summarizeProviderNetworkError(error: unknown): string {
+  if (error instanceof Error) {
+    const normalizedMessage = normalizeProviderCode(error.message);
+    if (normalizedMessage) return `network:${normalizedMessage}`;
+    return `network:error_hash=${hashText(error.name)}`;
+  }
+  const raw = String(error ?? "");
+  const normalized = normalizeProviderCode(raw);
+  if (normalized) return `network:${normalized}`;
+  return `network:error_hash=${hashText(raw)}`;
+}
+
+function normalizeProviderCode(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9:_-]+/g, "")
+    .slice(0, 80)
+    .toLowerCase();
 }

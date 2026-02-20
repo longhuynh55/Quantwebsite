@@ -681,12 +681,34 @@ async function loadOHLCVDataFromDuckDb(duckdbPath: string): Promise<Map<string, 
 }
 
 async function loadOHLCVForSymbolFromDuckDb(duckdbPath: string, symbol: string): Promise<OHLCV[]> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const source = `duckdb:${duckdbPath}:ohlcv`;
   const rows = await queryDuckDbRows(
     duckdbPath,
     "SELECT symbol, date, open, high, low, close, volume FROM ohlcv WHERE symbol = ? ORDER BY date",
-    [symbol.trim().toUpperCase()]
+    [normalizedSymbol]
   );
   const parseResult = parseDuckDbRowsWithValidation(rows, validateOHLCVRow);
+
+  if (parseResult.totalRows <= 0) {
+    if (dataQualityCache.ohlcv?.totalRows === 0) {
+      dataQualityCache.ohlcv = null;
+    }
+    datasetStatusCache.ohlcv = {
+      dataset: "ohlcv",
+      status: "unknown",
+      backend: "duckdb",
+      source,
+      updatedAt: new Date(),
+    };
+    return parseResult.rows;
+  }
+
+  const report = buildQualityReport("ohlcv", parseResult);
+  if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
+    logQualityReport(report);
+  }
+  setDatasetStatusSuccess("ohlcv", "duckdb", source);
   return parseResult.rows;
 }
 

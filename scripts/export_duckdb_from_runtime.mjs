@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -294,7 +294,7 @@ async function main() {
       const fallbackMessage = error instanceof Error ? error.message : String(error);
       throw new Error(
         "DuckDB export fallback via Docker failed. Ensure Docker Desktop is running, " +
-        "or install the optional Node binding with `npm install duckdb`.\n" +
+        "or install the optional Node binding with `pnpm install duckdb`.\n" +
         `Details: ${fallbackMessage}\n` +
         `SQL plan: ${sqlFilePath}`
       );
@@ -311,3 +311,4 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
+

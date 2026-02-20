@@ -309,7 +309,7 @@ async function loadStatement(statement: FundamentalsStatement): Promise<Statemen
       .join(", ");
     throw new Error(
       `Fundamentals CSV parse errors in ${fileName}: errors=${parsed.errors.length} (${top}). ` +
-        `Please regenerate prepared fundamentals in public/data (run npm run data:prepare:2018_2025).`
+        `Please regenerate prepared fundamentals in public/data (run pnpm run data:prepare:2018_2025).`
     );
   }
 
@@ -416,5 +416,6 @@ export function clearFundamentalsCache(): void {
   clearDataBackendCache();
   clearDuckDbModuleCache();
 }
+
 
 

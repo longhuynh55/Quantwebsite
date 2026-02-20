@@ -14,7 +14,7 @@ import {
   SkeletonStats,
   ErrorState,
 } from "@/components/ui";
-import { showSuccess, showError } from "@/components/ui/toast";
+import { showError } from "@/components/ui/toast";
 import { LineChart } from "@/components/charts";
 import {
   TrendingUp,
@@ -80,7 +80,6 @@ export default function HomePage() {
             mtdReturn: data.mtdReturn,
             currentIndex: data.currentIndex,
           });
-          showSuccess("Market data loaded", `Analyzed ${data.totalStocks} HOSE stocks`);
         }
       } catch (err) {
         console.error("Failed to fetch market data:", err);
