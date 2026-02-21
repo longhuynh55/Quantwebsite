@@ -61,25 +61,24 @@ const indicatorOptions: Array<{
   label: string;
 }> = [
   { value: "rsi", label: "RSI (Relative Strength Index)" },
-  { value: "macd", label: "MACD" },
   { value: "ma", label: "Moving Average (SMA)" },
   { value: "ema", label: "Exponential Moving Average" },
   { value: "bollinger", label: "Bollinger Bands" },
-  { value: "atr", label: "ATR (Average True Range)" },
-  { value: "volume", label: "Volume" },
 ];
+const supportedIndicatorTypes = new Set<IndicatorNodeData["indicatorType"]>(
+  indicatorOptions.map((item) => item.value)
+);
 
 const filterOptions: Array<{
   value: FilterNodeData["filterType"];
   label: string;
 }> = [
-  { value: "price_above", label: "Price Above" },
-  { value: "price_below", label: "Price Below" },
-  { value: "volume_above", label: "Volume Above" },
-  { value: "volume_below", label: "Volume Below" },
   { value: "rsi_overbought", label: "RSI Overbought (>70)" },
   { value: "rsi_oversold", label: "RSI Oversold (<30)" },
 ];
+const supportedFilterTypes = new Set<FilterNodeData["filterType"]>(
+  filterOptions.map((item) => item.value)
+);
 
 const comparisonOptions: Array<{
   value: FilterNodeData["comparisonOperator"];
@@ -289,6 +288,7 @@ export const PropertyPanel = memo(
 
     const renderIndicatorConfig = (nodeData: IndicatorNode) => {
       const config = nodeData.config;
+      const hasSupportedIndicator = supportedIndicatorTypes.has(config.indicatorType);
 
       return (
         <div className="space-y-4">
@@ -297,7 +297,7 @@ export const PropertyPanel = memo(
               Indicator Type
             </label>
             <select
-              value={config.indicatorType || "rsi"}
+              value={hasSupportedIndicator ? config.indicatorType : ""}
               onChange={(e) => {
                 const nextConfig: IndicatorNodeData = {
                   ...config,
@@ -309,12 +309,22 @@ export const PropertyPanel = memo(
               }}
               className="w-full h-9 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              {!hasSupportedIndicator && (
+                <option value="" disabled>
+                  Select a supported indicator
+                </option>
+              )}
               {indicatorOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
             </select>
+            {!hasSupportedIndicator && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                This indicator is not supported in Template Tuner mode.
+              </p>
+            )}
           </div>
 
           <div>
@@ -336,49 +346,6 @@ export const PropertyPanel = memo(
               }}
             />
           </div>
-
-          {config.indicatorType === "macd" && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Fast Period
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={config.fastPeriod || 12}
-                  onChange={(e) => {
-                    const nextConfig: IndicatorNodeData = {
-                      ...config,
-                      label: nodeData.label,
-                      fastPeriod: parseIntOr(e.target.value, 12),
-                    };
-
-                    updateNodeData({ ...nodeData, config: nextConfig });
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Slow Period
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={config.slowPeriod || 26}
-                  onChange={(e) => {
-                    const nextConfig: IndicatorNodeData = {
-                      ...config,
-                      label: nodeData.label,
-                      slowPeriod: parseIntOr(e.target.value, 26),
-                    };
-
-                    updateNodeData({ ...nodeData, config: nextConfig });
-                  }}
-                />
-              </div>
-            </div>
-          )}
 
           {config.indicatorType === "bollinger" && (
             <div>
@@ -408,6 +375,7 @@ export const PropertyPanel = memo(
 
     const renderFilterConfig = (nodeData: FilterNode) => {
       const config = nodeData.config;
+      const hasSupportedFilter = supportedFilterTypes.has(config.filterType);
 
       return (
         <div className="space-y-4">
@@ -416,7 +384,7 @@ export const PropertyPanel = memo(
               Filter Type
             </label>
             <select
-              value={config.filterType || "price_above"}
+              value={hasSupportedFilter ? config.filterType : ""}
               onChange={(e) => {
                 const nextConfig: FilterNodeData = {
                   ...config,
@@ -428,12 +396,22 @@ export const PropertyPanel = memo(
               }}
               className="w-full h-9 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              {!hasSupportedFilter && (
+                <option value="" disabled>
+                  Select a supported filter
+                </option>
+              )}
               {filterOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
             </select>
+            {!hasSupportedFilter && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                This filter is not supported in Template Tuner mode.
+              </p>
+            )}
           </div>
 
           <div>

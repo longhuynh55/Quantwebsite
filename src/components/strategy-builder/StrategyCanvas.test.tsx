@@ -171,19 +171,12 @@ describe("StrategyCanvas", () => {
     expect(mockAddNode).not.toHaveBeenCalled();
   });
 
-  it("creates edge on connect", () => {
+  it("ignores connect attempts because connections are disabled", () => {
     render(<StrategyCanvas />);
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
 
-    expect(mockStoreAddEdge).toHaveBeenCalledTimes(1);
-    expect(mockStoreAddEdge).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: "node-a",
-        target: "node-b",
-        animated: true,
-      })
-    );
+    expect(mockStoreAddEdge).not.toHaveBeenCalled();
   });
 
   it("updates selected node for node click and pane click", () => {

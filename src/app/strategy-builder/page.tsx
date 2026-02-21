@@ -91,6 +91,33 @@ export default function StrategyBuilderPage() {
     }
   }, [capitalInput, currentStrategy, strategyName]);
 
+  const previewWarnings = useMemo(() => {
+    if (!currentStrategy) {
+      return [];
+    }
+
+    const warnings: string[] = [];
+    const ignoredLegacyNodes = currentStrategy.nodes.filter((node) => {
+      const nodeType = node?.data?.type;
+      return nodeType === "signal" || nodeType === "output";
+    }).length;
+
+    if (ignoredLegacyNodes > 0) {
+      warnings.push(
+        `${ignoredLegacyNodes} legacy node(s) (Signal/Output) are ignored by Template Tuner execution.`
+      );
+    }
+
+    const connectionCount = currentStrategy.edges.length;
+    if (connectionCount > 0) {
+      warnings.push(
+        `${connectionCount} connection(s) detected. Connections are visual only and do not change execution logic.`
+      );
+    }
+
+    return warnings;
+  }, [currentStrategy]);
+
   const isRunActive = runStatus === "queued" || runStatus === "running";
 
   const getClientErrorMessage = useCallback((error: unknown, fallback: string) => {
@@ -402,6 +429,13 @@ export default function StrategyBuilderPage() {
             <p className="mt-1 text-red-600 dark:text-red-400" role="alert">
               {runError}
             </p>
+          )}
+          {previewWarnings.length > 0 && (
+            <div className="mt-1 space-y-1 text-amber-700 dark:text-amber-300">
+              {previewWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
           )}
         </div>
 

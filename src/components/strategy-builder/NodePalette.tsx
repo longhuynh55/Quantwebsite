@@ -6,9 +6,6 @@ import {
   Database,
   Activity,
   Filter,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  BarChart2,
   GripVertical,
 } from "lucide-react";
 
@@ -45,30 +42,6 @@ const nodeTypes: NodeTypeItem[] = [
     icon: Filter,
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-100 dark:bg-orange-900/50",
-  },
-  {
-    type: "signalBuy",
-    label: "Buy Signal",
-    description: "Buy order trigger",
-    icon: ArrowUpCircle,
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-100 dark:bg-green-900/50",
-  },
-  {
-    type: "signalSell",
-    label: "Sell Signal",
-    description: "Sell order trigger",
-    icon: ArrowDownCircle,
-    color: "text-red-600 dark:text-red-400",
-    bgColor: "bg-red-100 dark:bg-red-900/50",
-  },
-  {
-    type: "output",
-    label: "Output",
-    description: "Results display",
-    icon: BarChart2,
-    color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-100 dark:bg-emerald-900/50",
   },
 ];
 
@@ -155,30 +128,12 @@ export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) =
           </div>
         </div>
 
-        {/* Execution Section */}
-        <div className="mb-4">
-          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-1">
-            Execution
-          </div>
-          <div className="space-y-2">
-            <NodePaletteItem item={nodeTypes[3]} onDragStart={onDragStart} />
-            <NodePaletteItem item={nodeTypes[4]} onDragStart={onDragStart} />
-          </div>
-        </div>
-
-        {/* Output Section */}
-        <div>
-          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-1">
-            Results
-          </div>
-          <NodePaletteItem item={nodeTypes[5]} onDragStart={onDragStart} />
-        </div>
       </div>
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          Tip: Connect nodes by dragging from handles
+          Tip: Configure nodes in the right panel before running
         </p>
       </div>
     </div>

@@ -122,7 +122,7 @@ describe("buildStrategyLabRunRequest", () => {
     });
   });
 
-  it("maps unsupported indicator types to momentum fallback", () => {
+  it("throws for unsupported indicator types instead of falling back", () => {
     const strategy = createStrategy([
       createNode("data-1", {
         type: "dataSource",
@@ -159,12 +159,48 @@ describe("buildStrategyLabRunRequest", () => {
       }),
     ]);
 
-    const payload = buildStrategyLabRunRequest(strategy);
-    expect(payload.strategyType).toBe("momentum");
-    expect(payload.params).toEqual({
-      lookback: 20,
-      threshold: 0.08,
-    });
+    expect(() => buildStrategyLabRunRequest(strategy)).toThrow(
+      'Indicator type "macd" is not supported in Template Tuner mode.'
+    );
+  });
+
+  it("throws when MA strategy includes filters", () => {
+    const strategy = createStrategy([
+      createNode("data-1", {
+        type: "dataSource",
+        label: "Data",
+        config: {
+          label: "Data",
+          stocks: ["HPG"],
+          timeframe: "1d",
+          startDate: "",
+          endDate: "",
+        },
+      }),
+      createNode("indicator-1", {
+        type: "indicator",
+        label: "MA",
+        config: {
+          label: "MA",
+          indicatorType: "ma",
+          period: 20,
+        },
+      }),
+      createNode("filter-1", {
+        type: "filter",
+        label: "Filter",
+        config: {
+          label: "Filter",
+          filterType: "rsi_overbought",
+          value: 70,
+          comparisonOperator: ">",
+        },
+      }),
+    ]);
+
+    expect(() => buildStrategyLabRunRequest(strategy)).toThrow(
+      "Filters are not supported with MA strategies in Template Tuner mode."
+    );
   });
 
   it("throws when symbol is missing", () => {

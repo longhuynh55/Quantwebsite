@@ -6,12 +6,9 @@ import {
   Background,
   Controls,
   MiniMap,
-  addEdge,
   useNodesState,
   useEdgesState,
-  type Connection,
   type NodeTypes,
-  type OnConnect,
   type NodeChange,
   type EdgeChange,
   ReactFlowProvider,
@@ -38,7 +35,6 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
   const {
     currentStrategy,
     addNode,
-    addEdge: storeAddEdge,
     setSelectedNode,
     setNodes,
   } = useStrategyBuilderStore();
@@ -93,27 +89,6 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
     [onEdgesChange]
   );
 
-  // Handle connections
-  const onConnect: OnConnect = useCallback(
-    (connection: Connection) => {
-      if (!connection.source || !connection.target) return;
-
-      const newEdge: StrategyEdge = {
-        id: `edge-${connection.source}-${connection.target}-${generateId()}`,
-        source: connection.source,
-        target: connection.target,
-        sourceHandle: connection.sourceHandle ?? undefined,
-        targetHandle: connection.targetHandle ?? undefined,
-        animated: true,
-        style: { stroke: "#94a3b8" },
-      };
-
-      setLocalEdges((eds) => addEdge(newEdge, eds));
-      storeAddEdge(newEdge);
-    },
-    [setLocalEdges, storeAddEdge]
-  );
-
   // Handle node selection
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: StrategyNode) => {
@@ -143,7 +118,7 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
       // Create node data based on type
       let nodeData: StrategyNodeData;
-      let nodeType: string = type;
+      const nodeType: string = type;
       let label: string;
 
       switch (type) {
@@ -183,45 +158,6 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
               filterType: "price_above",
               value: 0,
               comparisonOperator: ">",
-            },
-          };
-          break;
-        case "signalBuy":
-          nodeType = "signal";
-          label = "Buy Signal";
-          nodeData = {
-            type: "signal",
-            label,
-            config: {
-              label,
-              signalType: "buy",
-              condition: "",
-              quantity: 100,
-            },
-          };
-          break;
-        case "signalSell":
-          nodeType = "signal";
-          label = "Sell Signal";
-          nodeData = {
-            type: "signal",
-            label,
-            config: {
-              label,
-              signalType: "sell",
-              condition: "",
-              quantity: 100,
-            },
-          };
-          break;
-        case "output":
-          label = "Output";
-          nodeData = {
-            type: "output",
-            label,
-            config: {
-              label,
-              metrics: ["returns", "sharpe", "drawdown"],
             },
           };
           break;
@@ -292,7 +228,6 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
-        onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onDrop={onDrop}
@@ -302,6 +237,7 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
         fitView
         snapToGrid
         snapGrid={[15, 15]}
+        nodesConnectable={false}
         connectionLineStyle={connectionLineStyle}
         className="bg-gray-50 dark:bg-gray-950"
       >

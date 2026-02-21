@@ -18,6 +18,25 @@ type IndicatorNode = StrategyNode & {
 type FilterNode = StrategyNode & {
   data: Extract<StrategyNodeData, { type: "filter" }>;
 };
+type SupportedIndicatorType = "ma" | "ema" | "rsi" | "bollinger";
+
+const SUPPORTED_INDICATOR_TYPES = new Set<SupportedIndicatorType>([
+  "ma",
+  "ema",
+  "rsi",
+  "bollinger",
+]);
+const RSI_FILTER_TYPES = new Set(["rsi_oversold", "rsi_overbought"]);
+
+function getDistinctIndicatorTypes(indicators: IndicatorNode[]): string[] {
+  return Array.from(
+    new Set(indicators.map((node) => node.data.config.indicatorType))
+  );
+}
+
+function getDistinctFilterTypes(filters: FilterNode[]): string[] {
+  return Array.from(new Set(filters.map((node) => node.data.config.filterType)));
+}
 
 export class StrategyBuilderMappingError extends Error {}
 
@@ -74,8 +93,29 @@ function pickStrategyFromIndicators(
 
   const primary = indicators[0];
   const indicatorType = primary.data.config.indicatorType;
+  const uniqueIndicatorTypes = getDistinctIndicatorTypes(indicators);
+  if (uniqueIndicatorTypes.length > 1) {
+    throw new StrategyBuilderMappingError(
+      `Mixed indicator families are not supported. Use one of: ${Array.from(
+        SUPPORTED_INDICATOR_TYPES
+      ).join(", ")}.`
+    );
+  }
+  if (!SUPPORTED_INDICATOR_TYPES.has(indicatorType as SupportedIndicatorType)) {
+    throw new StrategyBuilderMappingError(
+      `Indicator type "${indicatorType}" is not supported in Template Tuner mode. Supported: ${Array.from(
+        SUPPORTED_INDICATOR_TYPES
+      ).join(", ")}.`
+    );
+  }
 
   if (indicatorType === "ma" || indicatorType === "ema") {
+    if (filters.length > 0) {
+      throw new StrategyBuilderMappingError(
+        `Filters are not supported with ${indicatorType.toUpperCase()} strategies in Template Tuner mode.`
+      );
+    }
+
     const sameType = indicators.filter(
       (node) => node.data.config.indicatorType === indicatorType
     );
@@ -98,6 +138,17 @@ function pickStrategyFromIndicators(
   }
 
   if (indicatorType === "rsi") {
+    const unsupportedRsiFilters = getDistinctFilterTypes(filters).filter(
+      (filterType) => !RSI_FILTER_TYPES.has(filterType)
+    );
+    if (unsupportedRsiFilters.length > 0) {
+      throw new StrategyBuilderMappingError(
+        `RSI only supports filters: ${Array.from(RSI_FILTER_TYPES).join(
+          ", "
+        )}. Unsupported: ${unsupportedRsiFilters.join(", ")}.`
+      );
+    }
+
     const period = clamp(
       Math.floor(primary.data.config.period || 14),
       2,
@@ -125,6 +176,12 @@ function pickStrategyFromIndicators(
   }
 
   if (indicatorType === "bollinger") {
+    if (filters.length > 0) {
+      throw new StrategyBuilderMappingError(
+        "Filters are not supported with Bollinger strategies in Template Tuner mode."
+      );
+    }
+
     const period = clamp(
       Math.floor(primary.data.config.period || 20),
       5,
@@ -138,22 +195,9 @@ function pickStrategyFromIndicators(
     };
   }
 
-  const lookback = clamp(Math.floor(primary.data.config.period || 20), 2, 252);
-  const firstFilterValue = filters.find((node) =>
-    Number.isFinite(node.data.config.value)
-  )?.data.config.value;
-  const thresholdCandidate =
-    typeof firstFilterValue === "number" && Number.isFinite(firstFilterValue)
-      ? firstFilterValue > 1
-        ? firstFilterValue / 100
-        : firstFilterValue
-      : 0.05;
-  const threshold = clamp(thresholdCandidate, 0.001, 0.5);
-
-  return {
-    strategyType: "momentum",
-    params: { lookback, threshold },
-  };
+  throw new StrategyBuilderMappingError(
+    `Indicator type "${indicatorType}" is not supported in Template Tuner mode.`
+  );
 }
 
 export function buildStrategyLabRunRequest(

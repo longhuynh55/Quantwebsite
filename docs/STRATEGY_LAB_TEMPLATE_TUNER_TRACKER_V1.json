@@ -1,0 +1,101 @@
+﻿{
+  "schemaVersion": "strategy-lab-template-tuner-tracker-v1-2026-02-21",
+  "workstream": "StrategyLab.TemplateTuner",
+  "positioning": {
+    "mode": "template_tuner",
+    "note": "Drag/drop UI, template-driven execution. Not a graph compiler."
+  },
+  "statusLegend": ["todo", "in_progress", "blocked", "done"],
+  "items": [
+    {
+      "id": "TT-000",
+      "priority": "P0",
+      "area": "Product",
+      "title": "Lock positioning: Template Tuner (not graph compiler)",
+      "status": "in_progress",
+      "acceptance": ["UI + docs never imply arbitrary graph execution"],
+      "owners": ["PM", "FE"],
+      "links": ["docs/STRATEGY_LAB_TEMPLATE_TUNER_PLAN_V1.md:1"]
+    },
+    {
+      "id": "TT-001",
+      "priority": "P0",
+      "area": "UI",
+      "title": "Remove/disable non-semantic nodes (Signal/Output) or label ignored",
+      "status": "done",
+      "acceptance": ["Users cannot create nodes that don't affect execution (or sees explicit 'ignored')"],
+      "owners": ["FE"],
+      "links": ["src/components/strategy-builder/NodePalette.tsx:1", "src/components/strategy-builder/StrategyCanvas.tsx:1"]
+    },
+    {
+      "id": "TT-002",
+      "priority": "P0",
+      "area": "UI",
+      "title": "Edges policy: decorative-only or disable connect",
+      "status": "done",
+      "acceptance": ["Connections never imply logic; preview states 'connections ignored' if enabled"],
+      "owners": ["FE"],
+      "links": ["src/components/strategy-builder/StrategyCanvas.tsx:1"]
+    },
+    {
+      "id": "TT-003",
+      "priority": "P0",
+      "area": "UI",
+      "title": "Restrict indicator/filter options to engine-supported set",
+      "status": "done",
+      "acceptance": ["No unsupported options available in Template Tuner mode"],
+      "owners": ["FE", "Quant"],
+      "links": ["src/components/strategy-builder/PropertyPanel.tsx:1", "src/lib/quant/backtest.ts:1"]
+    },
+    {
+      "id": "TT-004",
+      "priority": "P0",
+      "area": "UI",
+      "title": "Execution Preview panel (resolved template + params + config)",
+      "status": "done",
+      "acceptance": ["Preview equals submitted payload; shows ignored inputs list"],
+      "owners": ["FE", "BE"],
+      "links": ["src/app/strategy-builder/page.tsx:1", "src/lib/strategy-lab/builder-mapper.ts:1"]
+    },
+    {
+      "id": "TT-005",
+      "priority": "P0",
+      "area": "Mapping",
+      "title": "Strict mapping rules (no silent fallback)",
+      "status": "done",
+      "acceptance": ["Unsupported graph -> deterministic error; supported -> deterministic payload"],
+      "owners": ["AI Eng", "BE"],
+      "links": ["src/lib/strategy-lab/builder-mapper.ts:1"]
+    },
+    {
+      "id": "TT-006",
+      "priority": "P0",
+      "area": "Engine",
+      "title": "Bias-safe Strategy Lab execution defaults (force next_open)",
+      "status": "todo",
+      "acceptance": ["same_close not available or requires explicit opt-in warning"],
+      "owners": ["Quant", "BE"],
+      "links": ["src/lib/quant/backtest.ts:12", "src/lib/strategy-lab/executor.ts:1"]
+    },
+    {
+      "id": "TT-007",
+      "priority": "P0",
+      "area": "Engine",
+      "title": "Backtest invariants tests",
+      "status": "todo",
+      "acceptance": ["No-lookahead, cost monotonicity, accounting consistency tests pass"],
+      "owners": ["QA", "Quant"],
+      "links": ["src/lib/quant/backtest.ts:1"]
+    },
+    {
+      "id": "TT-011",
+      "priority": "P0",
+      "area": "QA",
+      "title": "E2E smoke: build -> preview -> run -> summary",
+      "status": "todo",
+      "acceptance": ["Runs in docker and produces artifacts (report + screenshots)"],
+      "owners": ["QA", "FE"],
+      "links": ["scripts/smoke.mjs:1", "scripts/qa.mjs:1"]
+    }
+  ]
+}

@@ -296,4 +296,40 @@ describe("strategy-builder page", () => {
     expect(mockCreateStrategyLabRunClient).not.toHaveBeenCalled();
     expect(mockToast.error).toHaveBeenCalledWith("Please add a Data Source node.");
   });
+
+  it("renders preview warnings when strategy has legacy nodes and connections", () => {
+    mockStoreState = createStoreState({
+      currentStrategy: {
+        id: "strategy-legacy",
+        name: "Legacy Strategy",
+        nodes: [
+          {
+            id: "node-legacy-signal",
+            data: { type: "signal", label: "Buy Signal", config: {} },
+          },
+        ],
+        edges: [{ id: "edge-1", source: "node-a", target: "node-b" }],
+        createdAt: new Date("2026-02-20T00:00:00.000Z"),
+        updatedAt: new Date("2026-02-20T00:00:00.000Z"),
+      },
+    });
+
+    mockBuildStrategyLabRunRequest.mockReturnValue({
+      name: "Legacy Strategy",
+      exchange: "HOSE",
+      symbol: "FPT",
+      strategyType: "sma_crossover",
+      capital: 100000,
+      params: { shortPeriod: 10, longPeriod: 20 },
+    });
+
+    render(<StrategyBuilderPage />);
+
+    expect(
+      screen.getByText(/legacy node\(s\) \(Signal\/Output\) are ignored/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Connections are visual only and do not change execution logic/i)
+    ).toBeInTheDocument();
+  });
 });
