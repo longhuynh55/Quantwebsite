@@ -294,12 +294,15 @@ async function run() {
 
         const assistant = await askAssistant(prompt, { page: "backtesting", symbol: missingSymbol });
         const message = assistant.message.trim();
+        const providerUsed = String(assistant?.meta?.providerUsed ?? "").toLowerCase();
+        const hasBacktestToolFailure = hasToolStatus(assistant.usedTools, "backtestSummary", "error");
+        const hasPolicyGuardrailFallback = providerUsed === "policy";
 
         ensure(message.includes("INSUFFICIENT_DATA"), `unexpected response: ${message}`);
         ensure(!/\d/.test(message), "response should not contain numeric claims");
         ensure(
-          hasToolStatus(assistant.usedTools, "backtestSummary", "error"),
-          "backtestSummary should fail for missing symbol"
+          hasBacktestToolFailure || hasPolicyGuardrailFallback,
+          "expected backtestSummary:error or policy guardrail fallback for missing symbol"
         );
 
         logPass(name, `symbol=${missingSymbol}`);

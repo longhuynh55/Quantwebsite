@@ -1,0 +1,56 @@
+---
+slug: factor-models
+title: 'Factor Models Explained'
+description: 'A research workflow for building, validating, and combining equity factors such as value and momentum.'
+level: advanced
+durationMinutes: 40
+order: 1
+---
+## Overview
+
+A factor is a measurable characteristic that is associated with differences in expected returns across assets. Factor models are used to explain returns, to build systematic portfolios, and to control exposures when evaluating performance.
+
+A factor is not automatically an "edge." A robust factor requires a coherent definition, careful data handling, and validation that accounts for turnover, costs, and regime dependence.
+
+### Learning objectives
+
+- Define what a factor is and how factors are implemented.
+- Build a factor signal and translate it into a portfolio.
+- Evaluate factor performance with proper diagnostics.
+
+### Common equity factors
+
+- Value: inexpensive relative to fundamentals.
+- Momentum: recent winners tend to continue over a horizon.
+- Size: differences between small and large capitalization.
+- Quality: profitability and balance-sheet strength.
+- Low volatility: defensive behavior under risk aversion.
+
+### Building a factor signal
+
+A standard workflow:
+
+- Choose a metric and a rebalance schedule.
+- Clean data (point-in-time alignment, corporate actions, missing values).
+- Normalize and handle extremes (winsorize or clip if appropriate).
+- Rank assets and form quantiles (for example, top 20% vs bottom 20%).
+- Construct an implementable portfolio (weights, constraints, sector controls).
+
+### Validation and diagnostics
+
+- Information coefficient (IC): correlation between signal and subsequent returns.
+- Turnover: how much the portfolio trades when rebalanced.
+- Sector neutrality: whether returns are explained by sector tilts.
+- Cost sensitivity: performance after plausible transaction costs.
+- Regime dependence: behavior in different volatility and trend regimes.
+
+### Multi-factor portfolios
+
+Multi-factor approaches combine several signals to reduce reliance on any single effect. The key is to combine factors that are not redundant and to control unintended exposures such as market beta and sector concentration.
+
+### Checklist
+
+- Is the factor definition precise and point-in-time correct?
+- Is the portfolio implementable under liquidity constraints?
+- Does performance survive costs and turnover?
+- Are results stable across regimes and subperiods?

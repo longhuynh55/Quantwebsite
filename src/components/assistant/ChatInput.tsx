@@ -92,7 +92,7 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
           )}
         </Button>
       </div>
-      <p id={helperId} className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
+      <p id={helperId} className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
         Enter: send | Shift+Enter: new line
       </p>
     </div>

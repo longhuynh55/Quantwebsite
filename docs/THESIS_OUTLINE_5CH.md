@@ -1,13 +1,13 @@
-# Thesis Outline (5 Chapters) - Finance Copilot for Vietnamese Equities
+# Thesis Outline (5 Chapters) - QuantVN Strategy Forge
 
 ## Working Title
-**Design and Evaluation of a Robust Finance Copilot for Quantitative Analysis in the Vietnamese Stock Market**
+**QuantVN Strategy Forge: A Reliability-Gated AI Assistant for Trading Strategy Design and Backtesting on Vietnamese Equities (HOSE)**
 
 ## Chapter 1 - Introduction
 - Problem context: analysts and students need fast and trustworthy insights for HOSE-listed symbols.
 - Research gap: large language models improve usability but can hallucinate numeric financial facts.
 - Objectives:
-  - Build a grounded finance copilot over local market datasets.
+  - Build a grounded AI assistant over local market datasets.
   - Improve robustness under missing data, tool failure, and ambiguous prompts.
   - Evaluate reliability with quantitative metrics.
 - Scope:
@@ -61,16 +61,14 @@
   - Trade-off between strict robustness and response coverage.
 
 ## Chapter 5 - Conclusion and Future Work
-- Conclusion:
-  - Summarize whether the system meets reliability objectives.
-  - Report practical readiness for thesis demonstration.
-- Limitations:
-  - Dataset freshness and coverage constraints.
-  - Provider variability and prompt sensitivity.
-- Future work:
-  - Expand financial endpoint coverage and benchmark datasets.
-  - Add stronger CI/CD gates and nightly regression suites.
-  - Introduce calibration metrics and confidence auditing.
+- **Summary**
+- The sequential remediation tracker (`quant-website/docs/SEQUENTIAL_REMEDIATION_TRACKER_2026-02-19.md`) keeps the multi-stage rollout honest: CI/data gates (Stage 1) now hook into workflow artifacts, assistant trust/policy metadata surfaced end-to-end, and the API/health story has clear non-OK semantics backed by documented health probe contracts. Together with the architecture notes on rate limiting and assistant signals (see `quant-website/docs/ARCHITECTURE.md`), the effort shows that the assistant and API can expose grounded diagnostics while staying interoperable with the data plane coverage described in `quant-website/docs/api-period-date-test-matrix.md`.
+- **Limitations**
+- Fairness and scalability of rate limiting remain incomplete: the current limiter is still single-process/in-memory (`src/lib/rateLimit.ts`), and the Sequential Remediation Tracker marks Stage 2 incomplete because tenant-aware quotas and probe throttling have not yet landed. Probe traffic bypasses rate limits today (`quant-website/docs/SEQUENTIAL_REMEDIATION_TRACKER_2026-02-19.md` Stage 3 status), so bursty clients can still upset the readiness budget. Dataset freshness, provider drift, and assistant prompt sensitivity also persist despite the specs in `quant-website/docs/ASSISTANT_EVAL_CRITERIA.md`, which highlights the adversarial/evidence requirements we need to keep validating.
+- **Future roadmap**
+1. **Redis-backed rate limiting** – migrate the limiter described in `quant-website/docs/ARCHITECTURE.md#Redis-for-Rate-Limiting` out of the in-memory counter so that distributed deployments share quotas, can honor tenant fingerprints, and issue `Retry-After` budgets for the health probe (`quant-website/docs/SEQUENTIAL_REMEDIATION_TRACKER_2026-02-19.md` Stage 3). Redis also unlocks centralized audit trails for `x-assistant-eval` and API clients that now use the expanded rate-limit headers in `quant-website/docs/API.md`.
+2. **Strategy Lab persistence (DB backend)** – implement the Postgres schema and job workflow outlined in `quant-website/docs/STRATEGY_LAB_BACKEND_TECH_DESIGN.md`, reuse the `Strategy Lab Frontend UX Architecture` insights for pagination/UX state, and surface the same run/event metadata back through `/api/strategy-lab` so that experiments survive worker restarts and can be replayed in audit-friendly ways.
+3. **Richer evaluation suites** – extend the API period/date test matrix (`quant-website/docs/api-period-date-test-matrix.md`) with nightly runs that sweep new symbols/dates, and couple those numeric benchmarks with the assistant evaluation rubric (`quant-website/docs/ASSISTANT_EVAL_CRITERIA.md`) so future regressions capture unsupported claims, grounding failures, and adversarial prompts. These suites will feed new CI gates and smoke reports, matching the QA/observability plans in `quant-website/docs/PERF_RELIABILITY_SOP_V2_PLAN.md` and `quant-website/docs/OBSERVABILITY_SLO.md`.
 
 ## Core Metrics (Primary Thesis Gate)
 1. `unsupportedClaimRate` (lower is better)

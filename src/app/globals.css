@@ -71,6 +71,26 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 
+  /* Professional Desktop Shadows */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+  --shadow-dropdown: 0 10px 40px -10px rgb(0 0 0 / 0.15);
+  --shadow-tooltip: 0 8px 24px -4px rgb(0 0 0 / 0.12);
+  --shadow-float: 0 12px 32px -8px rgb(0 0 0 / 0.14);
+
+  /* Glass Morphism */
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-bg-dark: rgba(15, 23, 42, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-border-dark: rgba(255, 255, 255, 0.1);
+  --glass-blur: 12px;
+
+  /* Desktop Layout */
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 80px;
+  --header-height: 64px;
+  --content-max-width: 1600px;
+
   /* Border Radius */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -349,6 +369,17 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Disable specific animations */
+  .sparkline-path,
+  .sparkline-area,
+  .sparkline-dot {
+    animation: none !important;
+  }
+
+  .status-live::before {
+    animation: none !important;
+  }
 }
 
 /* Number Styling for Financial Data */
@@ -392,7 +423,262 @@ html {
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* Animations */
+/* ============================================
+   Desktop-Only Styles (1280px+)
+   ============================================ */
+@media (min-width: 1280px) {
+  /* Sidebar Desktop */
+  .sidebar-desktop {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+  }
+
+  .sidebar-desktop.collapsed {
+    width: var(--sidebar-collapsed-width);
+    min-width: var(--sidebar-collapsed-width);
+  }
+
+  /* Main Content Desktop */
+  .main-content-desktop {
+    padding: 2rem 3rem;
+    max-width: var(--content-max-width);
+    margin: 0 auto;
+  }
+
+  /* Professional Cards Desktop */
+  .card-pro {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-pro:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  /* Enhanced Table Desktop */
+  .table-pro {
+    font-size: 0.875rem;
+  }
+
+  .table-pro th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--gray-50);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Hero Metrics */
+  .metric-hero {
+    padding: 2rem;
+  }
+
+  .metric-hero .metric-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+  }
+
+  /* Chart Container Desktop */
+  .chart-container-pro {
+    padding: 1.5rem;
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+  }
+
+  .chart-container-pro:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  /* Sidebar Status Section */
+  .sidebar-status {
+    padding: 1rem;
+    margin: 0.5rem;
+    border-radius: var(--radius-lg);
+    background: var(--gray-50);
+  }
+
+  /* Wider Tooltips for Collapsed Sidebar */
+  .sidebar-tooltip {
+    max-width: 200px;
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* ============================================
+   Crosshair Cursor for Charts
+   ============================================ */
+.chart-crosshair {
+  cursor: crosshair;
+}
+
+.chart-crosshair-vertical {
+  stroke: var(--gray-400);
+  stroke-dasharray: 4 4;
+  opacity: 0.6;
+}
+
+.chart-crosshair-horizontal {
+  stroke: var(--gray-400);
+  stroke-dasharray: 4 4;
+  opacity: 0.6;
+}
+
+.chart-brush-selection {
+  fill: var(--primary-100);
+  fill-opacity: 0.3;
+  stroke: var(--primary-400);
+}
+
+/* ============================================
+   Glass Morphism Components
+   ============================================ */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-tooltip);
+}
+
+.dark .glass-panel {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+}
+
+.glass-tooltip {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dropdown);
+  padding: 0.75rem 1rem;
+}
+
+.dark .glass-tooltip {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+}
+
+/* ============================================
+   Status Indicators
+   ============================================ */
+.status-live {
+  position: relative;
+}
+
+.status-live::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: var(--success-500);
+  border-radius: 50%;
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.status-stale::before {
+  background: var(--warning-500);
+  animation: pulse-stale 3s ease-in-out infinite;
+}
+
+.status-error::before {
+  background: var(--danger-500);
+  animation: none;
+}
+
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(1.2);
+    box-shadow: 0 0 8px var(--success-500);
+  }
+}
+
+@keyframes pulse-stale {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Sparkline Animation
+   ============================================ */
+.sparkline-path {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: sparkline-draw 1s ease-out forwards;
+}
+
+@keyframes sparkline-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.sparkline-area {
+  opacity: 0;
+  animation: sparkline-fade 0.5s ease-out 0.5s forwards;
+}
+
+@keyframes sparkline-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+.sparkline-dot {
+  opacity: 0;
+  animation: sparkline-dot-appear 0.3s ease-out forwards;
+}
+
+@keyframes sparkline-dot-appear {
+  to {
+    opacity: 1;
+  }
+}
+
+.sparkline-dot-last {
+  animation-delay: 0.8s;
+}
+
+/* ============================================
+   Progress Bar Animation
+   ============================================ */
+.progress-bar-animated {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 2s infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -529,4 +815,245 @@ html {
 
 .duration-300 {
   animation-duration: 300ms;
+}
+
+/* ============================================
+   MDX Academic Formatting (Learn)
+   ============================================ */
+.mdx-heading-anchor {
+  color: inherit;
+  text-decoration: none;
+}
+
+.prose .mdx-heading-anchor:hover {
+  text-decoration: none;
+}
+
+.prose .mdx-heading-anchor::after {
+  content: " #";
+  opacity: 0;
+  margin-left: 0.25rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.prose h2:hover .mdx-heading-anchor::after,
+.prose h3:hover .mdx-heading-anchor::after {
+  opacity: 1;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.prose table th,
+.prose table td {
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+}
+
+.dark .prose table th,
+.dark .prose table td {
+  border-color: var(--gray-700);
+}
+
+.prose table th {
+  background: var(--muted-bg);
+  font-weight: 600;
+}
+
+.prose .katex-display {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.prose .footnotes {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-200);
+  color: var(--muted);
+}
+
+.dark .prose .footnotes {
+  border-top-color: var(--gray-700);
+}
+
+/* rehype-pretty-code */
+pre[data-theme] {
+  border: 1px solid var(--gray-200);
+}
+
+.dark pre[data-theme] {
+  border-color: var(--gray-700);
+}
+
+/* ============================================
+   Performance Optimizations
+   ============================================ */
+
+/* Improve rendering performance with CSS containment */
+.table-pro {
+  contain: layout paint;
+}
+
+.chart-container-pro {
+  contain: layout paint style;
+}
+
+.sidebar-desktop {
+  contain: layout;
+}
+
+/* Hardware accelerate animations */
+.sparkline-path,
+.status-live::before {
+  will-change: transform, opacity;
+}
+
+/* ============================================
+   Utility Classes (to reduce inline styles)
+   ============================================ */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.flex-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+
+.absolute-fill {
+  position: absolute;
+  inset: 0;
+}
+
+.relative { position: relative; }
+.absolute { position: absolute; }
+.fixed { position: fixed; }
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.text-lg { font-size: 1.125rem; }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================
+   React Flow Custom Styles (Strategy Builder)
+   ============================================ */
+.react-flow__node {
+  cursor: grab;
+}
+
+.react-flow__node:active {
+  cursor: grabbing;
+}
+
+.react-flow__handle {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.animated path {
+  stroke-dasharray: 5;
+  animation: dashdraw 0.5s linear infinite;
+}
+
+@keyframes dashdraw {
+  from {
+    stroke-dashoffset: 10;
+  }
+}
+
+.react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.dark .react-flow__controls-button {
+  border-bottom-color: var(--gray-700);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__minimap {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Dark mode adjustments for React Flow */
+.dark .react-flow__background {
+  background-color: #020617;
+}
+
+.dark .react-flow__edge-path {
+  stroke: #64748b;
+}
+
+.dark .react-flow__connection-line {
+  stroke: #64748b;
+}
+
+/* Selection box */
+.react-flow__selection {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px dashed rgba(59, 130, 246, 0.5);
+}
+
+.dark .react-flow__selection {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
 }

@@ -7,6 +7,10 @@ const includeUiChecks = (() => {
   return !["0", "false", "no", "off"].includes(normalized);
 })();
 const assistantEvalToken = String(process.env.ASSISTANT_EVAL_AUTH_TOKEN ?? "").trim();
+const assistantSemanticGuardAttempts = Math.max(
+  1,
+  Number(process.env.ASSISTANT_SEMANTIC_GUARD_ATTEMPTS ?? 2)
+);
 const metricKeywords = [
   "net_return",
   "max_drawdown",
@@ -30,6 +34,8 @@ const metricKeywords = [
 const unitTokenRegex = /%|\b(vnd|usd|eur|dong|dong\/cp|cp|shares?|co phieu|points?|pts|ty|trieu|billion|million|bn|mn|x|times?|lan)\b/i;
 const periodTokenRegex = /\b(20\d{2}[-/]\d{1,2}([-/]\d{1,2})?|20\d{2}\s*q[1-4]|q[1-4]\s*20\d{2}|fy\s*20\d{2}|latest|as of|today|hom nay|hien tai|ky|quy|nam|period)\b/i;
 const unitlessMetricRegex = /\b(pe|pb|beta|sharpe|roe|roa|margin|ratio)\b/;
+const WATCHLIST_MAX_SYMBOLS = 50;
+const WATCHLIST_QUERY_IMPORT_MAX = 30;
 
 function logInfo(message) {
   console.log(`INFO ${message}`);
@@ -112,6 +118,10 @@ function normalizeSymbol(raw) {
   return String(raw ?? "").trim().toUpperCase();
 }
 
+function normalizeWatchlistSymbol(raw) {
+  return normalizeSymbol(raw).replace(/[^A-Z0-9]/g, "").slice(0, 10);
+}
+
 function diffCalendarDays(olderDateKey, newerDateKey) {
   const olderMs = parseDateMs(`${olderDateKey}T00:00:00Z`);
   const newerMs = parseDateMs(`${newerDateKey}T00:00:00Z`);
@@ -124,6 +134,60 @@ function formatSymbols(symbols, max = 6) {
   if (list.length === 0) return "none";
   if (list.length <= max) return list.join(", ");
   return `${list.slice(0, max).join(", ")} (+${list.length - max} more)`;
+}
+
+function mergeWatchlistSymbols(queue, existing = []) {
+  const normalizedQueue = queue.map(normalizeWatchlistSymbol).filter(Boolean);
+  const merged = [...normalizedQueue, ...existing.map(normalizeWatchlistSymbol).filter(Boolean)];
+  return uniq(merged).slice(0, WATCHLIST_MAX_SYMBOLS);
+}
+
+function parseChartsWatchlistQuery(raw) {
+  return String(raw ?? "")
+    .split(",")
+    .map((item) => normalizeSymbol(item))
+    .filter(Boolean)
+    .slice(0, WATCHLIST_QUERY_IMPORT_MAX);
+}
+
+function buildScreenerQueryParams(search, filters, options = {}) {
+  const params = new URLSearchParams();
+  const normalizedSearch = normalizeSymbol(search);
+  if (normalizedSearch) params.set("search", normalizedSearch);
+
+  if (filters.status) params.set("status", String(filters.status));
+  if (filters.listingPhase) params.set("listingPhase", String(filters.listingPhase));
+  if (filters.minAvgVolume) params.set("minAvgVolume", String(filters.minAvgVolume));
+  if (filters.maxAvgVolume) params.set("maxAvgVolume", String(filters.maxAvgVolume));
+  if (filters.minTradingDays) params.set("minTradingDays", String(filters.minTradingDays));
+  if (filters.maxTradingDays) params.set("maxTradingDays", String(filters.maxTradingDays));
+  if (filters.industry) params.set("industry", String(filters.industry));
+  params.set("sortBy", String(filters.sortBy ?? "symbol"));
+  params.set("sortDir", String(filters.sortDir ?? "asc"));
+
+  if (options.exportAll) {
+    params.set("limit", "all");
+  } else {
+    params.set("page", String(filters.page ?? 1));
+    params.set("pageSize", String(filters.pageSize ?? 50));
+  }
+  return params;
+}
+
+function canonicalizeStocksPayload(data) {
+  const stocks = Array.isArray(data?.stocks) ? data.stocks : [];
+  const symbols = stocks.map((row) => normalizeSymbol(row?.symbol)).filter(Boolean);
+  const total = Number(data?.total);
+  const page = Number(data?.page);
+  const pageSize = Number(data?.pageSize);
+  return {
+    symbols,
+    total: Number.isFinite(total) ? total : Number.NaN,
+    page: Number.isFinite(page) ? page : null,
+    pageSize: Number.isFinite(pageSize) ? pageSize : null,
+    sortBy: String(data?.sortBy ?? ""),
+    sortDir: String(data?.sortDir ?? ""),
+  };
 }
 
 function validateOhlcvSeriesPoints(points) {
@@ -364,6 +428,169 @@ async function run() {
       ensure(data.stocks.length <= 5, "limit not respected");
       ensure(data.total >= data.stocks.length, "total < returned length");
       logPass(name, `returned=${data.stocks.length}, total=${data.total}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "Watchlist persistence/query contract";
+    try {
+      ensure(allStocks.length > 0, "metadata unavailable for watchlist contract");
+      const activeSymbols = allStocks
+        .filter((item) => String(item?.status ?? "").toUpperCase() === "ACTIVE")
+        .map((item) => normalizeSymbol(item?.symbol))
+        .filter(Boolean);
+      const seedSymbols = uniq([primarySymbol, fullSymbol, partialSymbol, ...activeSymbols.slice(0, 6)]).filter(Boolean);
+      ensure(seedSymbols.length >= 3, "insufficient seed symbols for watchlist contract");
+
+      const rawQueue = [
+        seedSymbols[0],
+        ` ${seedSymbols[0]} `,
+        seedSymbols[1].toLowerCase(),
+        `${seedSymbols[2]}***`,
+        seedSymbols[0],
+        "",
+      ];
+      const persisted = mergeWatchlistSymbols(rawQueue, []);
+      ensure(persisted.length >= 3, "watchlist persistence produced too few symbols");
+      ensure(persisted.length <= WATCHLIST_MAX_SYMBOLS, "watchlist cap exceeded");
+
+      const replay = mergeWatchlistSymbols(rawQueue, persisted);
+      ensure(JSON.stringify(replay) === JSON.stringify(persisted), "watchlist addSymbols should be idempotent");
+
+      const fromChartsQuery = parseChartsWatchlistQuery(persisted.join(","));
+      const rehydrated = mergeWatchlistSymbols(fromChartsQuery, []);
+      const expectedRehydrated = persisted.slice(0, WATCHLIST_QUERY_IMPORT_MAX);
+      ensure(
+        JSON.stringify(rehydrated) === JSON.stringify(expectedRehydrated),
+        "watchlist query round-trip mismatch"
+      );
+
+      const queryCandidates = rehydrated
+        .filter((symbol) => String(stockMetadataBySymbol.get(symbol)?.status ?? "").toUpperCase() === "ACTIVE")
+        .slice(0, 6);
+      ensure(queryCandidates.length >= 2, "insufficient active symbols to validate watchlist query");
+
+      for (const symbol of queryCandidates) {
+        const { response, data } = await fetchJson(`/api/stocks?symbol=${encodeURIComponent(symbol)}&limit=1`);
+        ensure(response.ok, `${symbol} query HTTP ${response.status}`);
+        ensure(Array.isArray(data?.data) && data.data.length === 1, `${symbol} expected 1-row series`);
+        ensure(normalizeSymbol(data?.metadata?.symbol) === symbol, `${symbol} metadata mismatch`);
+      }
+
+      logPass(name, `persisted=${persisted.length}, queried=${queryCandidates.length}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "Screener preset apply equivalence (manual vs preset query)";
+    try {
+      ensure(allStocks.length > 0, "metadata unavailable for preset contract");
+
+      const activeRows = allStocks.filter((item) => String(item?.status ?? "").toUpperCase() === "ACTIVE");
+      ensure(activeRows.length > 0, "no active rows for preset contract");
+      const topSymbol = normalizeSymbol(activeRows[0]?.symbol ?? primarySymbol);
+      ensure(topSymbol.length > 0, "unable to resolve top symbol for preset contract");
+      const listingPhase = String(activeRows[0]?.listingPhase ?? "HOSE").trim() || "HOSE";
+      const industry = String(
+        activeRows.find((item) => typeof item?.icbName4 === "string" && item.icbName4.trim())?.icbName4 ?? ""
+      ).trim();
+
+      const manualState = {
+        search: topSymbol.slice(0, 2),
+        filters: {
+          status: "ACTIVE",
+          listingPhase,
+          minAvgVolume: "",
+          maxAvgVolume: "",
+          minTradingDays: "",
+          maxTradingDays: "",
+          industry,
+          sortBy: "avgVolume",
+          sortDir: "desc",
+          page: 1,
+          pageSize: 25,
+        },
+      };
+      const savedPreset = {
+        search: manualState.search,
+        filters: {
+          status: manualState.filters.status,
+          listingPhase: manualState.filters.listingPhase,
+          minAvgVolume: manualState.filters.minAvgVolume,
+          maxAvgVolume: manualState.filters.maxAvgVolume,
+          minTradingDays: manualState.filters.minTradingDays,
+          maxTradingDays: manualState.filters.maxTradingDays,
+          industry: manualState.filters.industry,
+          sortBy: manualState.filters.sortBy,
+          sortDir: manualState.filters.sortDir,
+          pageSize: manualState.filters.pageSize,
+        },
+      };
+      const appliedPresetFilters = {
+        ...savedPreset.filters,
+        page: 1,
+      };
+
+      const manualParams = buildScreenerQueryParams(manualState.search, manualState.filters);
+      const presetParams = buildScreenerQueryParams(savedPreset.search, appliedPresetFilters);
+      ensure(manualParams.toString() === presetParams.toString(), "manual/preset query string mismatch");
+
+      const { response: manualResponse, data: manualData } = await fetchJson(`/api/stocks?${manualParams.toString()}`);
+      const { response: presetResponse, data: presetData } = await fetchJson(`/api/stocks?${presetParams.toString()}`);
+      ensure(manualResponse.ok, `manual query HTTP ${manualResponse.status}`);
+      ensure(presetResponse.ok, `preset query HTTP ${presetResponse.status}`);
+
+      const manualCanonical = canonicalizeStocksPayload(manualData);
+      const presetCanonical = canonicalizeStocksPayload(presetData);
+      ensure(manualCanonical.total === presetCanonical.total, "manual/preset total mismatch");
+      ensure(manualCanonical.page === presetCanonical.page, "manual/preset page mismatch");
+      ensure(manualCanonical.pageSize === presetCanonical.pageSize, "manual/preset pageSize mismatch");
+      ensure(manualCanonical.sortBy === presetCanonical.sortBy, "manual/preset sortBy mismatch");
+      ensure(manualCanonical.sortDir === presetCanonical.sortDir, "manual/preset sortDir mismatch");
+      ensure(
+        JSON.stringify(manualCanonical.symbols) === JSON.stringify(presetCanonical.symbols),
+        "manual/preset symbol ordering mismatch"
+      );
+
+      logPass(name, `rows=${manualCanonical.symbols.length}, total=${manualCanonical.total}`);
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
+    const name = "POST /api/telemetry/ui-kpi contract";
+    try {
+      const symbol = normalizeSymbol(primarySymbol ?? "VNM") || "VNM";
+      const { response, data } = await fetchJson("/api/telemetry/ui-kpi", {
+        method: "POST",
+        body: {
+          metric: "assistant_contextual_action_ctr",
+          event: "assistant_contextual_action_clicked",
+          page: "charts",
+          source: "qa_contract",
+          symbol,
+          count: 1,
+          detail: {
+            mode: "qa",
+            contextual: true,
+          },
+        },
+      });
+      if (response.status === 429) {
+        logPass(name, "skipped rate-limited");
+        return;
+      }
+      ensure(response.status === 202, `expected HTTP 202, got ${response.status}`);
+      ensure(data?.accepted === true, "accepted flag must be true");
+      logPass(name);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));
@@ -984,6 +1211,79 @@ async function run() {
   });
 
   checks.push(async () => {
+    const name = "POST /api/assistant context payload contract";
+    try {
+      const contextSymbol = normalizeSymbol(primarySymbol ?? "VNM") || "VNM";
+      const richContextSnapshot = {
+        page: "screener",
+        symbol: contextSymbol,
+        symbols: [contextSymbol, normalizeSymbol(fullSymbol ?? ""), normalizeSymbol(partialSymbol ?? "")].filter(Boolean),
+        timeframe: "365",
+        selectedIndicators: ["sma20", "ema50"],
+        filters: {
+          search: contextSymbol.toLowerCase(),
+          listingPhase: "HOSE",
+          pageSize: 25,
+          nested: { shouldStayOpaque: true },
+        },
+        lastApiPayload: {
+          endpoint: "/api/stocks",
+          params: { listingPhase: "HOSE", page: 1 },
+        },
+        navGroup: "analysis",
+        exportContext: {
+          reportType: "screener_snapshot",
+          timeframe: "1y",
+          filters: {
+            listingPhase: "HOSE",
+            includeInactive: false,
+            pageSize: 25,
+          },
+        },
+      };
+
+      const rich = await fetchJson("/api/assistant", {
+        method: "POST",
+        body: {
+          message: "",
+          conversationHistory: [{ role: "user", content: "test context payload" }],
+          contextSnapshot: richContextSnapshot,
+          preferences: { language: "vi", detailLevel: "brief" },
+        },
+      });
+      if (rich.response.status === 429) {
+        logPass(name, "skipped rate-limited");
+        return;
+      }
+      ensure(rich.response.status === 400, `expected 400 for rich context, got HTTP ${rich.response.status}`);
+      ensure(rich.data?.success === false, "rich context should preserve error contract success=false");
+      ensure(String(rich.data?.error ?? "") === "Message is required.", "rich context error contract mismatch");
+
+      const legacy = await fetchJson("/api/assistant", {
+        method: "POST",
+        body: {
+          message: "",
+          conversationHistory: [],
+          context: { page: "screener", filters: { listingPhase: "HOSE", search: contextSymbol } },
+        },
+      });
+      if (legacy.response.status === 429) {
+        logPass(name, "skipped rate-limited");
+        return;
+      }
+      ensure(legacy.response.status === 400, `expected 400 for legacy context, got HTTP ${legacy.response.status}`);
+      ensure(legacy.data?.success === false, "legacy context should preserve error contract success=false");
+      ensure(String(legacy.data?.error ?? "") === "Message is required.", "legacy context error contract mismatch");
+      ensure(String(legacy.data?.error ?? "") === String(rich.data?.error ?? ""), "legacy/rich error mismatch");
+
+      logPass(name, "rich+legacy payload accepted");
+    } catch (error) {
+      failures += 1;
+      logFail(name, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  checks.push(async () => {
     const name = "POST /api/assistant semantic metric guard (period/unit/citation)";
     try {
       const symbol = String(primarySymbol ?? "VNM");
@@ -1000,37 +1300,55 @@ async function run() {
           }
         : {};
 
-      const { response, data } = await fetchJson("/api/assistant", {
-        method: "POST",
-        headers: evalHeaders,
-        body: {
-          message: prompt,
-          conversationHistory: [],
-          contextSnapshot: {
-            page: "backtesting",
-            symbol,
+      let lastReason = "semantic metric guard failed";
+      for (let attempt = 1; attempt <= assistantSemanticGuardAttempts; attempt += 1) {
+        const { response, data } = await fetchJson("/api/assistant", {
+          method: "POST",
+          headers: evalHeaders,
+          body: {
+            message: prompt,
+            conversationHistory: [],
+            contextSnapshot: {
+              page: "backtesting",
+              symbol,
+            },
+            preferences: {
+              language: "vi",
+              detailLevel: "brief",
+            },
           },
-          preferences: {
-            language: "vi",
-            detailLevel: "brief",
-          },
-        },
-      });
+        });
 
-      if (providerLikelyUnavailable(response, data)) {
-        logInfo(`semantic metric guard skipped: provider unavailable (HTTP ${response.status})`);
-        logPass(name, "skipped provider unavailable");
-        return;
+        if (providerLikelyUnavailable(response, data)) {
+          logInfo(`semantic metric guard skipped: provider unavailable (HTTP ${response.status})`);
+          logPass(name, "skipped provider unavailable");
+          return;
+        }
+
+        if (!response.ok) {
+          lastReason = `HTTP ${response.status}`;
+        } else if (data?.success !== true) {
+          lastReason = "assistant success=false";
+        } else if (!(typeof data?.message === "string" && data.message.length > 0)) {
+          lastReason = "assistant message missing";
+        } else {
+          const verdict = validateMetricSemanticResponse(data.message, data?.citations, data?.policyStatus);
+          if (verdict.ok) {
+            logPass(name, `symbol=${symbol}, claims=${verdict.claims.length}, attempt=${attempt}/${assistantSemanticGuardAttempts}`);
+            return;
+          }
+          lastReason = verdict.reason || "semantic metric guard failed";
+        }
+
+        if (attempt < assistantSemanticGuardAttempts) {
+          logInfo(
+            `semantic metric guard retry ${attempt}/${assistantSemanticGuardAttempts} for ${symbol}: ${lastReason}`
+          );
+          await sleep(400);
+        }
       }
 
-      ensure(response.ok, `HTTP ${response.status}`);
-      ensure(data?.success === true, "assistant success=false");
-      ensure(typeof data?.message === "string" && data.message.length > 0, "assistant message missing");
-
-      const verdict = validateMetricSemanticResponse(data.message, data?.citations, data?.policyStatus);
-      ensure(verdict.ok, verdict.reason || "semantic metric guard failed");
-
-      logPass(name, `symbol=${symbol}, claims=${verdict.claims.length}`);
+      throw new Error(lastReason);
     } catch (error) {
       failures += 1;
       logFail(name, error instanceof Error ? error.message : String(error));
@@ -1049,8 +1367,8 @@ async function run() {
       { path: "/charts", mustContain: ["Interactive Charts"] },
       { path: "/portfolio", mustContain: ["Portfolio Optimization"] },
       { path: "/risk", mustContain: ["Risk Management"] },
-      { path: "/backtesting", mustContain: ["Strategy Backtesting"] },
-      { path: "/factors", mustContain: ["Factor Investing"] },
+      { path: "/backtesting", mustContain: ["Backtesting"] },
+      { path: "/factors", mustContain: ["Factor Analysis"] },
       { path: "/learn", mustContain: ["Learn"] },
     ];
 

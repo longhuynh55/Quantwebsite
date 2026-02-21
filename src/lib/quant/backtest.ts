@@ -39,6 +39,7 @@ export interface BacktestConfig {
 }
 
 export interface Trade {
+  symbol?: string;
   entryDate: Date;
   exitDate: Date;
   entryPrice: number;
@@ -623,6 +624,7 @@ export function runBacktest(
   let daysInPosition = 0;
 
   let position: {
+    symbol: string;
     shares: number;
     entryDate: Date;
     entryPrice: number;
@@ -647,6 +649,7 @@ export function runBacktest(
     totalTurnover += entryGrossNotional;
 
     position = {
+      symbol: cleanedData[index].symbol,
       shares,
       entryDate: cleanedData[index].date,
       entryPrice: executionPrice,
@@ -670,6 +673,7 @@ export function runBacktest(
     totalTurnover += exitGrossNotional;
 
     trades.push({
+      symbol: position.symbol,
       entryDate: position.entryDate,
       exitDate: cleanedData[index].date,
       entryPrice: position.entryPrice,

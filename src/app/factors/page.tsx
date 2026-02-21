@@ -15,11 +15,14 @@ import {
   TabsContent,
   Skeleton,
   ErrorState,
-  NoResultsState,
+  DataTable,
+  TickerMenu,
+  PageTransition,
 } from "@/components/ui";
 import { showSuccess, showError } from "@/components/ui/toast";
 import { BarChart } from "@/components/charts";
-import { TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart3, ArrowRight, Activity, Zap, Shield, Search, BookOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface FactorExposure {
   symbol: string;
@@ -91,172 +94,267 @@ export default function FactorsPage() {
   const getFactorValue = (stock: FactorExposure): number => stock[selectedFactor];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Factor Investing</h1>
-        <p className="text-gray-600 dark:text-gray-400">Analyze stocks through factor lenses: momentum, value, volatility, and size</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        {FACTORS.map((factor) => (
-          <Card key={factor.value} className={`cursor-pointer transition-all ${selectedFactor === factor.value ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20" : "hover:shadow-md"}`} onClick={() => setSelectedFactor(factor.value)}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2"><BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" /><h3 className="font-semibold text-gray-900 dark:text-white">{factor.label}</h3></div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{factor.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Error State */}
-      {error && !loading && (
-        <ErrorState
-          message="Failed to load factor data"
-          description={error}
-          className="mb-6"
-        />
-      )}
-
-      <Tabs defaultValue="rankings">
-        <TabsList className="mb-6">
-          <TabsTrigger value="rankings">Stock Rankings</TabsTrigger>
-          <TabsTrigger value="explanation">How It Works</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="rankings">
-          {/* Loading State */}
-          {loading ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <Skeleton className="h-6 w-48" />
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <Skeleton key={i} className="h-10 w-full" />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <Skeleton className="h-6 w-48" />
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <Skeleton key={i} className="h-10 w-full" />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-600" />Top {currentFactor?.label} Stocks</CardTitle>
-                  <CardDescription>Highest factor exposure scores</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {topStocks.length === 0 ? (
-                    <NoResultsState
-                      title="No stocks found"
-                      description="No stocks match the current factor criteria"
-                      className="py-8"
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      {topStocks.slice(0, 10).map((stock, i) => (
-                        <div key={stock.symbol} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                          <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center text-sm font-bold">{i + 1}</span>
-                            <Link href={`/charts?symbol=${stock.symbol}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{stock.symbol}</Link>
-                          </div>
-                          <Badge variant="success">{getFactorValue(stock).toFixed(2)}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><TrendingDown className="w-5 h-5 text-red-600" />Lowest {currentFactor?.label} Stocks</CardTitle>
-                  <CardDescription>Lowest factor exposure scores</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {bottomStocks.length === 0 ? (
-                    <NoResultsState
-                      title="No stocks found"
-                      description="No stocks match the current factor criteria"
-                      className="py-8"
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      {bottomStocks.slice(0, 10).map((stock, i) => (
-                        <div key={stock.symbol} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                          <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center text-sm font-bold">{i + 1}</span>
-                            <Link href={`/charts?symbol=${stock.symbol}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{stock.symbol}</Link>
-                          </div>
-                          <Badge variant="destructive">{getFactorValue(stock).toFixed(2)}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>{currentFactor?.label} Distribution</CardTitle>
-              <CardDescription>Top stocks by factor score</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <Skeleton className="h-[250px] w-full" />
-              ) : (
-                <BarChart data={topStocks.slice(0, 10).map((s) => ({ name: s.symbol, value: getFactorValue(s) }))} height={250} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="explanation">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader><CardTitle>What is Factor Investing?</CardTitle></CardHeader>
-              <CardContent className="prose prose-sm dark:prose-invert">
-                <p className="text-gray-600 dark:text-gray-400">Factor investing targets specific drivers of return across asset classes. These factors explain differences in stock returns.</p>
-                <h4 className="font-semibold mt-4 text-gray-900 dark:text-white">Key Factors:</h4>
-                <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
-                  <li><strong>Momentum:</strong> Stocks that performed well tend to continue</li>
-                  <li><strong>Value:</strong> Stocks trading below intrinsic value tend to outperform</li>
-                  <li><strong>Low Volatility:</strong> Lower-risk stocks often provide better risk-adjusted returns</li>
-                  <li><strong>Size:</strong> Smaller companies often outperform larger ones</li>
-                </ul>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>How We Calculate Factors</CardTitle></CardHeader>
-              <CardContent className="prose prose-sm dark:prose-invert">
-                <p className="text-gray-600 dark:text-gray-400">Our factor calculations are adapted for the Vietnamese market:</p>
-                <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
-                  <li><strong>Momentum:</strong> 12-1 month price change</li>
-                  <li><strong>Value:</strong> Price relative to 200-day SMA</li>
-                  <li><strong>Volatility:</strong> Inverse of 63-day realized volatility</li>
-                  <li><strong>Size:</strong> Log of average volume</li>
-                </ul>
-              </CardContent>
-            </Card>
+    <PageTransition variant="slideUp">
+      <div className="max-w-full space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Factor Analytics</h1>
+            <p className="text-sm text-gray-500 dark:text-slate-400">Quantitative analysis of market drivers and equity anomalies</p>
           </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 font-bold px-3 py-1">
+              HOSE Coverage: 500+ Symbols
+            </Badge>
+          </div>
+        </div>
+
+        {/* Factor Selection Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {FACTORS.map((factor) => {
+            const isSelected = selectedFactor === factor.value;
+            return (
+              <Card 
+                key={factor.value} 
+                className={cn(
+                  "cursor-pointer transition-all duration-300 border-gray-100 dark:border-slate-800 rounded-2xl group",
+                  isSelected 
+                    ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-md translate-y-[-2px]" 
+                    : "hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:shadow-sm"
+                )} 
+                onClick={() => setSelectedFactor(factor.value)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                      isSelected ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-slate-800 text-gray-500 group-hover:bg-gray-200 dark:group-hover:bg-slate-700"
+                    )}>
+                      {factor.value === 'momentum' && <Zap className="w-5 h-5" />}
+                      {factor.value === 'value' && <BarChart3 className="w-5 h-5" />}
+                      {factor.value === 'volatility' && <Shield className="w-5 h-5" />}
+                      {factor.value === 'size' && <Activity className="w-5 h-5" />}
+                    </div>
+                    {isSelected && (
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                    )}
+                  </div>
+                  <h3 className={cn("font-bold text-sm mb-1", isSelected ? "text-blue-600 dark:text-blue-400" : "text-gray-900 dark:text-slate-100")}>
+                    {factor.label}
+                  </h3>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-500 leading-relaxed uppercase font-bold tracking-tight">
+                    {factor.description}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Error State */}
+        {error && !loading && (
+          <ErrorState message="Failed to load factor data" description={error} />
+        )}
+
+        <div className="space-y-6">
+          <Tabs defaultValue="rankings" className="w-full">
+            <div className="flex items-center justify-between mb-4 bg-gray-50/50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800">
+              <TabsList className="bg-transparent border-none">
+                <TabsTrigger value="rankings" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold px-6">
+                  Equity Rankings
+                </TabsTrigger>
+                <TabsTrigger value="distribution" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold px-6">
+                  Distribution Analysis
+                </TabsTrigger>
+                <TabsTrigger value="theory" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold px-6">
+                  Methodology
+                </TabsTrigger>
+              </TabsList>
+              <div className="hidden md:flex items-center gap-2 pr-2">
+                <Search className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Factor: {currentFactor?.label}</span>
+              </div>
+            </div>
+
+            <TabsContent value="rankings" className="mt-0">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Exposure Table */}
+                <Card className="rounded-2xl overflow-hidden border-gray-100 dark:border-slate-800">
+                  <CardHeader className="pb-4 bg-gray-50/30 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">
+                          <TrendingUp className="w-3.5 h-3.5 mr-2 text-emerald-500" />
+                          High {currentFactor?.label} Exposure
+                        </CardTitle>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-700 border-emerald-100">Top 50</Badge>
+                    </div>
+                  </CardHeader>
+                  <DataTable
+                    data={topStocks}
+                    isLoading={loading}
+                    columns={[
+                      {
+                        header: "Rank",
+                        accessorKey: "rank",
+                        cell: (s) => (
+                          <span className="text-[10px] font-bold text-gray-400">
+                            #{Math.max(1, topStocks.findIndex((item) => item.symbol === s.symbol) + 1)}
+                          </span>
+                        ),
+                        width: "15%",
+                      },
+                      {
+                        header: "Symbol",
+                        accessorKey: "symbol",
+                        sortable: true,
+                        cell: (s) => (
+                          <TickerMenu symbol={s.symbol}>
+                            <span className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{s.symbol}</span>
+                          </TickerMenu>
+                        ),
+                        width: "35%",
+                      },
+                      {
+                        header: "Factor Score",
+                        accessorKey: selectedFactor,
+                        sortable: true,
+                        align: "right",
+                        cell: (s) => (
+                          <Badge variant="success" className="font-mono text-[10px]">
+                            {getFactorValue(s).toFixed(2)}
+                          </Badge>
+                        ),
+                        width: "30%",
+                      },
+                      {
+                        header: "",
+                        accessorKey: "link",
+                        align: "center",
+                        cell: (s) => (
+                          <Link href={`/charts?symbol=${s.symbol}`} className="text-gray-400 hover:text-blue-500">
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        ),
+                        width: "20%",
+                      },
+                    ]}
+                    height="450px"
+                  />
+                </Card>
+
+                {/* Bottom Exposure Table */}
+                <Card className="rounded-2xl overflow-hidden border-gray-100 dark:border-slate-800">
+                  <CardHeader className="pb-4 bg-gray-50/30 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">
+                          <TrendingDown className="w-3.5 h-3.5 mr-2 text-rose-500" />
+                          Low {currentFactor?.label} Exposure
+                        </CardTitle>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] bg-rose-50 text-rose-700 border-rose-100">Bottom 50</Badge>
+                    </div>
+                  </CardHeader>
+                  <DataTable
+                    data={bottomStocks}
+                    isLoading={loading}
+                    columns={[
+                      {
+                        header: "Rank",
+                        accessorKey: "rank",
+                        cell: (s) => (
+                          <span className="text-[10px] font-bold text-gray-400">
+                            #
+                            {Math.max(
+                              1,
+                              bottomStocks.length - Math.max(0, bottomStocks.findIndex((item) => item.symbol === s.symbol))
+                            )}
+                          </span>
+                        ),
+                        width: "15%",
+                      },
+                      {
+                        header: "Symbol",
+                        accessorKey: "symbol",
+                        sortable: true,
+                        cell: (s) => (
+                          <TickerMenu symbol={s.symbol}>
+                            <span className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{s.symbol}</span>
+                          </TickerMenu>
+                        ),
+                        width: "35%",
+                      },
+                      {
+                        header: "Factor Score",
+                        accessorKey: selectedFactor,
+                        sortable: true,
+                        align: "right",
+                        cell: (s) => (
+                          <Badge variant="destructive" className="font-mono text-[10px]">
+                            {getFactorValue(s).toFixed(2)}
+                          </Badge>
+                        ),
+                        width: "30%",
+                      },
+                      {
+                        header: "",
+                        accessorKey: "link",
+                        align: "center",
+                        cell: (s) => (
+                          <Link href={`/charts?symbol=${s.symbol}`} className="text-gray-400 hover:text-blue-500">
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        ),
+                        width: "20%",
+                      },
+                    ]}
+                    height="450px"
+                  />
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="distribution" className="mt-0">
+              <Card className="rounded-2xl border-gray-100 dark:border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">
+                    <Activity className="w-3.5 h-3.5 mr-2 text-blue-500" />
+                    Market Distribution Analysis
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">Comparison of {currentFactor?.label} scores across top constituents</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <Skeleton className="h-[350px] w-full rounded-xl" />
+                  ) : (
+                    <BarChart data={topStocks.slice(0, 15).map((s) => ({ name: s.symbol, value: getFactorValue(s) }))} height={350} />
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="theory" className="mt-0">
+              {/* Theory content placeholder */}
+              <Card className="rounded-2xl border-gray-100 dark:border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">
+                    <BookOpen className="w-3.5 h-3.5 mr-2 text-blue-500" />
+                    Factor Theory & Methodology
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">Understanding {currentFactor?.label} factor analysis</CardDescription>
+                </CardHeader>
+                <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Factor analysis is a quantitative method used to explain the returns of securities based on their exposure to various risk factors.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    </PageTransition>
   );
 }

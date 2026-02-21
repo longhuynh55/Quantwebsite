@@ -2,6 +2,7 @@
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 export type AssistantUIMode = 'copilot' | 'screener';
+export type AssistantExecutionMode = 'chat' | 'agent';
 
 export type PageContext =
   | { page: 'home' }
@@ -43,6 +44,7 @@ export interface AssistantRequest {
   contextSnapshot?: AssistantContextSnapshot;
   preferences?: AssistantPreferences;
   uiMode?: AssistantUIMode;
+  executionMode?: AssistantExecutionMode;
   requestId?: string;
   clientTs?: string;
 }
@@ -164,6 +166,7 @@ export interface AssistantResponseMeta {
   providerUsed: string;
   fallbackUsed: boolean;
   latencyMs: number;
+  orchestrationMode?: AssistantExecutionMode;
   requestId?: string;
   policyMode?: AssistantPolicyMode;
   groundingMode?: "enabled" | "disabled";
@@ -178,12 +181,29 @@ export interface AssistantResponseMeta {
   queryPlanSummary?: string;
   plannedToolCount?: number;
   plannedTools?: AssistantToolName[];
+  queryPlanFilters?: Record<string, unknown>;
+  queryPlanSymbols?: string[];
+  featureFlags?: AssistantFeatureFlagSnapshot;
   semantic?: AssistantSemanticMeta;
+}
+
+export interface AssistantFeatureFlagSnapshot {
+  screenerPresets: boolean;
+  watchlistBridge: boolean;
+  assistantContextualActions: boolean;
+  uiKpiTelemetry: boolean;
 }
 
 export type AssistantPolicyMode = 'shadow' | 'enforce_high_risk' | 'enforce_all';
 export type AssistantPolicyStatus = 'ok' | 'fallback' | 'shadow_blocked';
 export type AssistantDataConfidence = 'high' | 'medium' | 'low';
+export type AssistantNavGroup = 'home' | 'analysis' | 'strategies' | 'advanced' | 'learn';
+
+export interface AssistantExportContext {
+  reportType?: string;
+  filters?: Record<string, unknown>;
+  timeframe?: string;
+}
 
 export interface AssistantContextSnapshot {
   page: PageContext['page'];
@@ -194,6 +214,8 @@ export interface AssistantContextSnapshot {
   selectedIndicators?: string[];
   lastApiPayload?: Record<string, unknown>;
   uiMode?: AssistantUIMode;
+  navGroup?: AssistantNavGroup;
+  exportContext?: AssistantExportContext;
 }
 
 export interface AssistantPreferences {

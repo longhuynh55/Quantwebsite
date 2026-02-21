@@ -110,7 +110,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         <div
           className={cn(
             'text-xs mt-3 flex items-center gap-2 flex-wrap',
-            isUser ? 'text-blue-200' : 'text-gray-400 dark:text-gray-500'
+            isUser ? 'text-blue-200' : 'text-gray-500 dark:text-gray-400'
           )}
         >
           <Clock3 className="w-3 h-3" />

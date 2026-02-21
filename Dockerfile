@@ -1,4 +1,4 @@
-﻿FROM node:20-bookworm-slim AS deps
+FROM node:20-bookworm-slim AS deps
 
 WORKDIR /app
 RUN corepack enable
@@ -40,4 +40,3 @@ COPY --from=builder /app/public ./public
 EXPOSE 3000
 
 CMD ["pnpm", "run", "start", "-p", "3000"]
-

@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     ".next-ci-webpack/**",
     "out/**",
     "build/**",
+    // Repo-local scratch files/directories (generated during eval/dev runs):
+    "_tmp*",
+    "**/_tmp*",
+    "tmp/**",
+    "artifacts/**",
+    "playwright-report/**",
+    "test-results/**",
     "next-env.d.ts",
   ]),
 ]);

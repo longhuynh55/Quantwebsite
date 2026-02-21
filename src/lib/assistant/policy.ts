@@ -1,6 +1,7 @@
 import type { AssistantContextSnapshot, AssistantToolName, AssistantToolUsage } from "@/types/assistant";
 import type { GroundingResult } from "@/lib/assistant/tools";
 import { collectRequiredSignals, getCandidateSymbols, isFabricationDirective, type RequiredSignal } from "@/lib/assistant/signals";
+import type { AssistantQueryPlan } from "@/lib/assistant/planner";
 
 export type AssistantPolicyMode = "shadow" | "enforce_high_risk" | "enforce_all";
 export type AssistantPolicyStatus = "ok" | "fallback" | "shadow_blocked";
@@ -18,6 +19,8 @@ export type PolicyReasonCode =
 interface PolicyEvaluationInput {
   message: string;
   contextSnapshot?: AssistantContextSnapshot;
+  conversationHistory?: string;
+  queryPlan?: AssistantQueryPlan;
   grounding: GroundingResult;
 }
 
@@ -100,6 +103,17 @@ const NUMERIC_KEYWORDS = [
   "ti le",
   "phan tram",
 ];
+const INVALID_TICKER_TOKENS = new Set(["API", "JSON", "HTTP", "HTTPS", "CSV", "OHLC", "OHLCV"]);
+const PRICE_METRIC_HINTS = [
+  "close",
+  "open",
+  "high",
+  "low",
+  "volume",
+  "gia dong cua",
+  "gia mo cua",
+  "khoi luong",
+];
 
 export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEvaluationResult {
   const mode = getPolicyMode();
@@ -155,11 +169,7 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
       shadowBlocked,
     };
   }
-  const requiredSignals = collectRequiredSignals({
-    message: input.message,
-    contextSnapshot: input.contextSnapshot,
-    baselineOnlyMode: BASELINE_ONLY_MODE,
-  });
+  const requiredSignals = resolveRequiredSignals(input);
   const numericIntent = isNumericIntent(normalizedMessage, input.contextSnapshot, requiredSignals);
 
   const enforcementApplies = shouldApplyEnforcement(mode, numericIntent, input.contextSnapshot, requiredSignals);
@@ -177,7 +187,7 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
 
   const failure = evaluateGrounding(requiredSignals, input.grounding);
   const symbolCoverageFailure = evaluateMultiSymbolGrounding(
-    getCandidateSymbols(input.message, input.contextSnapshot),
+    resolveRequestedSymbols(input),
     input.grounding
   );
   const effectiveFailure = failure ?? symbolCoverageFailure;
@@ -258,6 +268,40 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
     responseMessage: fallbackMessage,
     shadowBlocked: false,
   };
+}
+
+function resolveRequiredSignals(input: PolicyEvaluationInput): RequiredSignal[] {
+  if (input.queryPlan && Array.isArray(input.queryPlan.steps) && input.queryPlan.steps.length > 0) {
+    const plannedSignals = input.queryPlan.steps.map((step) => ({ tool: step.tool, endpoint: step.endpoint }));
+    const requiredPlanSignals = input.queryPlan.steps
+      .filter((step) => step.required === true)
+      .map((step) => ({ tool: step.tool, endpoint: step.endpoint }));
+    if (requiredPlanSignals.length > 0) {
+      return requiredPlanSignals;
+    }
+    if (plannedSignals.length > 0) {
+      return plannedSignals;
+    }
+  }
+
+  return collectRequiredSignals({
+    message: input.message,
+    contextSnapshot: input.contextSnapshot,
+    conversationHistory: input.conversationHistory,
+    baselineOnlyMode: BASELINE_ONLY_MODE,
+  });
+}
+
+function resolveRequestedSymbols(input: PolicyEvaluationInput): string[] {
+  const planSymbols = Array.isArray(input.queryPlan?.symbols)
+    ? input.queryPlan.symbols
+        .map((symbol) => normalizeSymbolToken(symbol))
+        .filter((symbol): symbol is string => Boolean(symbol))
+    : [];
+  if (planSymbols.length > 0) {
+    return planSymbols;
+  }
+  return getCandidateSymbols(input.message, input.contextSnapshot, input.conversationHistory);
 }
 
 function getPolicyMode(): AssistantPolicyMode {
@@ -621,18 +665,31 @@ function detectAmbiguousSymbolViolation(
 ): { reason: string } | null {
   const normalized = normalizeForKeywordMatch(message);
   const symbolCandidates = getCandidateSymbols(message, contextSnapshot);
+  const invalidTickerTokens = extractInvalidTickerTokens(message);
   const shortTickerMention = /\b(?:ma|ticker|symbol)\s*[=:]?\s*[a-z0-9]{1,2}\b/i.test(normalized);
   const explicitAmbiguity =
     normalized.includes("khong ro")
     || normalized.includes("ko ro")
     || normalized.includes("ambiguous")
     || normalized.includes("khong chac");
+  const asksPriceMetric = PRICE_METRIC_HINTS.some((keyword) => normalized.includes(keyword));
+  const asksCompareIntent =
+    normalized.includes("so sanh")
+    || normalized.includes("compare")
+    || normalized.includes("versus")
+    || /\bvs\b/.test(normalized);
   const asksFinanceStatement =
     normalized.includes("bctc")
     || normalized.includes("bao cao tai chinh")
     || normalized.includes("income statement")
     || normalized.includes("balance sheet")
     || normalized.includes("cash flow");
+
+  if (invalidTickerTokens.length > 0 && asksPriceMetric && (asksCompareIntent || symbolCandidates.length === 0)) {
+    return {
+      reason: `Invalid ticker token detected: ${invalidTickerTokens.join(", ")}. Please provide a valid HOSE symbol.`,
+    };
+  }
 
   if (shortTickerMention && asksFinanceStatement) {
     return {
@@ -645,6 +702,17 @@ function detectAmbiguousSymbolViolation(
     };
   }
   return null;
+}
+
+function extractInvalidTickerTokens(message: string): string[] {
+  const matches = message.match(/\b[A-Z][A-Z0-9]{2,6}\b/g) ?? [];
+  const invalid = new Set<string>();
+  for (const token of matches) {
+    if (INVALID_TICKER_TOKENS.has(token)) {
+      invalid.add(token);
+    }
+  }
+  return Array.from(invalid);
 }
 
 function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): string {
@@ -676,6 +744,7 @@ function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): str
   } else if (reasonCode === "fabrication_directive_blocked") {
     guidance.unshift("The request asked for fabricated/estimated numeric data outside grounded evidence.");
   } else if (reasonCode === "ambiguous_symbol_not_supported") {
+    guidance.unshift("Khong the tra ve so lieu cho ma co phieu mo hoac khong ton tai.");
     guidance.unshift("The ticker is ambiguous; please provide a valid HOSE symbol before numeric analysis.");
   }
 

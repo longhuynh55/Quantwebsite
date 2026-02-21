@@ -11,14 +11,22 @@ import {
   Input,
   Select,
   Badge,
+  DataTable,
+  TickerMenu,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
   SkeletonStats,
   SkeletonChart,
   ErrorState,
+  PageTransition,
+  ErrorBoundary,
 } from "@/components/ui";
 import { showSuccess, showError } from "@/components/ui/toast";
 import { BarChart, CorrelationMatrix } from "@/components/charts";
 import { formatPercent } from "@/lib/utils";
-import { Plus, Trash2, PieChart as PieChartIcon, Settings } from "lucide-react";
+import { Plus, Trash2, PieChart as PieChartIcon, Settings, Activity, BarChart3, Shield, Layers, RefreshCw, Info, TrendingUp } from "lucide-react";
 
 interface Allocation {
   symbol: string;
@@ -148,176 +156,376 @@ export default function PortfolioPage() {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Portfolio Optimization</h1>
-        <p className="text-gray-600 dark:text-gray-400">Build optimized portfolios using Mean-Variance, Min Variance, Risk Parity, or Equal Weight</p>
-      </div>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Select Assets</CardTitle>
-          <CardDescription>Add 2-10 symbols to optimize</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {symbols.map((sym) => (
-              <Badge key={sym} variant="secondary" className="flex items-center gap-1 py-1 px-3">
-                {sym}
-                <button onClick={() => removeSymbol(sym)} className="ml-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-              </Badge>
-            ))}
+    <PageTransition variant="slideUp">
+      <div className="max-w-full space-y-8">
+        <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Portfolio Optimization</h1>
+            <p className="text-sm text-gray-500 dark:text-slate-400">Construct mathematically optimal portfolios based on historical risk/return profiles</p>
           </div>
-          <div className="flex gap-2">
-            <Input value={newSymbol} onChange={(e) => setNewSymbol(e.target.value.toUpperCase())} placeholder="Add symbol..." onKeyDown={(e) => e.key === "Enter" && addSymbol()} className="w-32" />
-            <Button onClick={addSymbol} variant="outline" size="icon"><Plus className="w-4 h-4" /></Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" />Method</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Method</label>
-              <Select value={method} onChange={(e) => setMethod(e.target.value)} options={[{ value: "mean_variance", label: "Mean-Variance (Markowitz)" }, { value: "min_variance", label: "Min Variance (Covariance-Aware)" }, { value: "risk_parity", label: "Risk Parity" }, { value: "equal_weight", label: "Equal Weight" }]} />
-            </div>
-            <Button onClick={optimize} disabled={loading || symbols.length < 2}>
-              {loading ? <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div> : <PieChartIcon className="w-4 h-4 mr-2" />}Optimize
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl border-gray-200 dark:border-slate-800"
+              onClick={() => {
+                setResult(null);
+                setSymbols(["AAA", "ACB", "VIC", "VNM", "FPT"]);
+              }}
+            >
+              Reset Universe
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Error State */}
-      {error && !loading && (
-        <ErrorState
-          message="Optimization failed"
-          description={error}
-          onRetry={optimize}
-          className="mb-6"
-        />
-      )}
-
-      {/* Loading State */}
-      {loading && (
-        <>
-          <SkeletonStats count={3} className="mb-6" />
-          <SkeletonChart height={300} className="mb-6" />
-        </>
-      )}
-
-      {/* Results */}
-      {result && !loading && (
-        <>
-          {(result.benchmark || result.asOfDate) && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Optimization Context</CardTitle>
-                <CardDescription>Reference benchmark and as-of date used by optimizer</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {result.benchmark && <Badge variant="outline">Benchmark: {result.benchmark}</Badge>}
-                  {result.asOfDate && <Badge variant="outline">As of: {String(result.asOfDate).slice(0, 10)}</Badge>}
-                  {Array.isArray(result.effectiveUniverse) && (
-                    <Badge variant="outline">Effective Universe: {result.effectiveUniverse.length}</Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {result.expectedReturn !== undefined && (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Expected Return</p><p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatPercent(result.expectedReturn)}</p></CardContent></Card>
-              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Volatility</p><p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatPercent(result.volatility)}</p></CardContent></Card>
-              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Sharpe Ratio</p><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{result.sharpeRatio?.toFixed(2)}</p></CardContent></Card>
-              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Diversification Ratio</p><p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{Number.isFinite(result.diversificationRatio) ? Number(result.diversificationRatio).toFixed(2) : "N/A"}</p></CardContent></Card>
-              <Card><CardContent className="p-4"><p className="text-sm text-gray-500 dark:text-gray-400">Effective N</p><p className="text-2xl font-bold text-teal-600 dark:text-teal-400">{Number.isFinite(result.effectiveN) ? Number(result.effectiveN).toFixed(2) : "N/A"}</p></CardContent></Card>
-            </div>
-          )}
-
-          {Array.isArray(result.excludedSymbols) && result.excludedSymbols.length > 0 && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Excluded Symbols</CardTitle>
-                <CardDescription>Symbols filtered out before optimization with reasons</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {result.excludedSymbols.slice(0, 20).map((item) => (
-                    <Badge key={`${item.symbol}:${item.reason}`} className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                      {item.symbol}: {item.reason}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="mb-6">
-            <CardHeader><CardTitle>Portfolio Allocation</CardTitle></CardHeader>
+        {/* Optimization Engine Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 bg-gray-50/50 dark:bg-slate-900/50 border-gray-100 dark:border-slate-800 rounded-2xl overflow-hidden">
+            <CardHeader className="pb-2 border-b border-gray-100 dark:border-slate-800/50 mb-4 bg-white/50 dark:bg-slate-900/50">
+              <CardTitle className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
+                <Layers className="w-3 h-3 mr-2 text-blue-500" />
+                Asset Universe ({symbols.length}/{MAX_SYMBOLS})
+              </CardTitle>
+            </CardHeader>
             <CardContent>
-              <BarChart data={result.allocations.map((a) => ({ name: a.symbol, value: a.weight * 100 }))} height={300} />
-              <div className="mt-4 space-y-2">
-                {result.allocations.map((a) => (
-                  <div key={a.symbol} className="flex justify-between items-center">
-                    <span className="font-medium text-gray-900 dark:text-white">{a.symbol}</span>
-                    <span className="font-bold text-gray-900 dark:text-white">{formatPercent(a.weight)}</span>
-                  </div>
+              <div className="flex flex-wrap gap-2 mb-6 min-h-[40px]">
+                {symbols.map((sym) => (
+                  <Badge key={sym} variant="secondary" className="flex items-center gap-1.5 py-1.5 px-3 bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg group shadow-sm transition-all hover:border-red-200 dark:hover:border-red-900/50">
+                    <span className="font-bold text-xs">{sym}</span>
+                    <button onClick={() => removeSymbol(sym)} className="ml-1 text-gray-400 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </Badge>
                 ))}
+                {symbols.length === 0 && (
+                  <span className="text-xs text-gray-400 italic py-2">No assets selected. Add tickers below.</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input 
+                    value={newSymbol} 
+                    onChange={(e) => setNewSymbol(e.target.value.toUpperCase())} 
+                    placeholder="Enter Stock Ticker (e.g. FPT)" 
+                    onKeyDown={(e) => e.key === "Enter" && addSymbol()} 
+                    className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl font-bold uppercase" 
+                  />
+                </div>
+                <Button onClick={addSymbol} variant="outline" className="rounded-xl border-gray-200 dark:border-slate-700 px-4">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          {result.assetStats && (
-            <Card className="mb-6">
-              <CardHeader><CardTitle>Asset Statistics</CardTitle></CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b border-gray-200 dark:border-gray-700">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Symbol</th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">Expected Return</th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">Volatility</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {result.assetStats.map((stat) => (
-                        <tr key={stat.symbol}>
-                          <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">{stat.symbol}</td>
-                          <td className="px-4 py-2 text-right text-green-600 dark:text-green-400">{formatPercent(stat.meanReturn)}</td>
-                          <td className="px-4 py-2 text-right text-orange-600 dark:text-orange-400">{formatPercent(stat.volatility)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          <Card className="bg-blue-600 dark:bg-blue-700 border-none rounded-2xl shadow-lg shadow-blue-500/20 text-white flex flex-col">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-[10px] font-bold text-blue-100 uppercase tracking-widest flex items-center">
+                <Settings className="w-3 h-3 mr-2" />
+                Solver Configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-blue-100 uppercase tracking-widest px-1">Optimization Method</label>
+                  <Select 
+                    value={method} 
+                    onChange={(e) => setMethod(e.target.value)} 
+                    options={[
+                      { value: "mean_variance", label: "Mean-Variance (Markowitz)" }, 
+                      { value: "min_variance", label: "Minimum Volatility" }, 
+                      { value: "risk_parity", label: "Risk Parity" }, 
+                      { value: "equal_weight", label: "Equally Weighted" }
+                    ]} 
+                    className="bg-blue-500 dark:bg-blue-600 border-blue-400 dark:border-blue-500 text-white rounded-xl text-xs font-bold"
+                  />
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <p className="text-[10px] text-blue-100/70 leading-relaxed italic px-1">
+                  {method === 'mean_variance' && "Maximizes expected return for a given level of risk."}
+                  {method === 'min_variance' && "Constructs the lowest risk portfolio regardless of returns."}
+                  {method === 'risk_parity' && "Equalizes the risk contribution of each asset."}
+                  {method === 'equal_weight' && "Simple 1/N allocation across all selected instruments."}
+                </p>
+              </div>
+              <Button 
+                onClick={optimize} 
+                disabled={loading || symbols.length < 2}
+                className="w-full mt-6 h-12 bg-white text-blue-600 hover:bg-blue-50 dark:hover:bg-white rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {loading ? (
+                  <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
+                ) : (
+                  <PieChartIcon className="w-5 h-5 mr-2 fill-current" />
+                )}
+                Run Optimizer
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
 
-          {/* Correlation Matrix */}
-          {result.correlationMatrix && result.correlationMatrix.matrix.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Correlation Matrix</CardTitle>
-                <CardDescription>Correlation between assets in the portfolio</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CorrelationMatrix
-                  symbols={result.correlationMatrix.symbols}
-                  matrix={result.correlationMatrix.matrix}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
-    </div>
+        {/* Results Section */}
+        {loading && (
+          <div className="space-y-6">
+            <SkeletonStats count={5} />
+            <SkeletonChart height={400} />
+          </div>
+        )}
+
+        {error && !loading && (
+          <ErrorState message="Optimization failed" description={error} onRetry={optimize} />
+        )}
+
+        {result && !loading && (
+          <ErrorBoundary
+            fallback={
+              <div className="p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
+                <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+                  Error displaying portfolio results
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  The results couldn&apos;t be rendered. Please try running the optimization again.
+                </p>
+                <Button size="sm" onClick={optimize}>
+                  Retry Optimization
+                </Button>
+              </div>
+            }
+          >
+            <div className="space-y-6">
+              {/* Performance Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <Card className="bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Exp. Return</span>
+                    </div>
+                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatPercent(result.expectedReturn)}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Activity className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Volatility</span>
+                    </div>
+                    <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{formatPercent(result.volatility)}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Sharpe Ratio</span>
+                    </div>
+                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{result.sharpeRatio?.toFixed(2)}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Shield className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Diversification</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                      {Number.isFinite(result.diversificationRatio) ? Number(result.diversificationRatio).toFixed(2) : "N/A"}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Activity className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Effective N</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                      {Number.isFinite(result.effectiveN) ? Number(result.effectiveN).toFixed(2) : "N/A"}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Tabs defaultValue="allocation" className="w-full">
+              <div className="flex items-center justify-between mb-4 bg-gray-50/50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800">
+                <TabsList className="bg-transparent border-none">
+                  <TabsTrigger value="allocation" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                    <PieChartIcon className="w-3.5 h-3.5 mr-2" />
+                    Portfolio Weights
+                  </TabsTrigger>
+                  <TabsTrigger value="metrics" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                    <Activity className="w-3.5 h-3.5 mr-2" />
+                    Asset Metrics
+                  </TabsTrigger>
+                  <TabsTrigger value="risk" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                    <Shield className="w-3.5 h-3.5 mr-2" />
+                    Risk Analysis
+                  </TabsTrigger>
+                </TabsList>
+                
+                <div className="flex items-center gap-2 pr-2">
+                  <span className="text-[10px] text-gray-400 font-medium mr-2">Ref: {result.benchmark || 'VN-INDEX'} • {result.asOfDate ? String(result.asOfDate).slice(0, 10) : 'Live'}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" aria-label="Refresh data">
+                    <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
+                  </Button>
+                </div>
+              </div>
+
+              <TabsContent value="allocation" className="mt-0 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider">Optimal Weights Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <BarChart data={result.allocations.map((a) => ({ name: a.symbol, value: a.weight * 100 }))} height={300} />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="overflow-hidden">
+                    <DataTable
+                      data={result.allocations}
+                      columns={[
+                        {
+                          header: "Asset",
+                          accessorKey: "symbol",
+                          sortable: true,
+                          cell: (a) => (
+                            <TickerMenu symbol={a.symbol}>
+                              <div className="flex items-center gap-3 group/ticker">
+                                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                <span className="font-bold group-hover/ticker:underline">{a.symbol}</span>
+                              </div>
+                            </TickerMenu>
+                          ),
+                          width: "30%",
+                        },
+                        {
+                          header: "Weight",
+                          accessorKey: "weight",
+                          sortable: true,
+                          align: "right",
+                          cell: (a) => <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{formatPercent(a.weight)}</span>,
+                          width: "35%",
+                        },
+                        {
+                          header: "Exp. Return",
+                          accessorKey: "expectedReturn",
+                          sortable: true,
+                          align: "right",
+                          cell: (a) => <span className="font-mono text-green-600">{formatPercent(a.expectedReturn)}</span>,
+                          width: "35%",
+                        },
+                      ]}
+                      height="300px"
+                    />
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="metrics" className="mt-0">
+                <Card className="overflow-hidden border-none shadow-none">
+                  <DataTable
+                    data={result.assetStats || []}
+                    columns={[
+                      {
+                        header: "Symbol",
+                        accessorKey: "symbol",
+                        sortable: true,
+                        cell: (s) => (
+                          <TickerMenu symbol={s.symbol}>
+                            <span className="font-bold hover:underline cursor-pointer">{s.symbol}</span>
+                          </TickerMenu>
+                        ),
+                        width: "30%",
+                      },
+                      {
+                        header: "Mean Return (Ann.)",
+                        accessorKey: "meanReturn",
+                        sortable: true,
+                        align: "right",
+                        cell: (s) => <span className="font-mono text-green-600 font-medium">{formatPercent(s.meanReturn)}</span>,
+                        width: "35%",
+                      },
+                      {
+                        header: "Volatility (Ann.)",
+                        accessorKey: "volatility",
+                        sortable: true,
+                        align: "right",
+                        cell: (s) => <span className="font-mono text-amber-600 font-medium">{formatPercent(s.volatility)}</span>,
+                        width: "35%",
+                      },
+                    ]}
+                    height="400px"
+                  />
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="risk" className="mt-0 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <Card>
+                      <CardHeader className="pb-4">
+                        <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider">Asset Correlation Matrix</CardTitle>
+                        <CardDescription className="text-[10px]">Quantifying the linear relationship between asset returns</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {result.correlationMatrix && (
+                          <CorrelationMatrix
+                            symbols={result.correlationMatrix.symbols}
+                            matrix={result.correlationMatrix.matrix}
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-xs font-bold text-gray-500 uppercase">System Insights</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-start gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
+                          <Info className="w-4 h-4 text-blue-500 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold text-blue-700 dark:text-blue-400">Optimal Diversification</p>
+                            <p className="text-[10px] text-blue-600/80 dark:text-blue-400/80 leading-relaxed">
+                              The {method.replace('_', ' ')} solver identified {result.allocations.filter(a => a.weight > 0.01).length} active positions.
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {Array.isArray(result.excludedSymbols) && result.excludedSymbols.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase px-1">Exclusions</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {result.excludedSymbols.slice(0, 10).map((item) => (
+                                <Badge key={item.symbol} variant="outline" className="text-[9px] py-0 border-amber-200 text-amber-700 bg-amber-50/50" title={item.reason}>
+                                  {item.symbol}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+            </div>
+          </ErrorBoundary>
+        )}
+      </div>
+    </PageTransition>
   );
 }

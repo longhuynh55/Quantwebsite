@@ -58,6 +58,13 @@ pnpm install
 pnpm list --depth 0
 ```
 
+Windows note for native optional packages (for example `@lydell/node-pty`):
+
+```bash
+# Ensure optionalDependencies are not skipped in this repo
+pnpm config set optional true
+```
+
 ---
 
 ## Data Requirements
@@ -404,6 +411,32 @@ curl "http://localhost:3000/api/health/data?refresh=true"
 # Clear node_modules and reinstall
 rm -rf node_modules package-lock.json
 pnpm install
+```
+
+### Issue: `@lydell/node-pty ... could not find ... conpty.node` (Windows)
+
+**Symptoms:**
+- Terminal or tooling crashes with message about missing `@lydell/node-pty-win32-x64/conpty.node`
+- Usually appears after install with optional dependencies disabled
+
+**Root Cause:**
+- Optional dependencies were skipped (`--omit=optional`, `--no-optional`, or config `optional=false`)
+- `node_modules` reused across different OS environments (Windows vs Docker/WSL)
+
+**Solution (local Windows):**
+```bash
+# inside quant-website
+pnpm config set optional true
+```
+
+```powershell
+if (Test-Path node_modules) { Remove-Item node_modules -Recurse -Force }
+pnpm install
+```
+
+If still failing:
+```bash
+pnpm rebuild @lydell/node-pty
 ```
 
 ### Issue: Slow Data Loading

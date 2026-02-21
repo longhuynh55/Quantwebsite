@@ -1,7 +1,15 @@
 "use client";
 
 import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+
+// Force dynamic rendering to avoid useSearchParams issues during build
+export const dynamic = 'force-dynamic';
+import { useSearchParams } from "next/navigation";
+import { uiFeatureFlags } from "@/lib/featureFlags";
+import { useUrlState } from "@/lib/hooks";
+import { useAssistantStore } from "@/lib/stores/assistantStore";
+import { useWatchlistStore } from "@/lib/stores/watchlistStore";
+import { trackUiKpiEvent } from "@/lib/uiKpi";
 import {
   Card,
   CardHeader,
@@ -20,15 +28,18 @@ import {
   SkeletonStats,
   ErrorState,
   NoResultsState,
+  ErrorBoundary,
 } from "@/components/ui";
 import { showError } from "@/components/ui/toast";
-import { CandlestickChart, TimeRangeSelector, OHLCVData } from "@/components/charts";
+import { CandlestickChart, TimeRangeSelector, OHLCVData, MultiLineChart } from "@/components/charts";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import {
   Search,
+  Star,
   TrendingUp,
   TrendingDown,
   Calendar,
+  X,
 } from "lucide-react";
 
 const TIME_RANGES = [
@@ -38,6 +49,10 @@ const TIME_RANGES = [
   { label: "1Y", value: "365" },
   { label: "All", value: "all" },
 ];
+
+const COMPARE_SYMBOL_LIMIT = 5;
+const HOSE_EXCHANGE = "HOSE";
+const COMPARE_LINE_COLORS = ["#2563eb", "#16a34a", "#ea580c", "#9333ea", "#0891b2"];
 
 interface StockPoint {
   date: string;
@@ -58,6 +73,11 @@ interface StockMetadataLite {
   icbName4?: string;
 }
 
+interface CompareSeries {
+  symbol: string;
+  data: StockPoint[];
+}
+
 type FundamentalsValue = number | string | null;
 
 interface FundamentalsSnapshot {
@@ -75,17 +95,113 @@ interface FundamentalsResponse {
   cashFlow: FundamentalsSnapshot | null;
 }
 
+function normalizeSymbolList(raw: string | null | undefined, limit: number): string[] {
+  if (typeof raw !== "string") return [];
+  const seen = new Set<string>();
+  const symbols: string[] = [];
+  for (const token of raw.split(/[,\s;|]+/)) {
+    const normalized = token.trim().toUpperCase();
+    if (!/^[A-Z0-9]{1,10}$/.test(normalized)) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    symbols.push(normalized);
+    if (symbols.length >= limit) break;
+  }
+  return symbols;
+}
+
+function mergeUniqueSymbolLists(lists: string[][], limit: number): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const candidate of list) {
+      const normalized = candidate.trim().toUpperCase();
+      if (!/^[A-Z0-9]{1,10}$/.test(normalized)) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(normalized);
+      if (merged.length >= limit) return merged;
+    }
+  }
+  return merged;
+}
+
 function ChartsContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const [symbol, setSymbol] = useState("AAA");
-  const [searchInput, setSearchInput] = useState("AAA");
+  const [symbol, setSymbol] = useUrlState<string>("symbol", "AAA");
+  const [compareSymbolsParam, setCompareSymbolsParam] = useUrlState<string>("compare", "");
+  const [timeRange, setTimeRange] = useUrlState<string>("timeRange", "365");
+  const [searchInput, setSearchInput] = useState(symbol);
+  const [compareInput, setCompareInput] = useState("");
+  const [compareInputLoading, setCompareInputLoading] = useState(false);
+  const setContext = useAssistantStore((state) => state.setContext);
+  const setConversationScope = useAssistantStore((state) => state.setConversationScope);
+  const watchlistSymbols = useWatchlistStore((state) => state.symbols);
+  const addSymbolsToWatchlist = useWatchlistStore((state) => state.addSymbols);
+  const toggleWatchlistSymbol = useWatchlistStore((state) => state.toggleSymbol);
+  const queryWatchlistSymbols = useMemo(
+    () => (uiFeatureFlags.watchlistBridge ? normalizeSymbolList(searchParams.get("watchlist"), 30) : []),
+    [searchParams]
+  );
+  const assistantWatchlistSymbols = useMemo(
+    () => (uiFeatureFlags.watchlistBridge ? mergeUniqueSymbolLists([queryWatchlistSymbols, watchlistSymbols], 30) : []),
+    [queryWatchlistSymbols, watchlistSymbols]
+  );
+  const compareSymbols = useMemo(() => {
+    const parsed = normalizeSymbolList(compareSymbolsParam, COMPARE_SYMBOL_LIMIT);
+    return mergeUniqueSymbolLists([[symbol], parsed], COMPARE_SYMBOL_LIMIT);
+  }, [compareSymbolsParam, symbol]);
+  const compareExtraSymbols = useMemo(
+    () => compareSymbols.filter((candidate) => candidate !== symbol),
+    [compareSymbols, symbol]
+  );
+  
+  // Sync search input with symbol from URL
+  useEffect(() => {
+    setSearchInput(symbol);
+  }, [symbol]);
+
+  useEffect(() => {
+    if (!uiFeatureFlags.watchlistBridge) return;
+    if (queryWatchlistSymbols.length === 0) return;
+    addSymbolsToWatchlist(queryWatchlistSymbols);
+  }, [addSymbolsToWatchlist, queryWatchlistSymbols]);
+
+  useEffect(() => {
+    setContext({ page: "charts", symbol });
+  }, [setContext, symbol]);
+
+  useEffect(() => {
+    const scopeFilters: Record<string, unknown> = {
+      symbol,
+      timeRange,
+    };
+    if (uiFeatureFlags.watchlistBridge && assistantWatchlistSymbols.length > 0) {
+      scopeFilters.symbols = assistantWatchlistSymbols;
+      scopeFilters.watchlist = assistantWatchlistSymbols.join(",");
+      scopeFilters.watchlistCount = assistantWatchlistSymbols.length;
+    }
+    if (uiFeatureFlags.watchlistBridge && queryWatchlistSymbols.length > 0) {
+      scopeFilters.watchlistQuerySource = true;
+      scopeFilters.contextSource = "watchlist_query";
+    }
+
+    setConversationScope({
+      symbol,
+      symbols: assistantWatchlistSymbols.length > 0 ? assistantWatchlistSymbols : undefined,
+      timeframe: timeRange,
+      filters: scopeFilters,
+    });
+  }, [assistantWatchlistSymbols, queryWatchlistSymbols.length, setConversationScope, symbol, timeRange]);
+
   const [data, setData] = useState<StockPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState("365");
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [stockMeta, setStockMeta] = useState<StockMetadataLite | null>(null);
+  const [compareSeries, setCompareSeries] = useState<CompareSeries[]>([]);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareIssues, setCompareIssues] = useState<string[]>([]);
 
   const [fundamentals, setFundamentals] = useState<FundamentalsResponse | null>(null);
   const [fundLoading, setFundLoading] = useState(false);
@@ -94,15 +210,6 @@ function ChartsContent() {
   const [fundSearch, setFundSearch] = useState("");
   const fundamentalsAbortRef = useRef<AbortController | null>(null);
   const fundamentalsRequestSeqRef = useRef(0);
-
-  // Initialize symbol from URL params
-  useEffect(() => {
-    const symbolFromQuery = searchParams.get("symbol")?.trim().toUpperCase();
-    if (symbolFromQuery && symbolFromQuery !== symbol) {
-      setSymbol(symbolFromQuery);
-      setSearchInput(symbolFromQuery);
-    }
-  }, [searchParams, symbol]);
 
   // Fetch data
   useEffect(() => {
@@ -159,17 +266,158 @@ function ChartsContent() {
     };
   }, [symbol, timeRange, refreshCounter]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchCompareSeries(symbols: string[]) {
+      if (symbols.length === 0) {
+        setCompareSeries([]);
+        setCompareIssues([]);
+        return;
+      }
+
+      setCompareLoading(true);
+      setCompareIssues([]);
+      try {
+        const limitParam = timeRange === "all" ? "all" : String(parseInt(timeRange, 10));
+        const results = await Promise.all(
+          symbols.map(async (candidate) => {
+            try {
+              const response = await fetch(
+                `/api/stocks?symbol=${encodeURIComponent(candidate)}&limit=${encodeURIComponent(limitParam)}`
+              );
+              if (!response.ok) {
+                const maybe = await response.json().catch(() => null);
+                const message = maybe?.error || `Failed to load ${candidate}`;
+                return { symbol: candidate, error: message };
+              }
+
+              const result = await response.json();
+              const exchangeValue = String(result?.metadata?.exchange ?? HOSE_EXCHANGE).trim().toUpperCase();
+              if (exchangeValue && exchangeValue !== HOSE_EXCHANGE) {
+                return { symbol: candidate, error: `${candidate} is listed on ${exchangeValue}.` };
+              }
+              if (!Array.isArray(result.data) || result.data.length === 0) {
+                return { symbol: candidate, error: `No chart data available for ${candidate}.` };
+              }
+
+              return { symbol: candidate, data: result.data as StockPoint[] };
+            } catch {
+              return { symbol: candidate, error: `Failed to load ${candidate}.` };
+            }
+          })
+        );
+
+        if (!isMounted) return;
+
+        const nextSeries: CompareSeries[] = [];
+        const nextIssues: string[] = [];
+
+        for (const item of results) {
+          if ("error" in item) {
+            nextIssues.push(item.error);
+          } else {
+            nextSeries.push({ symbol: item.symbol, data: item.data });
+          }
+        }
+
+        setCompareSeries(nextSeries);
+        setCompareIssues(nextIssues);
+      } finally {
+        if (isMounted) {
+          setCompareLoading(false);
+        }
+      }
+    }
+
+    fetchCompareSeries(compareExtraSymbols);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [compareExtraSymbols, refreshCounter, timeRange]);
+
   const handleSearch = useCallback(() => {
     const newSymbol = searchInput.trim().toUpperCase();
     if (!newSymbol) return;
 
     if (newSymbol !== symbol) {
       setSymbol(newSymbol);
-      router.push(`/charts?symbol=${newSymbol}`, { scroll: false });
     } else {
       setRefreshCounter((prev) => prev + 1);
     }
-  }, [searchInput, symbol, router]);
+  }, [searchInput, symbol, setSymbol]);
+
+  const handleAddCompareSymbol = useCallback(async () => {
+    const candidate = compareInput.trim().toUpperCase();
+    if (!candidate) return;
+    if (!/^[A-Z0-9]{1,10}$/.test(candidate)) {
+      showError("Invalid symbol", "Use 1-10 uppercase letters or digits.");
+      return;
+    }
+    if (compareSymbols.includes(candidate)) {
+      showError("Already selected", `${candidate} is already in the compare set.`);
+      return;
+    }
+    if (compareSymbols.length >= COMPARE_SYMBOL_LIMIT) {
+      showError("Limit reached", `You can compare up to ${COMPARE_SYMBOL_LIMIT} symbols.`);
+      return;
+    }
+
+    setCompareInputLoading(true);
+    try {
+      const response = await fetch(`/api/stocks?symbol=${encodeURIComponent(candidate)}&limit=1`);
+      if (!response.ok) {
+        const maybe = await response.json().catch(() => null);
+        showError("Symbol unavailable", maybe?.error || `Could not validate ${candidate}.`);
+        return;
+      }
+
+      const result = await response.json();
+      const exchangeValue = String(result?.metadata?.exchange ?? HOSE_EXCHANGE).trim().toUpperCase();
+      if (exchangeValue && exchangeValue !== HOSE_EXCHANGE) {
+        showError("HOSE-only compare", `${candidate} is listed on ${exchangeValue}.`);
+        return;
+      }
+
+      setCompareSymbolsParam([...compareExtraSymbols, candidate].join(","));
+      setCompareInput("");
+    } catch {
+      showError("Validation failed", `Could not validate ${candidate}.`);
+    } finally {
+      setCompareInputLoading(false);
+    }
+  }, [compareInput, compareSymbols, compareExtraSymbols, setCompareSymbolsParam]);
+
+  const handleRemoveCompareSymbol = useCallback(
+    (target: string) => {
+      setCompareSymbolsParam(compareExtraSymbols.filter((candidate) => candidate !== target).join(","));
+    },
+    [compareExtraSymbols, setCompareSymbolsParam]
+  );
+
+  const handleClearCompareSymbols = useCallback(() => {
+    setCompareSymbolsParam("");
+  }, [setCompareSymbolsParam]);
+
+  const handleWatchlistSelect = useCallback(
+    (nextSymbol: string) => {
+      if (!uiFeatureFlags.watchlistBridge) return;
+      if (!nextSymbol) return;
+      const normalized = nextSymbol.trim().toUpperCase();
+      setSearchInput(normalized);
+      setSymbol(normalized);
+      trackUiKpiEvent({
+        metric: "watchlist_interaction",
+        event: "watchlist_selected_symbol",
+        page: "charts",
+        source: "charts_watchlist_dropdown",
+        symbol: normalized,
+        count: 1,
+      });
+    },
+    [setSymbol]
+  );
 
   const loadFundamentals = useCallback(async (sym: string, period: string) => {
     const requestSeq = fundamentalsRequestSeqRef.current + 1;
@@ -273,6 +521,52 @@ function ChartsContent() {
     }));
   }, [data]);
 
+  const comparePrimarySupported = useMemo(() => {
+    if (!stockMeta?.exchange) return true;
+    return stockMeta.exchange.trim().toUpperCase() === HOSE_EXCHANGE;
+  }, [stockMeta?.exchange]);
+
+  const compareChartLines = useMemo(() => {
+    const lineSymbols: string[] = [];
+    if (comparePrimarySupported && data.length > 0) {
+      lineSymbols.push(symbol);
+    }
+    for (const series of compareSeries) {
+      if (!lineSymbols.includes(series.symbol)) {
+        lineSymbols.push(series.symbol);
+      }
+    }
+    return lineSymbols.slice(0, COMPARE_SYMBOL_LIMIT).map((item, index) => ({
+      dataKey: item,
+      name: item,
+      color: COMPARE_LINE_COLORS[index % COMPARE_LINE_COLORS.length],
+    }));
+  }, [comparePrimarySupported, compareSeries, data.length, symbol]);
+
+  const compareChartData = useMemo(() => {
+    const seriesInput: CompareSeries[] = [];
+    if (comparePrimarySupported && data.length > 0) {
+      seriesInput.push({ symbol, data });
+    }
+    for (const series of compareSeries) {
+      seriesInput.push(series);
+    }
+
+    const dataByDate = new Map<string, Record<string, string | number | null | undefined>>();
+    for (const series of seriesInput) {
+      const baseClose = series.data[0]?.close;
+      if (!Number.isFinite(baseClose) || !baseClose) continue;
+      for (const point of series.data) {
+        const dateKey = point.date.length >= 10 ? point.date.slice(0, 10) : point.date;
+        const row = dataByDate.get(dateKey) ?? { date: dateKey };
+        row[series.symbol] = ((point.close - baseClose) / baseClose) * 100;
+        dataByDate.set(dateKey, row);
+      }
+    }
+
+    return Array.from(dataByDate.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }, [comparePrimarySupported, compareSeries, data, symbol]);
+
   // Calculate statistics
   const stats = useMemo(() => {
     if (data.length === 0) return null;
@@ -326,6 +620,12 @@ function ChartsContent() {
     return value;
   };
 
+  const isCurrentSymbolInWatchlist = uiFeatureFlags.watchlistBridge && watchlistSymbols.includes(symbol);
+  const watchlistOptions = useMemo(
+    () => (uiFeatureFlags.watchlistBridge ? watchlistSymbols.map((item) => ({ value: item, label: item })) : []),
+    [watchlistSymbols]
+  );
+
   const renderFundamentalsTable = (snapshot: FundamentalsSnapshot | null) => {
     if (!snapshot) {
       return (
@@ -371,7 +671,7 @@ function ChartsContent() {
               <tr key={r.key} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <td className="py-2 pr-4 text-gray-700 dark:text-gray-200">
                   <span className="block font-medium">{r.label}</span>
-                  <span className="block text-xs text-gray-400 dark:text-gray-500 font-mono">{r.key}</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 font-mono">{r.key}</span>
                 </td>
                 <td className="py-2 text-right text-gray-900 dark:text-gray-100 font-mono">
                   {formatFundamentalValue(r.value)}
@@ -447,10 +747,105 @@ function ChartsContent() {
                   <Search className="w-4 h-4" />
                 )}
               </Button>
+              {uiFeatureFlags.watchlistBridge ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const action = isCurrentSymbolInWatchlist ? "removed" : "added";
+                    toggleWatchlistSymbol(symbol);
+                    trackUiKpiEvent({
+                      metric: "watchlist_interaction",
+                      event: "watchlist_toggled",
+                      page: "charts",
+                      source: `charts_header_${action}`,
+                      symbol,
+                      count: 1,
+                    });
+                  }}
+                  title={isCurrentSymbolInWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+                >
+                  <Star className={`w-4 h-4 ${isCurrentSymbolInWatchlist ? "fill-yellow-400 text-yellow-500" : ""}`} />
+                </Button>
+              ) : null}
             </div>
+            {uiFeatureFlags.watchlistBridge && watchlistOptions.length > 0 ? (
+              <div className="min-w-32">
+                <Select
+                  value={symbol}
+                  onChange={(event) => handleWatchlistSelect(event.target.value)}
+                  options={watchlistOptions}
+                />
+              </div>
+            ) : uiFeatureFlags.watchlistBridge ? (
+              <div className="text-xs text-gray-500 dark:text-gray-400 self-center">
+                Watchlist is empty
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
+
+      {/* Compare Picker */}
+      <Card className="mb-6 border-blue-100 dark:border-blue-900/50">
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">HOSE Compare (max {COMPARE_SYMBOL_LIMIT})</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Add symbols to compare normalized performance. HOSE symbols only.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={compareInput}
+                  onChange={(event) => setCompareInput(event.target.value.toUpperCase())}
+                  onKeyDown={(event) => event.key === "Enter" && void handleAddCompareSymbol()}
+                  placeholder="Add HOSE symbol..."
+                  maxLength={10}
+                  className="w-44"
+                  disabled={compareInputLoading || compareSymbols.length >= COMPARE_SYMBOL_LIMIT}
+                />
+                <Button
+                  onClick={() => void handleAddCompareSymbol()}
+                  disabled={compareInputLoading || compareSymbols.length >= COMPARE_SYMBOL_LIMIT}
+                >
+                  {compareInputLoading ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+                {compareExtraSymbols.length > 0 ? (
+                  <Button variant="outline" onClick={handleClearCompareSymbols}>
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {compareSymbols.map((item) => {
+                const isPrimary = item === symbol;
+                return (
+                  <Badge key={item} variant={isPrimary ? "success" : "outline"} className="flex items-center gap-2">
+                    <span>{isPrimary ? `${item} (Primary)` : item}</span>
+                    {!isPrimary ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCompareSymbol(item)}
+                        className="inline-flex items-center justify-center rounded hover:text-red-500"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    ) : null}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Error State */}
       {error && !loading && (
@@ -529,7 +924,22 @@ function ChartsContent() {
       {loading ? (
         <SkeletonChart height={450} className="border border-gray-200 dark:border-gray-700 rounded-xl" />
       ) : chartData.length > 0 ? (
-        <CandlestickChart
+        <ErrorBoundary
+          fallback={
+            <div className="p-8 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
+              <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+                Error displaying chart
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                The chart could not be rendered. Please try refreshing or selecting a different symbol.
+              </p>
+              <Button size="sm" onClick={() => setRefreshCounter(prev => prev + 1)}>
+                Retry
+              </Button>
+            </div>
+          }
+        >
+          <CandlestickChart
           data={chartData}
           symbol={symbol}
           height={450}
@@ -539,6 +949,7 @@ function ChartsContent() {
             { type: "ema", period: 50, color: "#8b5cf6" },
           ]}
         />
+        </ErrorBoundary>
       ) : error ? null : (
         <NoResultsState
           title="No chart data available"
@@ -546,6 +957,44 @@ function ChartsContent() {
           className="h-96 bg-gray-50 dark:bg-gray-800/50 rounded-xl"
         />
       )}
+
+      {/* Compare Canvas */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Compare Performance</CardTitle>
+          <CardDescription>Normalized return (%) from each symbol&apos;s first visible data point.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!comparePrimarySupported ? (
+            <div className="mb-3 text-sm text-amber-700 dark:text-amber-400">
+              {symbol} is listed on {stockMeta?.exchange}. Compare canvas supports HOSE symbols only.
+            </div>
+          ) : null}
+          {compareIssues.length > 0 ? (
+            <div className="mb-3 text-sm text-amber-700 dark:text-amber-400">
+              {compareIssues[0]}
+            </div>
+          ) : null}
+          {loading || compareLoading ? (
+            <SkeletonChart height={320} />
+          ) : compareChartData.length > 0 && compareChartLines.length > 0 ? (
+            <MultiLineChart
+              data={compareChartData}
+              lines={compareChartLines}
+              xKey="date"
+              height={320}
+              format="percent"
+              showCrosshair={true}
+            />
+          ) : (
+            <NoResultsState
+              title="No compare data available"
+              description="Add up to 5 HOSE symbols to compare on one canvas."
+              className="py-10"
+            />
+          )}
+        </CardContent>
+      </Card>
 
       {/* Period Info */}
       {data.length > 0 && !loading && (
@@ -567,7 +1016,21 @@ function ChartsContent() {
       )}
 
       {/* Fundamentals */}
-      <Card className="mt-8">
+      <ErrorBoundary
+        fallback={
+          <Card className="mt-8">
+            <CardContent className="p-8 text-center">
+              <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+                Error loading fundamentals
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Please try reloading the fundamentals data.
+              </p>
+            </CardContent>
+          </Card>
+        }
+      >
+        <Card className="mt-8">
         <CardHeader>
           <CardTitle>Fundamentals (Quarterly)</CardTitle>
           <CardDescription>Balance Sheet, Income Statement, Cash Flow</CardDescription>
@@ -643,6 +1106,7 @@ function ChartsContent() {
           )}
         </CardContent>
       </Card>
+      </ErrorBoundary>
     </>
   );
 }

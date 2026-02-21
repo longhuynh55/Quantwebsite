@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { CommandDialog } from "cmdk";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -15,16 +14,21 @@ import {
   BookOpen,
   CandlestickChart,
   Sparkles,
+  HelpCircle,
+  Settings,
+  ArrowRight,
 } from "lucide-react";
 
-interface CommandItem {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  shortcut?: string;
-  action: () => void;
-  group: string;
-}
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut,
+  CommandSeparator,
+} from "@/components/ui/command";
 
 interface StockResult {
   symbol: string;
@@ -35,7 +39,6 @@ export function CommandPalette() {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [stocks, setStocks] = React.useState<StockResult[]>([]);
-  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
   // Keyboard shortcut to open
@@ -55,16 +58,11 @@ export function CommandPalette() {
   React.useEffect(() => {
     if (!searchQuery || searchQuery.length < 1) {
       setStocks([]);
-      setLoading(false);
       return;
     }
 
     const controller = new AbortController();
     let active = true;
-
-    // Show spinner while we debounce + fetch.
-    setLoading(true);
-
     const fetchStocks = async () => {
       try {
         const query = searchQuery;
@@ -83,8 +81,6 @@ export function CommandPalette() {
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         if (active) setStocks([]);
-      } finally {
-        if (active) setLoading(false);
       }
     };
 
@@ -95,75 +91,6 @@ export function CommandPalette() {
       clearTimeout(timeout);
     };
   }, [searchQuery]);
-
-  const navigationCommands: CommandItem[] = [
-    {
-      id: "home",
-      label: "Home",
-      icon: <LayoutDashboard className="w-4 h-4" />,
-      action: () => router.push("/"),
-      group: "Navigation",
-    },
-    {
-      id: "screener",
-      label: "Stock Screener",
-      icon: <Search className="w-4 h-4" />,
-      shortcut: "G S",
-      action: () => router.push("/screener"),
-      group: "Navigation",
-    },
-    {
-      id: "charts",
-      label: "Charts",
-      icon: <TrendingUp className="w-4 h-4" />,
-      shortcut: "G C",
-      action: () => router.push("/charts"),
-      group: "Navigation",
-    },
-    {
-      id: "backtesting",
-      label: "Backtesting",
-      icon: <LineChart className="w-4 h-4" />,
-      shortcut: "G B",
-      action: () => router.push("/backtesting"),
-      group: "Portfolio",
-    },
-    {
-      id: "portfolio",
-      label: "Portfolio Optimization",
-      icon: <PieChart className="w-4 h-4" />,
-      action: () => router.push("/portfolio"),
-      group: "Portfolio",
-    },
-    {
-      id: "factors",
-      label: "Factor Analysis",
-      icon: <BarChart3 className="w-4 h-4" />,
-      action: () => router.push("/factors"),
-      group: "Portfolio",
-    },
-    {
-      id: "risk",
-      label: "Risk Management",
-      icon: <Shield className="w-4 h-4" />,
-      action: () => router.push("/risk"),
-      group: "Portfolio",
-    },
-    {
-      id: "ml-lab",
-      label: "ML Lab",
-      icon: <Brain className="w-4 h-4" />,
-      action: () => router.push("/ml-lab"),
-      group: "Portfolio",
-    },
-    {
-      id: "learn",
-      label: "Learn",
-      icon: <BookOpen className="w-4 h-4" />,
-      action: () => router.push("/learn"),
-      group: "Resources",
-    },
-  ];
 
   const runCommand = React.useCallback((command: () => void) => {
     setOpen(false);
@@ -177,115 +104,130 @@ export function CommandPalette() {
     router.push(`/charts?symbol=${symbol}`);
   };
 
-  // Filter navigation commands based on search
-  const filteredCommands = searchQuery
-    ? navigationCommands.filter((cmd) =>
-        cmd.label.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : navigationCommands;
-
   return (
     <CommandDialog
       open={open}
-      onOpenChange={(o) => {
+      onOpenChange={(o: boolean) => {
         setOpen(o);
         if (!o) {
           setSearchQuery("");
           setStocks([]);
-          setLoading(false);
         }
       }}
-      className="rounded-xl overflow-hidden"
     >
-      {/* Search Input */}
-      <div className="flex items-center border-b border-gray-200 dark:border-gray-700 px-4 bg-white dark:bg-gray-800">
-        <Search className="w-4 h-4 text-gray-400 dark:text-gray-500 mr-3 shrink-0" />
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search stocks, pages, or type a command..."
-          className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
-        />
-        <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-1.5 font-mono text-[10px] font-medium text-gray-400 dark:text-gray-500">
-          esc
-        </kbd>
-      </div>
+      <CommandInput
+        placeholder="Type a command or search for stocks..."
+        value={searchQuery}
+        onValueChange={setSearchQuery}
+      />
+      <CommandList className="max-h-[450px] scrollbar-thin">
+        <CommandEmpty>No results found.</CommandEmpty>
+        
+        {/* Recent / Suggested Group */}
+        {searchQuery.length === 0 && (
+          <CommandGroup heading="Suggestions">
+            <CommandItem onSelect={() => runCommand(() => router.push("/screener"))}>
+              <Search className="mr-2 h-4 w-4 text-blue-500" />
+              <span>Explore Stock Screener</span>
+              <CommandShortcut>G S</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommand(() => router.push("/charts"))}>
+              <TrendingUp className="mr-2 h-4 w-4 text-green-500" />
+              <span>Technical Charts</span>
+              <CommandShortcut>G C</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommand(() => router.push("/backtesting"))}>
+              <LineChart className="mr-2 h-4 w-4 text-purple-500" />
+              <span>Run Backtest Strategy</span>
+              <CommandShortcut>G B</CommandShortcut>
+            </CommandItem>
+          </CommandGroup>
+        )}
 
-      {/* Results */}
-      <div className="max-h-[400px] overflow-y-auto bg-white dark:bg-gray-800">
-        {/* Stock Results */}
+        {/* Dynamic Stock Results */}
         {stocks.length > 0 && (
-          <div className="p-2">
-            <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-2">
-              <Sparkles className="w-3 h-3" />
-              Stocks
-            </div>
+          <CommandGroup heading="Market Symbols">
             {stocks.map((stock) => (
-              <button
+              <CommandItem
                 key={stock.symbol}
-                onClick={() => handleStockSelect(stock.symbol)}
-                className="relative flex cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-sm outline-none w-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
+                onSelect={() => handleStockSelect(stock.symbol)}
+                className="flex items-center"
               >
-                <CandlestickChart className="w-4 h-4 mr-3 text-blue-500" />
-                <span className="font-medium">{stock.symbol}</span>
-                <span className="ml-2 text-gray-400 dark:text-gray-500">
-                  {stock.name || "View chart"}
-                </span>
-                <kbd className="ml-auto text-xs tracking-widest text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
-                  Enter
-                </kbd>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
-            <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
-          </div>
-        )}
-
-        {/* Navigation Commands */}
-        <div className="p-2">
-          {["Navigation", "Portfolio", "Resources"].map((group) => {
-            const groupItems = filteredCommands.filter((cmd) => cmd.group === group);
-            if (groupItems.length === 0) return null;
-
-            return (
-              <div key={group}>
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  {group}
+                <CandlestickChart className="mr-2 h-4 w-4 text-blue-400" />
+                <div className="flex flex-col">
+                  <span className="font-bold">{stock.symbol}</span>
+                  {stock.name && <span className="text-[10px] text-gray-400">{stock.name}</span>}
                 </div>
-                {groupItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => runCommand(item.action)}
-                    className="relative flex cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-sm outline-none w-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    <span className="mr-3 text-gray-500 dark:text-gray-400">{item.icon}</span>
-                    <span>{item.label}</span>
-                    {item.shortcut && (
-                      <span className="ml-auto text-xs tracking-widest text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded font-mono">
-                        {item.shortcut}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                <div className="ml-auto flex items-center text-[10px] text-gray-400 font-mono">
+                  View Chart <ArrowRight className="ml-1 h-3 w-3" />
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
 
-      {/* Footer */}
-      <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50">
-        <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-[10px] font-mono text-gray-600 dark:text-gray-300">Up/Down</kbd>
-        <span className="mx-2">navigate</span>
-        <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-[10px] font-mono text-gray-600 dark:text-gray-300">Enter</kbd>
-        <span className="mx-2">select</span>
-        <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-[10px] font-mono text-gray-600 dark:text-gray-300">esc</kbd>
-        <span className="mx-2">close</span>
+        <CommandSeparator />
+
+        {/* Navigation Group */}
+        <CommandGroup heading="Navigation">
+          <CommandItem onSelect={() => runCommand(() => router.push("/"))}>
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push("/portfolio"))}>
+            <PieChart className="mr-2 h-4 w-4" />
+            <span>Portfolio Optimization</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push("/factors"))}>
+            <BarChart3 className="mr-2 h-4 w-4" />
+            <span>Factor Analysis</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push("/risk"))}>
+            <Shield className="mr-2 h-4 w-4" />
+            <span>Risk Management</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push("/ml-lab"))}>
+            <Brain className="mr-2 h-4 w-4" />
+            <span>ML Lab</span>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* System & Support */}
+        <CommandGroup heading="System">
+          <CommandItem onSelect={() => runCommand(() => router.push("/learn"))}>
+            <BookOpen className="mr-2 h-4 w-4" />
+            <span>Learning Hub</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => {})}>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+            <CommandShortcut>⌘S</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => {})}>
+            <HelpCircle className="mr-2 h-4 w-4" />
+            <span>Get Support</span>
+          </CommandItem>
+        </CommandGroup>
+      </CommandList>
+      
+      {/* Footer Info */}
+      <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 px-4 py-3 text-[10px] text-gray-500 dark:text-slate-400 font-medium">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <kbd className="rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1 py-0.5">↑↓</kbd>
+            <span>Navigate</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <kbd className="rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1 py-0.5">↵</kbd>
+            <span>Select</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Sparkles className="h-3 w-3 text-blue-500" />
+          <span>QuantVN Command Engine v1.0</span>
+        </div>
       </div>
     </CommandDialog>
   );

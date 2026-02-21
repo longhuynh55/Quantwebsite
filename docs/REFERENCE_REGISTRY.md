@@ -64,3 +64,29 @@ Central log for all external references (papers, products, docs, standards) used
    `url`: https://www.bloomberg.com/faq/question/i-cannot-find-my-office-tools-add-in-how-can-i-get-it-back/  
    `used_in`: `docs/finance-ai-agent-roadmap.md`  
    `reason`: Excel-first delivery benchmark for institutional users.
+
+### 2026-02-21
+
+1. `type`: paper  
+   `title`: Efficient capital markets: A review of theory and empirical work  
+   `url`: https://doi.org/10.1111/j.1540-6261.1970.tb00518.x  
+   `used_in`: `docs/thesis/ch1_introduction.md`, `docs/thesis/ch2_literature_review.md`, `docs/thesis/references_apa.md`  
+   `reason`: Traditional finance baseline (market efficiency) used to motivate evaluation and reliability assumptions.
+
+2. `type`: paper  
+   `title`: Common risk factors in the returns on stocks and bonds  
+   `url`: https://doi.org/10.1016/0304-405X(93)90023-5  
+   `used_in`: `docs/thesis/ch2_literature_review.md`, `docs/thesis/references_apa.md`  
+   `reason`: Empirical factor model baseline used to bridge traditional and modern quantitative finance.
+
+3. `type`: paper  
+   `title`: The probability of backtest overfitting  
+   `url`: https://doi.org/10.1080/14697688.2015.1061509  
+   `used_in`: `docs/thesis/ch1_introduction.md`, `docs/thesis/ch2_literature_review.md`, `docs/thesis/references_apa.md`  
+   `reason`: Backtesting reliability reference used to motivate evaluation gates and disciplined validation.
+
+4. `type`: paper  
+   `title`: Empirical asset pricing via machine learning  
+   `url`: https://doi.org/10.1093/rfs/hhaa009  
+   `used_in`: `docs/thesis/ch1_introduction.md`, `docs/thesis/ch2_literature_review.md`, `docs/thesis/references_apa.md`  
+   `reason`: Modern ML-in-finance reference used to motivate high-dimensional modeling under strict validation.

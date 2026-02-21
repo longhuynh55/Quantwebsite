@@ -1,0 +1,16 @@
+# Figure 4.2: Evaluation Pipeline (Gates)
+
+```mermaid
+flowchart TB
+  PREP[Prepare runtime data] --> HEALTH[Health probe (/api/health/data?probe=true)]
+  HEALTH --> STATIC[Lint + Typecheck]
+  STATIC --> SMOKE[Docker smoke]
+  SMOKE --> QA[Docker QA]
+  QA --> AEVAL[Assistant eval suites]
+  AEVAL --> REPORT[Artifacts + report]
+  REPORT --> DECIDE{Meets acceptance gates?}
+  DECIDE -->|yes| PASS[Thesis demo ready]
+  DECIDE -->|no| FIX[Fix + rerun]
+  FIX --> PREP
+```
+

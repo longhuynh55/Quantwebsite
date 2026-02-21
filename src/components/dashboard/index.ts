@@ -1,0 +1,9 @@
+export { DashboardLayout } from "./DashboardLayout";
+export { WidgetWrapper } from "./WidgetWrapper";
+export { WidgetPalette } from "./WidgetPalette";
+export { PortfolioValueWidget } from "./widgets/PortfolioValueWidget";
+export { WatchlistWidget } from "./widgets/WatchlistWidget";
+export { PerformanceChartWidget } from "./widgets/PerformanceChartWidget";
+export { TopMoversWidget } from "./widgets/TopMoversWidget";
+export { MarketOverviewWidget } from "./widgets/MarketOverviewWidget";
+export { NewsWidget } from "./widgets/NewsWidget";

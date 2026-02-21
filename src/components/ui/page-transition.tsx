@@ -114,6 +114,7 @@ export function StaggerContainer({
     if (!container) return;
 
     const children = container.querySelectorAll("[data-stagger]");
+    const timers: NodeJS.Timeout[] = [];
 
     children.forEach((child, index) => {
       const element = child as HTMLElement;
@@ -128,12 +129,17 @@ export function StaggerContainer({
           : "none";
 
       // Trigger animation after delay
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         element.style.transition = "opacity 0.4s ease-out, transform 0.4s ease-out";
         element.style.opacity = "1";
         element.style.transform = "translateY(0) scale(1)";
       }, delay);
+      timers.push(timer);
     });
+
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+    };
   }, [staggerDelay, initialDelay, childAnimation]);
 
   return (
@@ -177,11 +183,13 @@ export function AnimatedSection({
     const section = sectionRef.current;
     if (!section) return;
 
+    let timeoutId: NodeJS.Timeout | null = null;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !hasAnimated) {
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
               setIsVisible(true);
               setHasAnimated(true);
             }, delay);
@@ -194,7 +202,10 @@ export function AnimatedSection({
 
     observer.observe(section);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [delay, threshold, hasAnimated]);
 
   const animationStyles: Record<string, { from: string; to: string }> = {

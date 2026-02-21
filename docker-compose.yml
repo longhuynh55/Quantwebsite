@@ -17,6 +17,7 @@
     environment:
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
+      NPM_CONFIG_OPTIONAL: "true"
       DATA_DIR: /app/public/data
       DATA_BACKEND: ${DATA_BACKEND:-auto}
       DATA_BACKEND_STRICT: ${DATA_BACKEND_STRICT:-false}
@@ -65,8 +66,10 @@
       SMOKE_BASE_URL: http://app:3000
       DATA_DIR: /app/public/data
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
+      NPM_CONFIG_OPTIONAL: "true"
     volumes:
       - ./:/app:ro
+      - node_modules_cache:/app/node_modules:ro
       - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
@@ -80,8 +83,10 @@
     environment:
       SMOKE_BASE_URL: http://app:3000
       DATA_DIR: /app/public/data
+      NPM_CONFIG_OPTIONAL: "true"
     volumes:
       - ./:/app:ro
+      - node_modules_cache:/app/node_modules:ro
       - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
@@ -99,6 +104,7 @@
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+      NPM_CONFIG_OPTIONAL: "true"
       DATA_DIR: /app/public/data
       DATA_BACKEND: ${DATA_BACKEND:-auto}
       DATA_BACKEND_STRICT: ${DATA_BACKEND_STRICT:-false}
@@ -140,7 +146,10 @@
     profiles: ["prod"]
     image: node:20-bookworm-slim
     working_dir: /app
-    command: ["node", "scripts/smoke.mjs"]
+    command: >
+      sh -c "corepack enable
+      && if [ ! -d node_modules/next ]; then pnpm install --frozen-lockfile; fi
+      && node scripts/smoke.mjs"
     depends_on:
       app-prod:
         condition: service_healthy
@@ -148,8 +157,10 @@
       SMOKE_BASE_URL: http://app-prod:3000
       DATA_DIR: /app/public/data
       ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
+      NPM_CONFIG_OPTIONAL: "true"
     volumes:
-      - ./:/app:ro
+      - ./:/app
+      - smoke_node_modules_cache:/app/node_modules
       - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
@@ -157,18 +168,24 @@
     profiles: ["prod"]
     image: node:20-bookworm-slim
     working_dir: /app
-    command: ["node", "scripts/qa.mjs"]
+    command: >
+      sh -c "corepack enable
+      && if [ ! -d node_modules/next ]; then pnpm install --frozen-lockfile; fi
+      && node scripts/qa.mjs"
     depends_on:
       app-prod:
         condition: service_healthy
     environment:
       SMOKE_BASE_URL: http://app-prod:3000
       DATA_DIR: /app/public/data
+      NPM_CONFIG_OPTIONAL: "true"
     volumes:
-      - ./:/app:ro
+      - ./:/app
+      - smoke_node_modules_cache:/app/node_modules
       - ./artifacts:/app/artifacts
       - ../data:/workspace-data:ro
 
 volumes:
   node_modules_cache:
+  smoke_node_modules_cache:
 

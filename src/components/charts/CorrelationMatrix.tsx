@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
-interface CorrelationMatrixProps {
+export interface CorrelationMatrixProps {
   symbols: string[];
   matrix: number[][]; // 2D array of correlations [-1, 1]
   className?: string;
@@ -134,6 +134,18 @@ export function CorrelationMatrix({
 }: CorrelationMatrixProps) {
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
 
+  // Memoized color cache - pre-compute colors for all unique values in matrix
+  const colorCache = useMemo(() => {
+    const cache: Record<string, string> = {};
+    // Pre-compute colors for all unique values in matrix
+    const uniqueValues = new Set<number>();
+    matrix.forEach(row => row.forEach(val => uniqueValues.add(val)));
+    uniqueValues.forEach(val => {
+      cache[val.toFixed(2)] = getCorrelationColor(val);
+    });
+    return cache;
+  }, [matrix]);
+
   // Validate matrix dimensions
   const isValidMatrix = useMemo(() => {
     if (!matrix || !symbols || symbols.length === 0) return false;
@@ -263,7 +275,8 @@ export function CorrelationMatrix({
                   const correlation = value;
                   const isDiagonal = rowIndex === colIndex;
                   const highlighted = isHighlighted(rowIndex, colIndex);
-                  const bgColor = getCorrelationColor(correlation);
+                  // Use cached color for better performance
+                  const bgColor = colorCache[correlation.toFixed(2)] || getCorrelationColor(correlation);
                   const textColor = getTextColor(correlation);
 
                   return (

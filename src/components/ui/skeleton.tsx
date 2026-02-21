@@ -176,4 +176,52 @@ const SkeletonStats = React.forwardRef<HTMLDivElement, SkeletonStatsProps>(
 );
 SkeletonStats.displayName = "SkeletonStats";
 
-export { Skeleton, SkeletonCard, SkeletonTable, SkeletonChart, SkeletonStats };
+// Skeleton for chart loading state - simple variant for lazy loading
+interface ChartSkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+  height?: number;
+}
+
+const ChartSkeleton = React.forwardRef<HTMLDivElement, ChartSkeletonProps>(
+  ({ className, height = 300, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        role="presentation"
+        aria-hidden="true"
+        className={cn(
+          "animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800",
+          "flex items-center justify-center",
+          className
+        )}
+        style={{ height }}
+        {...props}
+      >
+        {/* Animated chart placeholder lines */}
+        <div className="w-4/5 h-3/5 relative">
+          <div className="absolute inset-0 flex items-end gap-1">
+            {[40, 65, 45, 80, 55, 70, 50, 85, 60, 75, 45, 55].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-t"
+                style={{ height: `${h}%` }}
+              />
+            ))}
+          </div>
+          {/* Trend line overlay */}
+          <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+            <polyline
+              points="0,70 8,60 16,55 24,40 32,45 40,35 48,30 56,25 64,35 72,20 80,25 88,15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-gray-300 dark:text-gray-600"
+            />
+          </svg>
+        </div>
+      </div>
+    );
+  }
+);
+ChartSkeleton.displayName = "ChartSkeleton";
+
+export { Skeleton, SkeletonCard, SkeletonTable, SkeletonChart, SkeletonStats, ChartSkeleton };

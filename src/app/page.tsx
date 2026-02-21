@@ -10,28 +10,32 @@ import {
   CardTitle,
   Button,
   Badge,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
   Skeleton,
   SkeletonStats,
-  ErrorState,
+  PageTransition,
+  TickerMenu,
 } from "@/components/ui";
 import { showError } from "@/components/ui/toast";
 import { LineChart } from "@/components/charts";
 import {
   TrendingUp,
-  TrendingDown,
   Search,
   LineChart as LineChartIcon,
   PieChart,
   Shield,
   Brain,
-  BookOpen,
-  ArrowRight,
-  BarChart3,
   Activity,
   Database,
   Zap,
+  Globe,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
-import { formatCurrency, formatPercent } from "@/lib/utils";
+import { formatCurrency, formatPercent, cn } from "@/lib/utils";
 
 interface MarketOverview {
   totalStocks: number;
@@ -47,14 +51,12 @@ interface MarketOverview {
 export default function HomePage() {
   const [marketData, setMarketData] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function fetchMarketData() {
       try {
-        setError(null);
         const response = await fetch("/api/market-overview");
 
         if (!response.ok) {
@@ -85,7 +87,6 @@ export default function HomePage() {
         console.error("Failed to fetch market data:", err);
         if (isMounted) {
           const errorMessage = err instanceof Error ? err.message : "Failed to load market data";
-          setError(errorMessage);
           showError("Loading failed", errorMessage);
         }
       } finally {
@@ -165,327 +166,259 @@ export default function HomePage() {
     },
   ];
 
-  const stats = [
-    { icon: Database, label: "Stocks Analyzed", value: "500+", sublabel: "HOSE Listed" },
-    { icon: Activity, label: "Data Points", value: "1.5M+", sublabel: "Historical Records" },
-    { icon: Zap, label: "Strategies", value: "5+", sublabel: "Backtest Ready" },
-    { icon: BarChart3, label: "Years of Data", value: "5", sublabel: "2020-2025" },
-  ];
-
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-40"></div>
-
-        {/* Gradient Orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/30 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"></div>
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-24 lg:py-32">
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full text-sm font-medium mb-8 backdrop-blur-sm border border-white/10">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              Live Market Data | HOSE 2020-2025
+    <PageTransition variant="slideUp">
+      <div className="max-w-full space-y-8">
+        {/* Market Command Center Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <Globe className="w-6 h-6 text-white animate-spin-slow" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Market Intelligence</h1>
             </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-              Quantitative Finance for
-              <br />
-              <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
-                Vietnamese Stock Market
-              </span>
-            </h1>
-
-            <p className="text-lg sm:text-xl text-gray-300 mb-10 max-w-3xl mx-auto leading-relaxed">
-              Analyze 500+ HOSE stocks with professional-grade quantitative tools.
-              Backtest strategies, optimize portfolios, and explore factor investing.
+            <p className="text-sm text-gray-500 dark:text-slate-400 max-w-xl">
+              Real-time quantitative analytics for the <span className="text-blue-600 dark:text-blue-400 font-bold">HOSE Exchange</span>. 
+              Institutional-grade tools for retail traders and researchers.
             </p>
-
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <div className="pt-1">
               <Link href="/screener">
-                <Button size="lg" className="bg-white text-slate-900 hover:bg-gray-100 shadow-xl shadow-white/20 px-8 h-12 text-base font-semibold">
-                  <Search className="w-5 h-5 mr-2" />
-                  Start Screening
-                </Button>
-              </Link>
-              <Link href="/learn">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-white/30 text-white hover:bg-white/10 backdrop-blur-sm px-8 h-12 text-base font-semibold"
-                >
-                  <BookOpen className="w-5 h-5 mr-2" />
-                  Learn More
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 h-9">
+                  Launch Screener
+                  <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </Link>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <div key={index} className="text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 mb-4">
-                    <Icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{stat.label}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{stat.sublabel}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Market Overview */}
-      <section className="py-16 bg-gray-50 dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Market Overview</h2>
-              <p className="text-gray-500 dark:text-gray-400 mt-1">Real-time market statistics and trends</p>
+          
+          <div className="flex items-center gap-4 bg-gray-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm">
+            <div className="flex flex-col items-end pr-4 border-r border-gray-200 dark:border-slate-800">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Market Status</span>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-xs font-bold text-gray-900 dark:text-slate-200 uppercase">Live Operations</span>
+              </div>
             </div>
-            <Link href="/screener">
-              <Button variant="outline" className="hidden sm:flex">
-                View All Stocks
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
+            <div className="flex flex-col items-end">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">System Time</span>
+              <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">
+                {new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })} UTC
+              </span>
+            </div>
           </div>
+        </div>
 
-          {/* Error State */}
-          {error && !loading && (
-            <ErrorState
-              message="Failed to load market data"
-              description={error}
-              className="mb-6"
-            />
-          )}
-
+        {/* Market Snapshot Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {loading ? (
-            <SkeletonStats count={4} className="mb-6" />
+            <SkeletonStats count={4} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-800 border-blue-100 dark:border-blue-800">
-                <CardContent className="p-6">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Stocks</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{marketData?.totalStocks}</p>
-                  <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">HOSE Listed</p>
+            <>
+              <Card className="bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-900/10 dark:to-slate-900 border-blue-100 dark:border-blue-900/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Universe Size</span>
+                    <Database className="w-3.5 h-3.5 text-blue-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-gray-900 dark:text-white">{marketData?.totalStocks}</span>
+                    <span className="text-xs text-gray-500 font-medium">Equities</span>
+                  </div>
+                  <div className="mt-2 h-1 w-full bg-blue-100 dark:bg-blue-900/30 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 w-full animate-pulse" />
+                  </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-gray-800 border-green-100 dark:border-green-800">
-                <CardContent className="p-6">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Avg Daily Volume</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(marketData?.avgVolume || 0)}
-                  </p>
-                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">Across all stocks</p>
+              <Card className="bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-slate-900 border-emerald-100 dark:border-emerald-900/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Avg Liquidity</span>
+                    <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(marketData?.avgVolume || 0)}</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-600 font-bold mt-1 uppercase">Rolling 30D Average</p>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-gray-800 border-purple-100 dark:border-purple-800">
-                <CardContent className="p-6">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Market Index</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {marketData?.currentIndex?.toFixed(2) ?? "N/A"}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {marketData?.benchmark && (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{marketData.benchmark}</span>
-                    )}
-                    {marketData?.mtdReturn !== undefined && marketData.mtdReturn !== null && (
-                      <Badge variant={marketData.mtdReturn >= 0 ? "success" : "destructive"} className="text-xs">
-                        {formatPercent(marketData.mtdReturn)} MTD
-                      </Badge>
+              <Card className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-900/10 dark:to-slate-900 border-indigo-100 dark:border-indigo-900/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{marketData?.benchmark || 'VN-INDEX'}</span>
+                    <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-gray-900 dark:text-white">{marketData?.currentIndex?.toFixed(2)}</span>
+                    {marketData?.mtdReturn && (
+                      <span className={cn("text-xs font-bold", marketData.mtdReturn >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                        {marketData.mtdReturn >= 0 ? '+' : ''}{formatPercent(marketData.mtdReturn)}
+                      </span>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-gray-800 border-orange-100 dark:border-orange-800">
-                <CardContent className="p-6">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Data Period</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">5 Years</p>
-                  <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">2020 - 2025</p>
+              <Card className="bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-900/10 dark:to-slate-900 border-amber-100 dark:border-amber-900/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">Data Integrity</span>
+                    <Shield className="w-3.5 h-3.5 text-amber-500" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-gray-900 dark:text-white">99.9%</span>
+                    <span className="text-xs text-gray-500 font-medium">Uptime</span>
+                  </div>
+                  <p className="text-[11px] text-amber-600 font-bold mt-1 uppercase">HOSE 2018 - 2025</p>
                 </CardContent>
               </Card>
-            </div>
+            </>
           )}
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-            <Card className="lg:col-span-2 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-gray-900 dark:text-white">Market Trend</CardTitle>
-                <CardDescription>30-day market performance</CardDescription>
+        {/* Intelligence Feeds */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="rounded-2xl shadow-sm border-gray-100 dark:border-slate-800">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-blue-500" />
+                    Market Performance Trend
+                  </CardTitle>
+                  <CardDescription className="text-xs">Comparative benchmark performance over the last 30 intervals</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[11px] h-5 bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700">Real-time</Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <Skeleton className="h-[250px] w-full" />
+                  <Skeleton className="h-[300px] w-full" />
                 ) : marketData && (
                   <LineChart
                     data={marketData.marketTrend}
                     color="#3b82f6"
-                    height={250}
+                    height={300}
+                    showArea
                   />
                 )}
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-gray-900 dark:text-white">Top Movers</CardTitle>
-                <CardDescription>Latest trading session</CardDescription>
+            {/* Quick Access Tools */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {features.slice(0, 3).map((tool) => {
+                const Icon = tool.icon;
+                return (
+                  <Link key={tool.href} href={tool.href}>
+                    <Card className="h-full hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50 transition-all group rounded-2xl border-gray-100 dark:border-slate-800">
+                      <CardContent className="p-4">
+                        <div className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-slate-800 flex items-center justify-center mb-3 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <h3 className="font-bold text-xs text-gray-900 dark:text-white mb-1">{tool.title}</h3>
+                        <p className="text-xs text-gray-500 line-clamp-2">{tool.description}</p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Top Movers Sidebar */}
+            <Card className="rounded-2xl border-gray-100 dark:border-slate-800 shadow-sm overflow-hidden">
+              <CardHeader className="bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-800 pb-4">
+                <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center">
+                  <Zap className="w-3.5 h-3.5 mr-2 text-amber-500" />
+                  Session Leaders
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <Skeleton key={i} className="h-10 w-full" />
+              <CardContent className="pt-4 px-0">
+                <Tabs defaultValue="gainers">
+                  <div className="px-4 mb-4">
+                    <TabsList className="w-full bg-gray-100 dark:bg-slate-800 rounded-xl p-1 h-9">
+                      <TabsTrigger value="gainers" className="flex-1 text-xs font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Top Gainers</TabsTrigger>
+                      <TabsTrigger value="losers" className="flex-1 text-xs font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Top Losers</TabsTrigger>
+                    </TabsList>
+                  </div>
+                  
+                  <TabsContent value="gainers" className="mt-0">
+                    <div className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {marketData?.topGainers.slice(0, 5).map((stock) => (
+                        <TickerMenu key={stock.symbol} symbol={stock.symbol} className="w-full">
+                          <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                {stock.symbol.slice(0, 1)}
+                              </div>
+                              <span className="font-bold text-xs text-gray-900 dark:text-slate-200 group-hover:underline">{stock.symbol}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">+{formatPercent(stock.change)}</span>
+                              <span className="text-[11px] text-gray-400 uppercase">Yield session</span>
+                            </div>
+                          </div>
+                        </TickerMenu>
                       ))}
                     </div>
-                    <div className="space-y-2">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <Skeleton key={i} className="h-10 w-full" />
+                  </TabsContent>
+                  
+                  <TabsContent value="losers" className="mt-0">
+                    <div className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {marketData?.topLosers.slice(0, 5).map((stock) => (
+                        <TickerMenu key={stock.symbol} symbol={stock.symbol} className="w-full">
+                          <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center text-xs font-bold text-rose-600 dark:text-rose-400 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                                {stock.symbol.slice(0, 1)}
+                              </div>
+                              <span className="font-bold text-xs text-gray-900 dark:text-slate-200 group-hover:underline">{stock.symbol}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{formatPercent(stock.change)}</span>
+                              <span className="text-[11px] text-gray-400 uppercase">Drawdown</span>
+                            </div>
+                          </div>
+                        </TickerMenu>
                       ))}
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                        Top Gainers
-                      </p>
-                      <div className="space-y-2">
-                        {marketData?.topGainers.slice(0, 3).map((stock) => (
-                          <div
-                            key={stock.symbol}
-                            className="flex justify-between items-center py-1.5 px-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
-                          >
-                            <Link href={`/charts?symbol=${stock.symbol}`} className="font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                              {stock.symbol}
-                            </Link>
-                            <span className="text-green-600 dark:text-green-400 flex items-center text-sm font-semibold">
-                              <TrendingUp className="w-4 h-4 mr-1" />
-                              {formatPercent(stock.change)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
-                        Top Losers
-                      </p>
-                      <div className="space-y-2">
-                        {marketData?.topLosers.slice(0, 3).map((stock) => (
-                          <div
-                            key={stock.symbol}
-                            className="flex justify-between items-center py-1.5 px-3 bg-red-50 dark:bg-red-900/20 rounded-lg"
-                          >
-                            <Link href={`/charts?symbol=${stock.symbol}`} className="font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                              {stock.symbol}
-                            </Link>
-                            <span className="text-red-600 dark:text-red-400 flex items-center text-sm font-semibold">
-                              <TrendingDown className="w-4 h-4 mr-1" />
-                              {formatPercent(stock.change)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  </TabsContent>
+                </Tabs>
+                <div className="p-4 border-t border-gray-100 dark:border-slate-800">
+                  <Link href="/screener">
+                    <Button variant="ghost" size="sm" className="w-full text-xs font-bold text-blue-600 dark:text-blue-400">
+                      View All Instruments
+                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Platform Insights */}
+            <Card className="rounded-2xl border-none shadow-lg bg-blue-600 dark:bg-blue-700 text-white overflow-hidden relative">
+              <div className="absolute -bottom-4 -right-4 opacity-20 transform rotate-12">
+                <Sparkles className="w-24 h-24" />
+              </div>
+              <CardContent className="p-6 relative z-10">
+                <h3 className="text-sm font-bold mb-2">QuantVN Pro</h3>
+                <p className="text-xs text-blue-100/80 leading-relaxed mb-4">
+                  Get full access to backtest engines, factor modeling, and our experimental ML laboratory.
+                </p>
+                <Button size="sm" className="w-full bg-white text-blue-600 hover:bg-blue-50 font-bold rounded-xl text-xs h-8">
+                  Register Account
+                </Button>
               </CardContent>
             </Card>
           </div>
         </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-20 bg-white dark:bg-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              Powerful Quantitative Tools
-            </h2>
-            <p className="text-gray-500 dark:text-gray-400 max-w-2xl mx-auto text-lg">
-              Everything you need to analyze stocks, test strategies, and build
-              portfolios - all in one professional platform.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <Link key={feature.href} href={feature.href}>
-                  <Card className="h-full hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group border-gray-100 dark:border-gray-700">
-                    <CardContent className="p-6">
-                      <div className={`w-14 h-14 ${feature.iconBg} rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}>
-                        <Icon className={`w-7 h-7 ${feature.iconColor}`} />
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {feature.title}
-                      </h3>
-                      <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-4">
-                        {feature.description}
-                      </p>
-                      <div className="flex items-center text-blue-600 dark:text-blue-400 text-sm font-medium">
-                        <span>Explore</span>
-                        <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-2 transition-transform duration-300" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-40"></div>
-
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            Ready to dive into quantitative analysis?
-          </h2>
-          <p className="text-gray-400 mb-10 text-lg max-w-2xl mx-auto">
-            Start with our educational content or jump straight into the tools.
-            No registration required.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link href="/learn">
-              <Button size="lg" className="bg-white text-slate-900 hover:bg-gray-100 shadow-xl px-8 h-12 text-base font-semibold">
-                <BookOpen className="w-5 h-5 mr-2" />
-                Start Learning
-              </Button>
-            </Link>
-            <Link href="/screener">
-              <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 backdrop-blur-sm px-8 h-12 text-base font-semibold">
-                <Search className="w-5 h-5 mr-2" />
-                Try Screener
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </PageTransition>
   );
 }
+

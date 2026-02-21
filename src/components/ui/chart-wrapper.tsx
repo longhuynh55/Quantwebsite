@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/lib/hooks";
 
 interface ChartWrapperProps {
   children: ReactNode;
@@ -24,6 +25,10 @@ interface ChartWrapperProps {
  * Animates charts when they become visible in the viewport.
  * Supports different animation styles for various chart types.
  *
+ * @accessibility
+ * - Respects prefers-reduced-motion: shows content immediately without animation
+ *   if the user has enabled reduced motion in their system preferences
+ *
  * Usage:
  * ```tsx
  * <ChartWrapper animation="drawIn">
@@ -40,19 +45,28 @@ export function ChartWrapper({
   showSkeleton = false,
   skeletonHeight = 300,
 }: ChartWrapperProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [hasAnimated, setHasAnimated] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [isVisible, setIsVisible] = useState(prefersReducedMotion);
+  const [hasAnimated, setHasAnimated] = useState(prefersReducedMotion);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const isVisibleResolved = prefersReducedMotion || isVisible;
+  const hasAnimatedResolved = prefersReducedMotion || hasAnimated;
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      return;
+    }
+
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
+
+    let timeoutId: NodeJS.Timeout | null = null;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !hasAnimated) {
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
               setIsVisible(true);
               setHasAnimated(true);
             }, delay);
@@ -65,8 +79,11 @@ export function ChartWrapper({
 
     observer.observe(wrapper);
 
-    return () => observer.disconnect();
-  }, [delay, hasAnimated]);
+    return () => {
+      observer.disconnect();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [delay, hasAnimated, prefersReducedMotion]);
 
   // Animation keyframes as CSS classes
   const animationClasses = {
@@ -106,7 +123,7 @@ export function ChartWrapper({
       ref={wrapperRef}
       className={cn(
         "transition-all ease-out",
-        isVisible ? animated : initial,
+        isVisibleResolved ? animated : initial,
         className
       )}
       style={{
@@ -114,13 +131,16 @@ export function ChartWrapper({
         transitionProperty: "opacity, transform, clip-path",
       }}
     >
-      {showSkeleton && !hasAnimated ? skeleton : children}
+      {showSkeleton && !hasAnimatedResolved ? skeleton : children}
     </div>
   );
 }
 
 /**
  * StaggeredChartGrid - Grid of charts with staggered entrance animations
+ *
+ * @accessibility
+ * - Respects prefers-reduced-motion: shows all children immediately without animation
  */
 interface StaggeredChartGridProps {
   children: ReactNode;
@@ -140,14 +160,22 @@ export function StaggeredChartGrid({
   initialDelay = 100,
   columns = 2,
 }: StaggeredChartGridProps) {
-  const [visibleCount, setVisibleCount] = useState(0);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const childCount = React.Children.count(children);
+  const [visibleCount, setVisibleCount] = useState(prefersReducedMotion ? childCount : 0);
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // If reduced motion is preferred, show all children immediately
+    if (prefersReducedMotion) {
+      setVisibleCount(childCount);
+      return;
+    }
+
     const grid = gridRef.current;
     if (!grid) return;
 
-    const childCount = React.Children.count(children);
+    const timers: NodeJS.Timeout[] = [];
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -155,9 +183,10 @@ export function StaggeredChartGrid({
           if (entry.isIntersecting) {
             // Stagger the reveal of each child
             for (let i = 0; i < childCount; i++) {
-              setTimeout(() => {
+              const timer = setTimeout(() => {
                 setVisibleCount(i + 1);
               }, initialDelay + i * staggerDelay);
+              timers.push(timer);
             }
             observer.unobserve(entry.target);
           }
@@ -168,8 +197,11 @@ export function StaggeredChartGrid({
 
     observer.observe(grid);
 
-    return () => observer.disconnect();
-  }, [children, staggerDelay, initialDelay]);
+    return () => {
+      observer.disconnect();
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [children, staggerDelay, initialDelay, childCount, prefersReducedMotion]);
 
   const columnClasses = {
     1: "grid-cols-1",
@@ -184,7 +216,7 @@ export function StaggeredChartGrid({
         <div
           key={index}
           className={cn(
-            "transition-all duration-500 ease-out",
+            prefersReducedMotion ? "" : "transition-all duration-500 ease-out",
             index < visibleCount
               ? "opacity-100 translate-y-0"
               : "opacity-0 translate-y-4"

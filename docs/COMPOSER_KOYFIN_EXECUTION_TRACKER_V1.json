@@ -1,0 +1,134 @@
+{
+  "version": "composer-koyfin-execution-tracker-v1",
+  "scope": "HOSE-only",
+  "status": "active",
+  "phases": [
+    {
+      "id": "PH1",
+      "name": "Weeks 1-4",
+      "goal": "Research workspace foundation + strategy run skeleton",
+      "items": [
+        {
+          "id": "A-01",
+          "title": "Multi-symbol compare workspace",
+          "priority": "P0",
+          "owner": "Frontend + Quant/BA",
+          "status": "todo",
+          "dependsOn": []
+        },
+        {
+          "id": "A-02",
+          "title": "Advanced screener UX + criteria API bridge",
+          "priority": "P0",
+          "owner": "Frontend + Backend",
+          "status": "todo",
+          "dependsOn": []
+        },
+        {
+          "id": "B-01A",
+          "title": "Strategy-lab run API skeleton",
+          "priority": "P0",
+          "owner": "Backend",
+          "status": "todo",
+          "dependsOn": []
+        }
+      ]
+    },
+    {
+      "id": "PH2",
+      "name": "Weeks 5-8",
+      "goal": "P0 completion and risk constraints",
+      "items": [
+        {
+          "id": "A-03",
+          "title": "Alert center and rule workflow",
+          "priority": "P0",
+          "owner": "Frontend + Backend",
+          "status": "todo",
+          "dependsOn": [
+            "A-02"
+          ]
+        },
+        {
+          "id": "B-01B",
+          "title": "Strategy builder E2E run lifecycle",
+          "priority": "P0",
+          "owner": "Backend + Quant/BA + Frontend",
+          "status": "todo",
+          "dependsOn": [
+            "B-01A"
+          ]
+        },
+        {
+          "id": "B-02",
+          "title": "Portfolio risk constraints templates",
+          "priority": "P0",
+          "owner": "Quant/BA + Backend + Frontend",
+          "status": "todo",
+          "dependsOn": []
+        }
+      ]
+    },
+    {
+      "id": "PH3",
+      "name": "Weeks 9-12",
+      "goal": "P1 hardening and platform scale prep",
+      "items": [
+        {
+          "id": "C-01",
+          "title": "Watchlist/workspace pro UX",
+          "priority": "P1",
+          "owner": "Frontend",
+          "status": "todo",
+          "dependsOn": [
+            "A-01"
+          ]
+        },
+        {
+          "id": "C-02",
+          "title": "Report/export center",
+          "priority": "P1",
+          "owner": "Frontend + Backend",
+          "status": "todo",
+          "dependsOn": [
+            "B-01B"
+          ]
+        },
+        {
+          "id": "D-01",
+          "title": "Distributed cache abstraction",
+          "priority": "P2",
+          "owner": "Backend",
+          "status": "todo",
+          "dependsOn": []
+        },
+        {
+          "id": "D-02",
+          "title": "Async job resiliency and observability",
+          "priority": "P2",
+          "owner": "Backend + QA",
+          "status": "todo",
+          "dependsOn": [
+            "B-01B"
+          ]
+        }
+      ]
+    }
+  ],
+  "qualityGates": {
+    "merge": [
+      "pnpm run lint",
+      "pnpm exec tsc --noEmit",
+      "pnpm run build"
+    ],
+    "integration": [
+      "pnpm run docker:smoke",
+      "pnpm run docker:qa"
+    ],
+    "assistant": [
+      "pnpm run eval:assistant:pr-gate",
+      "pnpm run eval:assistant:perf-reliability",
+      "pnpm run eval:assistant:drift:monitor:skip-run"
+    ]
+  }
+}

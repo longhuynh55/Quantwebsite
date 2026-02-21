@@ -972,6 +972,10 @@ export function hasSufficientDataQuality(dataset: DatasetName, minAcceptedRatio:
   return report.acceptedRatio >= minAcceptedRatio;
 }
 
+export async function getDataSourceFingerprint(): Promise<string> {
+  return computeDataSourceFingerprint();
+}
+
 /**
  * Clears all caches - useful for testing or when data files are updated
  */

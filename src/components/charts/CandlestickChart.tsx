@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useTheme } from "@/components/providers/ThemeProvider";
 import {
   createChart,
   IChartApi,
@@ -52,7 +53,7 @@ function timeToDate(time: Time): Date {
   return new Date(time.year, time.month - 1, time.day);
 }
 
-interface IndicatorConfig {
+export interface IndicatorConfig {
   type: "sma" | "ema";
   period: number;
   color: string;
@@ -65,6 +66,7 @@ interface CandlestickChartProps {
   height?: number;
   showVolume?: boolean;
   symbol?: string;
+  isLoading?: boolean;
   onRangeChange?: (from: Date, to: Date) => void;
 }
 
@@ -121,6 +123,7 @@ export function CandlestickChart({
   height = 500,
   showVolume = true,
   symbol = "Stock",
+  isLoading = false,
   onRangeChange,
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -128,8 +131,8 @@ export function CandlestickChart({
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const { resolvedTheme } = useTheme();
 
-  const [isLoading] = useState(false);
   const [activeIndicators, setActiveIndicators] = useState<Set<string>>(() => {
     const initialCount = indicators.length > 0 ? indicators.length : 2;
     return new Set(Array.from({ length: initialCount }, (_, i) => `indicator-${i}`));
@@ -153,44 +156,45 @@ export function CandlestickChart({
 
     const container = chartContainerRef.current;
     const indicatorSeriesMap = indicatorSeriesRef.current;
+    const isDark = resolvedTheme === "dark";
 
     const chart = createChart(container, {
       width: container.clientWidth,
       height: showVolume ? height + 100 : height,
       layout: {
-        background: { type: ColorType.Solid, color: "#ffffff" },
-        textColor: "#6b7280",
+        background: { type: ColorType.Solid, color: isDark ? "#0f172a" : "#ffffff" },
+        textColor: isDark ? "#94a3b8" : "#6b7280",
         fontSize: 12,
         fontFamily: "Inter, system-ui, sans-serif",
       },
       grid: {
-        vertLines: { color: "#f3f4f6" },
-        horzLines: { color: "#f3f4f6" },
+        vertLines: { color: isDark ? "#1e293b" : "#f3f4f6" },
+        horzLines: { color: isDark ? "#1e293b" : "#f3f4f6" },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: "#94a3b8",
+          color: isDark ? "#334155" : "#94a3b8",
           width: 1,
           style: 2,
           labelBackgroundColor: "#3b82f6",
         },
         horzLine: {
-          color: "#94a3b8",
+          color: isDark ? "#334155" : "#94a3b8",
           width: 1,
           style: 2,
           labelBackgroundColor: "#3b82f6",
         },
       },
       rightPriceScale: {
-        borderColor: "#e5e7eb",
+        borderColor: isDark ? "#1e293b" : "#e5e7eb",
         scaleMargins: {
           top: 0.1,
           bottom: showVolume ? 0.25 : 0.1,
         },
       },
       timeScale: {
-        borderColor: "#e5e7eb",
+        borderColor: isDark ? "#1e293b" : "#e5e7eb",
         timeVisible: true,
         secondsVisible: false,
       },
@@ -203,11 +207,11 @@ export function CandlestickChart({
 
     // Create candlestick series
     const candlestickSeries = chart.addCandlestickSeries({
-      upColor: "#22c55e",
+      upColor: "#10b981",
       downColor: "#ef4444",
-      borderUpColor: "#22c55e",
+      borderUpColor: "#10b981",
       borderDownColor: "#ef4444",
-      wickUpColor: "#22c55e",
+      wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
     });
     candlestickSeriesRef.current = candlestickSeries;
@@ -264,7 +268,7 @@ export function CandlestickChart({
       candlestickSeriesRef.current = null;
       volumeSeriesRef.current = null;
     };
-  }, [height, showVolume, onRangeChange]);
+  }, [height, showVolume, onRangeChange, resolvedTheme]);
 
   // Update data
   useEffect(() => {
@@ -453,13 +457,13 @@ export function CandlestickChart({
             <div className="w-px h-6 bg-gray-200 mx-1" />
 
             {/* Zoom controls */}
-            <Button size="icon" variant="ghost" onClick={handleZoomIn} title="Zoom In">
+            <Button size="icon" variant="ghost" onClick={handleZoomIn} aria-label="Zoom in">
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={handleZoomOut} title="Zoom Out">
+            <Button size="icon" variant="ghost" onClick={handleZoomOut} aria-label="Zoom out">
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={handleReset} title="Reset View">
+            <Button size="icon" variant="ghost" onClick={handleReset} aria-label="Reset view">
               <RotateCcw className="w-4 h-4" />
             </Button>
           </div>

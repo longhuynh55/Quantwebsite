@@ -1,0 +1,58 @@
+---
+slug: technical-indicators
+title: 'Technical Indicators: A Practical Deep Dive'
+description: 'A disciplined view of moving averages, RSI, MACD, and volatility bands, with implementation pitfalls.'
+level: intermediate
+durationMinutes: 32
+order: 1
+---
+## Overview
+
+Technical indicators are transformations of price and volume intended to summarize trend, momentum, and volatility. They are useful as features, filters, and decision rules, but they are not guarantees of predictability. A disciplined approach focuses on interpretability, stability, and consistency with the trading horizon.
+
+### Learning objectives
+
+- Understand what indicators measure and what they do not measure.
+- Use indicators as part of a testable decision rule.
+- Avoid common implementation and interpretation errors.
+
+### Moving averages (trend and smoothing)
+
+A moving average is a smoothing operator. It reduces high-frequency noise at the cost of delay.
+
+- Simple moving average (SMA) treats each observation equally.
+- Exponential moving average (EMA) weights recent observations more heavily.
+
+A practical principle is to treat moving averages primarily as regime filters (trend vs non-trend) rather than as a standalone entry signal.
+
+### RSI (momentum oscillator)
+
+RSI compares average gains to average losses over a window.
+
+```
+RSI = 100 - 100 / (1 + RS)
+RS = Average Gain / Average Loss
+```
+
+RSI is often interpreted with threshold rules (for example, 70/30), but thresholds are regime-dependent. In strong trends, RSI can remain elevated or depressed for extended periods.
+
+### MACD and Bollinger Bands (momentum and volatility)
+
+- MACD measures momentum through differences of EMAs.
+- Bollinger Bands wrap a moving average with a volatility-based envelope.
+
+Use these tools to characterize state (trending, mean-reverting, high volatility) and then define explicit rules for how state maps to actions.
+
+### Implementation pitfalls
+
+- Look-ahead bias: computing indicators using future data in a backtest.
+- Parameter proliferation: many correlated indicators create the illusion of robustness.
+- Time-horizon mismatch: using short-horizon indicators for long-horizon holding periods.
+- Ignoring costs: indicators that trade frequently are sensitive to slippage.
+
+### Checklist
+
+- Can you explain what the indicator measures in one sentence?
+- Is the indicator computed using only information available at decision time?
+- Is the strategy stable under small parameter changes?
+- Do results survive plausible transaction costs and delays?

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/lib/hooks";
 
 interface AnimatedNumberProps {
   value: number;
@@ -24,6 +25,10 @@ interface AnimatedNumberProps {
  * @param suffix - String to append (e.g., "%")
  * @param formatter - Custom formatter function
  * @param trigger - "mount" to animate on mount, "visible" to animate when scrolled into view
+ *
+ * @accessibility
+ * - Respects prefers-reduced-motion: shows final value immediately if reduced motion is preferred
+ * - Provides aria-label with the final value for screen readers
  */
 export function AnimatedNumber({
   value,
@@ -35,11 +40,14 @@ export function AnimatedNumber({
   formatter,
   trigger = "visible",
 }: AnimatedNumberProps) {
-  const [displayValue, setDisplayValue] = useState(0);
-  const [hasAnimated, setHasAnimated] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [displayValue, setDisplayValue] = useState(prefersReducedMotion ? value : 0);
+  const [hasAnimated, setHasAnimated] = useState(prefersReducedMotion);
   const elementRef = useRef<HTMLSpanElement>(null);
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  const startValueRef = useRef(0);
+  const targetValueRef = useRef(value);
 
   const formatValue = useCallback(
     (val: number) => {
@@ -49,36 +57,93 @@ export function AnimatedNumber({
     [formatter, prefix, suffix, decimals]
   );
 
-  const startAnimation = useCallback(() => {
-    if (hasAnimated) return;
+  const cancelRunningAnimation = useCallback(() => {
+    if (animationRef.current !== null) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
     startTimeRef.current = null;
-    const step = (timestamp: number) => {
-      if (!startTimeRef.current) {
-        startTimeRef.current = timestamp;
-      }
+  }, []);
 
-      const elapsed = timestamp - startTimeRef.current;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentValue = value * easeOut;
-
-      setDisplayValue(currentValue);
-
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(step);
-      } else {
-        setDisplayValue(value);
+  const startAnimation = useCallback(
+    (fromValue: number, toValue: number) => {
+      // Skip animation if reduced motion is preferred
+      if (prefersReducedMotion) {
+        setDisplayValue(toValue);
         setHasAnimated(true);
+        return;
       }
-    };
 
-    animationRef.current = requestAnimationFrame(step);
-  }, [hasAnimated, duration, value]);
+      cancelRunningAnimation();
+      startValueRef.current = fromValue;
+      targetValueRef.current = toValue;
 
+      const step = (timestamp: number) => {
+        if (!startTimeRef.current) {
+          startTimeRef.current = timestamp;
+        }
+
+        const elapsed = timestamp - startTimeRef.current;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentValue = fromValue + (toValue - fromValue) * easeOut;
+
+        setDisplayValue(currentValue);
+
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(step);
+        } else {
+          setDisplayValue(toValue);
+          setHasAnimated(true);
+          animationRef.current = null;
+        }
+      };
+
+      animationRef.current = requestAnimationFrame(step);
+    },
+    [duration, cancelRunningAnimation, prefersReducedMotion]
+  );
+
+  // Handle value changes during animation
   useEffect(() => {
-    if (trigger === "mount") {
-      startAnimation();
+    if (prefersReducedMotion) {
+      targetValueRef.current = value;
       return;
+    }
+
+    // Skip if value hasn't actually changed
+    if (value === targetValueRef.current) return;
+
+    if (hasAnimated) {
+      // Already animated once, valueToRender follows `value` directly.
+      targetValueRef.current = value;
+      return;
+    }
+
+    // Cancel any running animation and start from current display value to new target
+    const frameId = window.requestAnimationFrame(() => {
+      startAnimation(displayValue, value);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [value, hasAnimated, displayValue, startAnimation, prefersReducedMotion]);
+
+  // Initial animation trigger
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      return;
+    }
+
+    if (trigger === "mount") {
+      const frameId = window.requestAnimationFrame(() => {
+        startAnimation(0, value);
+      });
+
+      return () => {
+        window.cancelAnimationFrame(frameId);
+      };
     }
 
     // Intersection Observer for visible trigger
@@ -89,7 +154,7 @@ export function AnimatedNumber({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !hasAnimated) {
-            startAnimation();
+            startAnimation(0, value);
             observer.unobserve(entry.target);
           }
         });
@@ -101,13 +166,11 @@ export function AnimatedNumber({
 
     return () => {
       observer.disconnect();
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      cancelRunningAnimation();
     };
-  }, [trigger, startAnimation, hasAnimated]);
+  }, [trigger, hasAnimated, value, startAnimation, cancelRunningAnimation, prefersReducedMotion]);
 
-  const valueToRender = hasAnimated ? value : displayValue;
+  const valueToRender = prefersReducedMotion || hasAnimated ? value : displayValue;
 
   return (
     <span

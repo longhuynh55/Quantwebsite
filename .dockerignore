@@ -1,8 +1,102 @@
+# =============================================================================
+# QuantVN Docker Ignore File
+# Excludes files not needed in Docker build context
+# =============================================================================
+
+# Dependencies
 node_modules
+.pnpm-store
+
+# Build outputs
 .next
+.next-ci
+.next-ci-webpack
+out
+build
+dist
+
+# Git
 .git
 .gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Environment files (secrets should be passed at runtime)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
 pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 dev_smoke*.log
-README.md
+dev-*.log
+
+# Test and coverage
+coverage
+.nyc_output
+__tests__
+__mocks__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.*
+jest.setup.*
+
+# Documentation
 docs
+*.md
+!README.md
+
+# Artifacts and temporary files
+artifacts
+_tmp*
+*.tmp
+*.temp
+delete_test
+
+# Docker files (avoid recursive builds)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+.circleci
+
+# Python virtual environment (if used for data processing)
+.venv
+.uv-cache
+__pycache__
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+*.bak
+
+# Development tools
+.eslintcache
+.prettierrc
+.prettierignore
+.editorconfig
+
+# Cache directories
+.cache
+.swc
+
+# Content and data (usually mounted as volumes)
+../data

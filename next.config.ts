@@ -1,5 +1,25 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+
+function withOptionalBundleAnalyzer(config: NextConfig): NextConfig {
+  if (process.env.ANALYZE !== "true") {
+    return config;
+  }
+
+  try {
+    const bundleAnalyzer = require("@next/bundle-analyzer");
+    return bundleAnalyzer({
+      enabled: true,
+      openAnalyzer: true,
+    })(config);
+  } catch {
+    console.warn("[next.config] ANALYZE=true but @next/bundle-analyzer is missing; skipping analyzer.");
+    return config;
+  }
+}
 
 const nextConfig: NextConfig = {
   // Allow overriding build output dir when default .next is locked by another process.
@@ -36,4 +56,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withOptionalBundleAnalyzer(nextConfig);

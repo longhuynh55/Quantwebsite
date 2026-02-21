@@ -57,3 +57,8 @@ next-env.d.ts
 
 # generated reports
 /artifacts/
+
+# playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/

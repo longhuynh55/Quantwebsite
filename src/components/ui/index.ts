@@ -1,5 +1,7 @@
 export { Button } from "./button";
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent, MetricCard } from "./card";
+export { DataTable } from "./DataTable";
+export { TickerMenu } from "./TickerMenu";
 export { Input } from "./input";
 export { Select } from "./select";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
@@ -22,3 +24,9 @@ export { AnimatedNumber, AnimatedPercentage, AnimatedCurrency } from "./animated
 export { PageTransition, StaggerContainer, AnimatedSection } from "./page-transition";
 export { ChartWrapper, StaggeredChartGrid } from "./chart-wrapper";
 export { SkipLink, MainContent, FocusTrap, VisuallyHidden } from "./skip-link";
+export {
+  ErrorBoundary,
+  useErrorHandler,
+  ErrorTrigger,
+} from "./error-boundary";
+export type { ErrorBoundaryProps, ErrorBoundaryFallbackProps, ErrorTriggerProps } from "./error-boundary";

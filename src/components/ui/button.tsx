@@ -6,8 +6,43 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: "default" | "sm" | "lg" | "icon";
 }
 
+/**
+ * Button - Primary button component with variants and sizes
+ *
+ * Supports multiple visual variants (default, destructive, outline, secondary, ghost, link)
+ * and sizes (default, sm, lg, icon).
+ *
+ * @accessibility
+ * - All buttons should have discernible text or an aria-label
+ * - **Icon buttons (size="icon") MUST have an aria-label or aria-labelledby attribute**
+ * - Focus states are visible with ring styling
+ * - Disabled state is properly announced
+ *
+ * @example
+ * ```tsx
+ * // Standard button with text
+ * <Button>Click me</Button>
+ *
+ * // Icon button - MUST have aria-label
+ * <Button size="icon" aria-label="Open menu">
+ *   <MenuIcon />
+ * </Button>
+ * ```
+ */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", ...props }, ref) => {
+    // In development, throw error if icon button without aria-label
+    if (process.env.NODE_ENV === 'development' && size === 'icon') {
+      const hasAriaLabel = Boolean(props['aria-label'] || props['aria-labelledby']);
+      if (!hasAriaLabel) {
+        throw new Error(
+          'Accessibility Error: Icon button MUST have an aria-label or aria-labelledby attribute. ' +
+          'Icon-only buttons provide no context for screen reader users without an accessible name.\n' +
+          'Example: <Button size="icon" aria-label="Open menu"><MenuIcon /></Button>'
+        );
+      }
+    }
+
     // Base styles with smooth transitions for all properties
     const baseStyles = cn(
       "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium",

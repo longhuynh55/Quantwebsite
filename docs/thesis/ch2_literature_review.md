@@ -1,19 +1,55 @@
-# Chapter 2: Literature Review and Theoretical Background
+﻿# Chapter 2: Literature Review and Theoretical Background
 
-## 2.1 Quantitative Finance Foundations
-Mean-variance theory formalizes portfolio construction as a trade-off between expected return and variance (Markowitz, 1952). Capital Asset Pricing Model concepts then connect expected returns to systematic risk via beta (Sharpe, 1964). For downside-focused risk control, Conditional Value at Risk (CVaR) captures tail loss more effectively than variance-only measures in many settings (Rockafellar & Uryasev, 2000).
+This chapter reviews prior work in a forward narrative that moves from traditional finance theory to modern empirical and computational finance, then to machine learning and reliability-aware AI assistants for finance. The goal is not to exhaust the literature, but to establish the conceptual commitments that a reliability-critical product must satisfy.
 
-## 2.2 Hallucination and Reliability in LLM Systems
-Truthfulness benchmarks show that strong language fluency does not guarantee factual correctness (Lin et al., 2022). Claim-level evaluation frameworks highlight the need to score atomic factual units instead of only overall answer quality (Min et al., 2023). Self-consistency style checks and black-box methods can detect potential hallucinations without fine-tuned labels (Manakul et al., 2023). Abstention behavior is also essential when user questions are unanswerable from available evidence (Rajpurkar et al., 2018).
+## 2.1 Traditional Finance: Portfolio Theory and Equilibrium Pricing
+Modern quantitative systems inherit their core objective functions from traditional finance. Mean-variance portfolio theory formalizes the choice of portfolio weights as a constrained trade-off between expected return and variance, making covariance structure a first-class modeling object and creating the notion of an efficient frontier (Markowitz, 1952). In equilibrium settings, the Capital Asset Pricing Model provides an interpretable benchmark that links expected returns to systematic exposure, turning beta into a canonical measure of market risk (Sharpe, 1964). These models do not merely motivate textbook metrics; they translate into system requirements. A platform that offers optimization or risk reporting must construct aligned return series, estimate covariances on a consistent calendar, and maintain explicit constraints that connect computed outputs to interpretable risk-return trade-offs.
 
-## 2.3 Grounded Generation and Retrieval
-Retrieval-augmented generation (RAG) connects responses to external evidence and generally improves factuality in knowledge-intensive tasks (Lewis et al., 2020). In a finance assistant context, retrieval is implemented through deterministic internal tools and APIs instead of open-web search, which improves reproducibility and auditability.
+## 2.2 From Efficiency to Factors: Empirical Finance and Robust Risk Dimensions
+While traditional models provide structure, empirical finance emphasizes what can be measured reliably in real markets. The efficient market hypothesis argues that prices incorporate available information, implying that systematic patterns should be rare unless they reflect compensation for risk, market frictions, or structural constraints (Fama, 1970). This perspective shaped decades of empirical testing and led to richer models of return variation. Multifactor approaches show that cross-sectional returns are not fully captured by a single market beta; instead, characteristics such as size and value can explain systematic differences in returns, motivating factor construction and factor-aware benchmarking (Fama & French, 1993). For a product, this literature motivates two design principles. First, results must be accompanied by diagnostics about coverage and data integrity because factor and beta estimates are only meaningful if computed on consistent samples. Second, the system should present factor and risk outputs as conditional on data availability and alignment rather than as unconditional truths.
 
-## 2.4 Research Gap
-Most generic LLM applications optimize convenience first and robustness second. For financial numeric outputs, this ordering is risky. The identified gap is a practical architecture that combines:
-- strict grounding requirements for numeric claims,
-- explicit fallback/abstention policies,
-- quantitative acceptance gates suitable for product and thesis evaluation.
+## 2.3 Modern Risk: Tail Measures and Optimization Under Downside Exposure
+Variance captures symmetric dispersion but may underrepresent downside exposure in heavy-tailed return distributions. Tail-oriented measures address this limitation by focusing directly on adverse outcomes. Conditional Value at Risk (CVaR), also known as expected shortfall, is a coherent risk measure that summarizes expected loss beyond a quantile and can be incorporated into convex optimization problems, making it attractive for practical systems (Rockafellar & Uryasev, 2000). The key implication for system design is that tail metrics increase dependence on consistent sampling windows and robust return construction. A platform that reports CVaR must enforce strong input validation and should surface the sensitivity of tail metrics to horizon, confidence level, and missing data.
 
-## 2.5 Chapter Summary
-The reviewed literature supports a design where retrieval grounding, abstention, and claim-level evaluation are mandatory. Chapter 3 translates these principles into system architecture, policy logic, and measurable metrics.
+## 2.4 Backtesting and the Discipline of Evaluation
+In applied quantitative finance, the backtest is the bridge between theory and operational decisions. Yet backtests are also a major source of false confidence because strategy discovery is often a search process. The probability of backtest overfitting grows as the research process explores more configurations, symbols, and time windows, especially when selection is guided by the same historical sample used for evaluation (Bailey et al., 2016). This motivates evaluation discipline that goes beyond reporting a few headline metrics. A reliable platform must make execution assumptions explicit, prevent look-ahead bias, model transaction costs, and present diagnostics that explain when results may be unstable or not comparable. In this view, evaluation is not an afterthought; it is part of the reliability contract between the system and the user.
+
+## 2.5 Machine Learning in Modern Finance
+Machine learning extends empirical finance by allowing nonlinear interactions and high-dimensional characteristic sets to be modeled in a disciplined way. In asset pricing contexts, machine learning can improve prediction and cross-sectional ranking by combining many features under regularization and careful validation (Gu et al., 2020). However, the same work reinforces classic limitations: financial return series are noisy, relationships drift over time, and high-capacity models can overfit without strong evaluation protocols. Accordingly, the product implication is that machine learning should be used to augment, not replace, interpretable baselines and that evaluation gates must remain stringent. Factor models remain a useful reference point because they provide stable economic interpretations that can serve as guardrails and comparison baselines for learned models (Fama & French, 1993).
+
+## 2.6 Reliability in Finance AI Assistants: Hallucination, Abstention, and Grounding
+As quantitative platforms adopt conversational interfaces, reliability constraints extend from numeric computation to language generation. Truthfulness benchmarking demonstrates that language models can produce confident but false claims, making it unsafe to treat fluent output as evidence (Lin et al., 2022). Claim-level evaluation frameworks motivate treating responses as sets of atomic propositions and scoring each proposition for support and correctness, which aligns naturally with finance use cases where numeric claims must be tied to sources (Min et al., 2023). Self-checking approaches further motivate consistency-based signals that can identify likely hallucination behavior even without gold labels (Manakul et al., 2023).
+
+A critical behavior for reliability is abstention. In unanswerable question settings, models must explicitly refuse to answer when evidence is absent rather than generating plausible but unsupported content (Rajpurkar et al., 2018). For a finance AI assistant, abstention is not merely a safety feature; it is a design commitment that preserves trust when tools fail, datasets are missing, or the user’s request is out of scope.
+
+Grounded generation provides the architectural mechanism to support these behaviors. Retrieval-augmented generation (RAG) improves factuality by conditioning generation on retrieved context from an external store (Lewis et al., 2020). In a reliability-critical finance product, the retrieved context can be the platform’s own deterministic tool outputs rather than open-web snippets. This tool-grounded framing improves auditability and reproducibility because numeric claims can be traced to specific internal endpoints and dataset snapshots. In addition, it aligns with AI-assisted strategy design: generated strategy descriptions and parameter recommendations can be validated by executing deterministic backtests and returning evidence-based diagnostics rather than speculative claims.
+
+## 2.7 Summary and Design Implications
+The literature reviewed in this chapter motivates a product architecture that treats reliability as a first-class requirement. Traditional and empirical finance require aligned time series, interpretable risk-return trade-offs, and robust factor-aware benchmarks (Markowitz, 1952; Sharpe, 1964; Fama, 1970; Fama & French, 1993). Modern risk measures reinforce that tail behavior demands disciplined data handling (Rockafellar & Uryasev, 2000). Backtesting research shows that evaluation must be designed to resist overfitting (Bailey et al., 2016), while machine learning work illustrates both the promise of high-dimensional modeling and the need for rigorous validation (Gu et al., 2020). Finally, LLM reliability and grounding work motivates an assistant architecture that retrieves evidence, applies claim-level thinking, and abstains when evidence is missing (Lewis et al., 2020; Lin et al., 2022; Min et al., 2023; Manakul et al., 2023; Rajpurkar et al., 2018).
+
+Chapter 3 translates these principles into the system architecture and evaluation methodology used by QuantVN.
+
+## References
+Bailey, D. H., Borwein, J. M., Lopez de Prado, M., & Zhu, Q. J. (2016). The probability of backtest overfitting. *Quantitative Finance, 16*(6), 813-825. https://doi.org/10.1080/14697688.2015.1061509
+
+Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. *The Journal of Finance, 25*(2), 383-417. https://doi.org/10.1111/j.1540-6261.1970.tb00518.x
+
+Fama, E. F., & French, K. R. (1993). Common risk factors in the returns on stocks and bonds. *Journal of Financial Economics, 33*(1), 3-56. https://doi.org/10.1016/0304-405X(93)90023-5
+
+Gu, S., Kelly, B., & Xiu, D. (2020). Empirical asset pricing via machine learning. *The Review of Financial Studies, 33*(5), 2223-2273. https://doi.org/10.1093/rfs/hhaa009
+
+Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., & Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. *Advances in Neural Information Processing Systems, 33*, 9459-9474.
+
+Lin, S., Hilton, J., & Evans, O. (2022). TruthfulQA: Measuring how models mimic human falsehoods. In *Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)* (pp. 3214-3252). Association for Computational Linguistics. https://doi.org/10.18653/v1/2022.acl-long.229
+
+Manakul, P., Liusie, A., & Gales, M. (2023). SelfCheckGPT: Zero-resource black-box hallucination detection for generative large language models. In *Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing* (pp. 9004-9017). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.emnlp-main.557
+
+Markowitz, H. (1952). Portfolio selection. *The Journal of Finance, 7*(1), 77-91. https://doi.org/10.1111/j.1540-6261.1952.tb01525.x
+
+Min, S., Krishna, K., Lyu, X., Lewis, M., Yih, W.-t., Koh, P. W., Iyyer, M., Callison-Burch, C., Hajishirzi, H., & Zettlemoyer, L. (2023). FActScore: Fine-grained atomic evaluation of factual precision in long form text generation. In *Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing* (pp. 12076-12100). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.emnlp-main.741
+
+Rajpurkar, P., Jia, R., & Liang, P. (2018). Know what you do not know: Unanswerable questions for SQuAD. In *Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers)* (pp. 784-789). Association for Computational Linguistics. https://doi.org/10.18653/v1/P18-2124
+
+Rockafellar, R. T., & Uryasev, S. (2000). Optimization of conditional value-at-risk. *The Journal of Risk, 2*(3), 21-41. https://doi.org/10.21314/JOR.2000.038
+
+Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *The Journal of Finance, 19*(3), 425-442. https://doi.org/10.1111/j.1540-6261.1964.tb02865.x

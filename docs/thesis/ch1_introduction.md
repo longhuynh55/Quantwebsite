@@ -1,34 +1,63 @@
-# Chapter 1: Introduction
+﻿# Chapter 1: Introduction
 
-## 1.1 Background
-Financial analysis workflows in Vietnam often require manual retrieval of market, fundamentals, and risk data from multiple sources. This process is slow and error-prone for students and early-career analysts. A finance copilot can reduce friction, but large language models may produce fluent yet unsupported numeric claims if not grounded by verifiable data (Lin et al., 2022; Min et al., 2023).
+Thesis title: QuantVN Strategy Forge: A Reliability-Gated AI Assistant for Trading Strategy Design and Backtesting on Vietnamese Equities (HOSE)
+
+## 1.1 Background and Motivation
+Quantitative finance provides a principled vocabulary for connecting market data to decision-making under uncertainty. In traditional theory, portfolio selection is framed as an optimization problem over risk and return, where diversification and covariance structure determine the attainable frontier (Markowitz, 1952). Equilibrium asset pricing further motivates risk-adjusted evaluation by linking expected returns to systematic exposure, providing a benchmark for comparing assets and strategies beyond raw performance (Sharpe, 1964). In parallel, the efficient market hypothesis argues that prices incorporate available information, implying that any persistent advantage must arise from information, constraints, or risk premia rather than naive pattern exploitation (Fama, 1970). These foundational ideas remain central to practice, but they become fragile when the data infrastructure is weak: if time series are missing days, symbols have inconsistent histories, or records contain malformed values, then the resulting indicators, covariance matrices, and risk metrics can be unstable and misleading.
+
+This fragility matters because modern quantitative workflows rely on derived statistics that amplify input errors. Risk analytics often require stable estimators of volatility, drawdowns, and benchmark-relative measures, while portfolio optimization depends on aligned return series and well-conditioned covariance estimates. Moreover, variance-based approaches can underrepresent downside exposure in heavy-tailed return distributions. Tail-oriented risk measures such as Conditional Value at Risk (CVaR) address this limitation and admit convex formulations that are attractive for real systems, but they also intensify the requirement for consistent data and careful windowing (Rockafellar & Uryasev, 2000). In emerging-market settings, including Vietnamese equities, these requirements are particularly salient: the symbol universe is heterogeneous, historical coverage varies across firms, and corporate or trading regime changes can create distributional shifts. Consequently, a credible platform must make data readiness explicit and integrate diagnostics that explain exclusions and quality limitations.
+
+At the methodological level, the evaluation of quantitative strategies introduces its own reliability risks. When strategy discovery is driven by repeated experimentation, backtest results can be overfit to historical noise, producing optimistic performance estimates that fail out of sample. The probability of backtest overfitting increases with the size of the search space and the flexibility of the modeling pipeline, which motivates strong validation discipline and transparent reporting of assumptions and diagnostics (Bailey et al., 2016). More recent empirical work also shows that machine learning can extract predictive structure from large sets of characteristics and interactions, but the same work emphasizes that high-capacity models must be regularized and evaluated carefully to avoid brittle conclusions under nonstationarity (Gu et al., 2020). These insights collectively point to a core engineering requirement: a quantitative platform must be designed not only to compute outputs, but to constrain and validate the conditions under which those outputs are meaningful.
+
+In parallel, user expectations for analytic systems are moving toward interactive and conversational interfaces. Large language models can help users express complex analytic intents and interpret results; however, fluency is not evidence. Truthfulness benchmarking shows that models can produce confident but unsupported claims, and that scaling alone does not guarantee factual reliability (Lin et al., 2022). For finance-focused AI assistants, this risk is amplified because responses often contain numeric claims and comparisons. Claim-level evaluation frameworks therefore motivate a stricter standard: responses should be assessed and produced as collections of atomic claims, each of which must be supported by evidence (Min et al., 2023). When evidence is missing, abstention is a first-class requirement, as demonstrated by question answering benchmarks that explicitly test unanswerable cases (Rajpurkar et al., 2018). Retrieval-augmented generation (RAG) provides a general architecture for grounding generation in external context (Lewis et al., 2020); in this thesis, the grounding source is the platform itself, through deterministic internal tools backed by validated datasets. This framing motivates QuantVN Strategy Forge: a product that combines robust quantitative workflows with a grounded AI assistant that refuses unsupported numeric output.
 
 ## 1.2 Problem Statement
-The central challenge is to build a copilot that is useful in conversational analysis while maintaining strict factual reliability for financial numbers. In this thesis, reliability means the assistant either:
-- returns evidence-backed values from internal tools, or
-- abstains/falls back when evidence is insufficient.
+This thesis addresses the problem of building and evaluating a reliability-critical quantitative finance platform for Vietnamese equities, where numeric outputs are produced only when their evidentiary basis is verifiable. The platform must provide standard analytical capabilities (screening, charting, backtesting, portfolio optimization, factor and risk analysis) over local datasets, and it must surface diagnostics that explain when and why results are limited by data quality or coverage. On top of these deterministic services, an assistant interface must enable conversational queries without introducing numeric hallucinations. The assistant should be allowed to produce numeric claims only when internal tools return sufficient evidence; otherwise it must abstain and provide actionable diagnostics.
+
+The problem is therefore end-to-end. Reliability depends on data preparation, runtime validation, time-series alignment, and conservative evaluation assumptions in backtesting and optimization. It also depends on a grounded generation pipeline that plans evidence needs, retrieves structured facts from internal endpoints, and enforces policy constraints that block unsupported numeric statements.
 
 ## 1.3 Research Objectives
-- Design a robust, tool-grounded assistant for Vietnamese equities.
-- Reduce hallucination risk in numeric answers.
-- Quantify reliability with reproducible evaluation metrics.
-- Demonstrate engineering feasibility within a graduation project timeline.
+The thesis pursues four objectives. First, it designs and implements a web-based quantitative analysis system for Vietnamese equities that consolidates core workflows into a coherent product. Second, it enforces data reliability through validation, integrity manifests, and runtime quality reporting so that analytics are stable and exclusions are transparent. Third, it implements an assistant interface that routes queries through deterministic internal tools and applies evidence-gated policies for numeric outputs, including abstention when evidence is insufficient. Fourth, it defines and applies reproducible evaluation procedures and metrics so reliability improvements can be measured and regressions can be detected.
 
 ## 1.4 Research Questions
-- RQ1: Can a policy-gated grounding pipeline lower unsupported numeric claims?
-- RQ2: What trade-off appears between strict robustness and response coverage?
-- RQ3: Which metrics are most informative for accuracy and hallucination control?
+This thesis is organized around five research questions. RQ1 asks how a local market-data pipeline and runtime validation layer can reduce instability in downstream quantitative analytics that depend on aligned time series and robust estimators. RQ2 asks which diagnostics and exclusion policies best communicate data readiness and limitations to end users while preserving analytical usefulness. RQ3 asks to what extent a tool-grounded assistant pipeline with policy gating reduces unsupported numeric claims compared to unguided generation (Lin et al., 2022; Min et al., 2023). RQ4 asks what trade-off emerges between strict abstention policies (refusing low-evidence answers) and response coverage, and how this trade-off affects perceived trustworthiness (Rajpurkar et al., 2018). RQ5 asks which evaluation metrics and gates provide the most actionable operational definition of reliability for iterative engineering under model/provider variability and dataset changes.
 
 ## 1.5 Scope and Assumptions
-- Scope: HOSE-focused analysis, local CSV/DuckDB datasets, conversational decision support.
-- Assumptions: data pipeline is refreshed before evaluation runs; assistant output is not investment advice.
-- Exclusions: real-time order execution, brokerage integration, and macroeconomic forecasting.
+The scope of the system is HOSE-focused Vietnamese equity analysis at daily frequency using local datasets prepared into runtime CSV files, with optional DuckDB acceleration for faster querying. The platform is designed for decision support and education; it does not implement automated order execution, brokerage integration, or real-time trading. The assistant is designed to operate over the platform’s internal tools and datasets, not to search the open web.
+
+The thesis assumes that the runtime dataset preparation pipeline is executed prior to evaluation runs and that health and data readiness checks pass. Because local datasets have explicit coverage and freshness constraints, limitations in universe size and history are treated as explicit boundaries of the work.
 
 ## 1.6 Contributions
-- A practical architecture for grounded financial Q&A.
-- A policy framework that enforces fallback on low-evidence scenarios.
-- A five-metric reliability gate for thesis evaluation.
-- A two-week implementation plan balancing product and research outcomes.
+This thesis makes three contributions.
 
-## 1.7 Chapter Summary
-This chapter defines the motivation, objectives, and scope. Chapter 2 reviews prior work in quantitative finance and language-model factuality, then derives the methodological choices for this thesis.
+First, it provides a data reliability approach for local Vietnamese equity datasets, emphasizing validation of records, integrity manifests, and runtime quality reporting that can explain missing coverage and exclusion reasons.
+
+Second, it provides a modular quantitative analytics stack exposed through API routes and UI workflows, including backtesting, portfolio optimization, factor analysis, and risk reporting under explicit assumptions consistent with classical finance foundations (Markowitz, 1952; Sharpe, 1964; Rockafellar & Uryasev, 2000).
+
+Third, it provides a grounded assistant pipeline with policy gating and abstention behavior that ties numeric outputs to evidence and supports claim-level evaluation, reducing hallucination risk through measurable acceptance criteria (Lewis et al., 2020; Lin et al., 2022; Min et al., 2023; Rajpurkar et al., 2018).
+
+## 1.7 Thesis Structure
+Chapter 2 reviews the theoretical foundations that motivate the system design. It begins with traditional finance (portfolio theory, asset pricing, and empirical factors), transitions to modern evaluation discipline and machine learning in finance, and then reviews reliability and grounding for language-model assistants. Chapter 3 presents the system design and methodology, describing the architecture, data pipeline, grounding tools, policy logic, and evaluation approach. Chapter 4 documents the implementation and experimental results, mapping features to concrete engineering artifacts and summarizing evaluation outcomes using the defined reliability metrics. Chapter 5 concludes by answering the research questions, discussing limitations, and proposing future work.
+
+## References
+Bailey, D. H., Borwein, J. M., Lopez de Prado, M., & Zhu, Q. J. (2016). The probability of backtest overfitting. *Quantitative Finance, 16*(6), 813-825. https://doi.org/10.1080/14697688.2015.1061509
+
+Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. *The Journal of Finance, 25*(2), 383-417. https://doi.org/10.1111/j.1540-6261.1970.tb00518.x
+
+Gu, S., Kelly, B., & Xiu, D. (2020). Empirical asset pricing via machine learning. *The Review of Financial Studies, 33*(5), 2223-2273. https://doi.org/10.1093/rfs/hhaa009
+
+Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., & Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. *Advances in Neural Information Processing Systems, 33*, 9459-9474.
+
+Lin, S., Hilton, J., & Evans, O. (2022). TruthfulQA: Measuring how models mimic human falsehoods. In *Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)* (pp. 3214-3252). Association for Computational Linguistics. https://doi.org/10.18653/v1/2022.acl-long.229
+
+Manakul, P., Liusie, A., & Gales, M. (2023). SelfCheckGPT: Zero-resource black-box hallucination detection for generative large language models. In *Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing* (pp. 9004-9017). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.emnlp-main.557
+
+Markowitz, H. (1952). Portfolio selection. *The Journal of Finance, 7*(1), 77-91. https://doi.org/10.1111/j.1540-6261.1952.tb01525.x
+
+Min, S., Krishna, K., Lyu, X., Lewis, M., Yih, W.-t., Koh, P. W., Iyyer, M., Callison-Burch, C., Hajishirzi, H., & Zettlemoyer, L. (2023). FActScore: Fine-grained atomic evaluation of factual precision in long form text generation. In *Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing* (pp. 12076-12100). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.emnlp-main.741
+
+Rajpurkar, P., Jia, R., & Liang, P. (2018). Know what you do not know: Unanswerable questions for SQuAD. In *Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers)* (pp. 784-789). Association for Computational Linguistics. https://doi.org/10.18653/v1/P18-2124
+
+Rockafellar, R. T., & Uryasev, S. (2000). Optimization of conditional value-at-risk. *The Journal of Risk, 2*(3), 21-41. https://doi.org/10.21314/JOR.2000.038
+
+Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *The Journal of Finance, 19*(3), 425-442. https://doi.org/10.1111/j.1540-6261.1964.tb02865.x

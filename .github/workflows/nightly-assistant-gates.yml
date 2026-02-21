@@ -95,18 +95,23 @@ jobs:
           EOF
 
       - name: Assistant routing matrix stability gate
+        id: assistant_routing
         run: pnpm run eval:assistant:routing:stable
 
       - name: Assistant policy matrix stability gate
+        id: assistant_policy
         run: pnpm run eval:assistant:policy-matrix:stable
 
       - name: Assistant perf reliability stability gate
+        id: assistant_perf
         run: pnpm run eval:assistant:perf-reliability:stable
 
       - name: Assistant realworld stability gate
+        id: assistant_realworld
         run: pnpm run eval:assistant:realworld:stable
 
       - name: Assistant backtesting KPI matrix
+        id: assistant_backtesting
         run: pnpm run eval:assistant:backtesting:kpi-matrix
 
       - name: Assistant comprehensive full stability (soft gate)
@@ -114,13 +119,50 @@ jobs:
         continue-on-error: true
         run: pnpm run eval:assistant:full:stable
 
+      - name: Sync agent roadmap tracking
+        if: always()
+        run: |
+          pnpm run agent:track
+          pnpm run agent:track:weekly
+
       - name: Nightly full gate summary
         if: always()
         run: |
+          echo "## Nightly Assistant Gates" >> $GITHUB_STEP_SUMMARY
+          echo "- routing matrix: ${{ steps.assistant_routing.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- policy matrix: ${{ steps.assistant_policy.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- perf reliability: ${{ steps.assistant_perf.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- realworld: ${{ steps.assistant_realworld.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- backtesting KPI: ${{ steps.assistant_backtesting.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- full stability (soft gate): ${{ steps.assistant_full.outcome }}" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.assistant_full.outcome }}" != "success" ]; then
             echo "assistant_full: soft_fail (non-blocking); inspect artifacts/assistant-eval-comprehensive-report.json" >> $GITHUB_STEP_SUMMARY
           else
             echo "assistant_full: pass" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f artifacts/composer-agent-progress-report.json ]; then
+            node <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+            const fs = require("fs");
+            const report = JSON.parse(fs.readFileSync("artifacts/composer-agent-progress-report.json", "utf8"));
+            const counts = report.summary?.countsByStatus ?? {};
+            const actions = Array.isArray(report.summary?.nextActions) ? report.summary.nextActions : [];
+            console.log("");
+            console.log("## Composer Agent Progress");
+            console.log(`- generated: ${report.generatedAt ?? "unknown"}`);
+            console.log(`- tracker updated: ${report.trackerUpdatedAt ?? "unknown"}`);
+            console.log(`- todo: ${counts.todo ?? 0}, in_progress: ${counts.in_progress ?? 0}, done: ${counts.done ?? 0}, blocked: ${counts.blocked ?? 0}`);
+            if (actions.length === 0) {
+              console.log("- next actions: none");
+            } else {
+              console.log("- next actions:");
+              actions.slice(0, 5).forEach((action, index) => {
+                console.log(`  ${index + 1}. ${action}`);
+              });
+            }
+            EOF
+          else
+            echo "## Composer Agent Progress" >> "$GITHUB_STEP_SUMMARY"
+            echo "- report: not generated" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload assistant artifacts
@@ -136,6 +178,10 @@ jobs:
             artifacts/backtesting-kpi-matrix-report.json
             artifacts/assistant-eval-comprehensive-report.json
             artifacts/assistant-eval-summary.md
+            artifacts/composer-agent-progress-report.json
+            artifacts/composer-agent-progress-board.md
+            docs/COMPOSER_AGENT_WEEKLY_STATUS_AUTO.md
+            docs/PROGRESS.md
           if-no-files-found: warn
 
       - name: Collect docker logs

@@ -1,6 +1,120 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+
+/**
+ * useUrlState - Synchronizes state with URL search parameters
+ * 
+ * @param key - The URL parameter key
+ * @param defaultValue - The default value if the parameter is missing
+ * @returns [value, setValue]
+ * 
+ * Usage:
+ * ```tsx
+ * const [symbol, setSymbol] = useUrlState("symbol", "AAA");
+ * ```
+ */
+export function useUrlState<T extends string | number | boolean>(
+  key: string,
+  defaultValue: T
+): [T, (value: T) => void] {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const value = useMemo(() => {
+    const param = searchParams.get(key);
+    if (param === null) return defaultValue;
+
+    if (typeof defaultValue === "number") {
+      const num = Number(param);
+      return (Number.isFinite(num) ? num : defaultValue) as T;
+    }
+
+    if (typeof defaultValue === "boolean") {
+      return (param === "true") as T;
+    }
+
+    return param as T;
+  }, [searchParams, key, defaultValue]);
+
+  const setValue = useCallback(
+    (newValue: T) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (newValue === defaultValue || newValue === "" || newValue === undefined || newValue === null) {
+        params.delete(key);
+      } else {
+        params.set(key, String(newValue));
+      }
+      
+      const query = params.toString();
+      const url = `${pathname}${query ? `?${query}` : ""}`;
+      router.replace(url, { scroll: false });
+    },
+    [searchParams, key, defaultValue, pathname, router]
+  );
+
+  return [value, setValue];
+}
+
+/**
+ * useUrlStateObject - Synchronizes an object of states with URL search parameters
+ */
+export function useUrlStateObject<T extends Record<string, string | number | boolean>>(
+  defaultValues: T
+): [T, (updates: Partial<T>) => void] {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const values = useMemo(() => {
+    const result = { ...defaultValues } as T;
+    const setResultValue = <K extends keyof T>(key: K, value: T[K]) => {
+      result[key] = value;
+    };
+
+    (Object.keys(defaultValues) as Array<keyof T>).forEach((key) => {
+      const param = searchParams.get(String(key));
+      if (param !== null) {
+        const defaultValue = defaultValues[key];
+
+        if (typeof defaultValue === "number") {
+          const num = Number(param);
+          if (Number.isFinite(num)) {
+            setResultValue(key, num as T[typeof key]);
+          }
+        } else if (typeof defaultValue === "boolean") {
+          setResultValue(key, (param === "true") as T[typeof key]);
+        } else {
+          setResultValue(key, param as T[typeof key]);
+        }
+      }
+    });
+    return result;
+  }, [searchParams, defaultValues]);
+
+  const setValues = useCallback(
+    (updates: Partial<T>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      
+      Object.entries(updates).forEach(([key, val]) => {
+        if (val === defaultValues[key] || val === "" || val === undefined || val === null) {
+          params.delete(key);
+        } else {
+          params.set(key, String(val));
+        }
+      });
+
+      const query = params.toString();
+      const url = `${pathname}${query ? `?${query}` : ""}`;
+      router.replace(url, { scroll: false });
+    },
+    [searchParams, defaultValues, pathname, router]
+  );
+
+  return [values, setValues];
+}
 
 /**
  * useDebounce - Debounces a value by the specified delay
@@ -53,10 +167,10 @@ export function useDebounce<T>(value: T, delay: number = 300): T {
  * <input onChange={(e) => debouncedSearch(e.target.value)} />
  * ```
  */
-export function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
-  callback: T,
+export function useDebouncedCallback<TArgs extends readonly unknown[]>(
+  callback: (...args: TArgs) => void,
   delay: number = 300
-): (...args: Parameters<T>) => void {
+): (...args: TArgs) => void {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -68,7 +182,7 @@ export function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
   }, []);
 
   return useCallback(
-    (...args: Parameters<T>) => {
+    (...args: TArgs) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -90,22 +204,27 @@ export function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
  */
 export function useThrottle<T>(value: T, interval: number = 100): T {
   const [throttledValue, setThrottledValue] = useState<T>(value);
-  const lastUpdated = useRef<number>(0);
+  const lastExecuted = useRef(0);
 
   useEffect(() => {
     const now = Date.now();
-    if (lastUpdated.current === 0) {
-      lastUpdated.current = now;
-      return;
-    }
-    const timeSinceLastUpdate = now - lastUpdated.current;
-    const delay = Math.max(0, interval - timeSinceLastUpdate);
-    const timer = setTimeout(() => {
-      lastUpdated.current = Date.now();
-      setThrottledValue(value);
-    }, delay);
+    const timeSinceLastExecution = now - lastExecuted.current;
 
-    return () => clearTimeout(timer);
+    if (lastExecuted.current === 0 || timeSinceLastExecution >= interval) {
+      const timeoutId = setTimeout(() => {
+        lastExecuted.current = Date.now();
+        setThrottledValue(value);
+      }, 0);
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      const timeoutId = setTimeout(() => {
+        lastExecuted.current = Date.now();
+        setThrottledValue(value);
+      }, interval - timeSinceLastExecution);
+
+      return () => clearTimeout(timeoutId);
+    }
   }, [value, interval]);
 
   return throttledValue;
@@ -133,6 +252,12 @@ export function useIntersectionObserver<T extends Element = HTMLDivElement>(
   const [entry, setEntry] = useState<IntersectionObserverEntry | null>(null);
   const elementRef = useRef<T | null>(null);
 
+  // Memoize options to prevent unnecessary effect re-runs
+  // Only recreate observer when these specific values change
+  const threshold = options.threshold;
+  const rootMargin = options.rootMargin;
+  const root = options.root;
+
   const setRef = useCallback(
     (node: T | null) => {
       elementRef.current = node;
@@ -157,7 +282,8 @@ export function useIntersectionObserver<T extends Element = HTMLDivElement>(
     return () => {
       observer.disconnect();
     };
-  }, [options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threshold, rootMargin, root]);
 
   return [setRef, isIntersecting, entry];
 }
@@ -205,31 +331,33 @@ export function useLocalStorage<T>(
   initialValue: T
 ): [T, (value: T | ((prev: T) => T)) => void, () => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
-    if (typeof window === "undefined") {
-      return initialValue;
-    }
+    if (typeof window === "undefined") return initialValue;
 
     try {
       const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch {
+      return item ? (JSON.parse(item) as T) : initialValue;
+    } catch (error) {
+      console.warn(`Error reading localStorage key "${key}":`, error);
       return initialValue;
     }
   });
 
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
-      try {
-        const valueToStore = value instanceof Function ? value(storedValue) : value;
-        setStoredValue(valueToStore);
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+      setStoredValue((prev) => {
+        try {
+          const valueToStore = value instanceof Function ? value(prev) : value;
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          }
+          return valueToStore;
+        } catch (error) {
+          console.error("Error saving to localStorage:", error);
+          return prev;
         }
-      } catch (error) {
-        console.error("Error saving to localStorage:", error);
-      }
+      });
     },
-    [key, storedValue]
+    [key]
   );
 
   const removeValue = useCallback(() => {
@@ -247,3 +375,7 @@ export function useLocalStorage<T>(
 }
 
 export default useDebounce;
+
+// Re-export timer and animation hooks
+export { useInterval } from "./hooks/useInterval";
+export { useAnimationFrame, useTimeout, usePrefersReducedMotion } from "./hooks/useAnimation";

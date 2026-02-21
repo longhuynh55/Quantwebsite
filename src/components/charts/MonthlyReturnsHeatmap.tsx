@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-interface MonthlyReturnsHeatmapProps {
+export interface MonthlyReturnsHeatmapProps {
   returns: { date: string; return: number }[];
   className?: string;
 }
@@ -242,27 +242,36 @@ export function MonthlyReturnsHeatmap({
     return result;
   }, [returns]);
 
-  // Handle cell hover
-  const handleMouseEnter = (
-    e: React.MouseEvent<HTMLDivElement>,
+  const showTooltip = (
+    target: HTMLElement,
     year: number,
     month: number | null,
-    value: number | null
+    value: number | null,
+    touchPoint?: { x: number; y: number }
   ) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
     const content = month !== null
       ? `${MONTHS_FULL[month]} ${year}: ${formatReturnValue(value)}`
       : `${year} Total: ${formatReturnValue(value)}`;
 
+    const preferredX = touchPoint?.x ?? (rect.left + rect.width / 2);
+    const preferredY = touchPoint?.y ?? (rect.top - 8);
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0;
+    const tooltipHalfWidth = 140;
+    const clampedX = viewportWidth > 0
+      ? Math.min(Math.max(preferredX, tooltipHalfWidth + 8), viewportWidth - tooltipHalfWidth - 8)
+      : preferredX;
+    const yOffset = touchPoint ? 20 : 0;
+
     setTooltip({
       visible: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top - 8,
+      x: clampedX,
+      y: preferredY - yOffset,
       content,
     });
   };
 
-  const handleMouseLeave = () => {
+  const hideTooltip = () => {
     setTooltip((prev) => ({ ...prev, visible: false }));
   };
 
@@ -290,7 +299,7 @@ export function MonthlyReturnsHeatmap({
             />
           </svg>
           <p className="font-medium">No returns data available</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Run a backtest to view monthly returns
           </p>
         </div>
@@ -346,11 +355,28 @@ export function MonthlyReturnsHeatmap({
                 <div
                   key={`${yearData.year}-${monthIndex}`}
                   className="flex-1 min-w-[48px] h-10 mx-0.5 flex items-center justify-center rounded text-xs font-mono cursor-pointer transition-transform hover:scale-105 hover:z-10"
+                  role="gridcell"
+                  tabIndex={0}
+                  aria-label={`${MONTHS_FULL[monthIndex]} ${yearData.year}: ${formatReturnValue(value)}`}
                   style={{
                     backgroundColor: value !== null ? getReturnColor(value, isDark) : (isDark ? "#1e293b" : "#f9fafb"),
                   }}
-                  onMouseEnter={(e) => handleMouseEnter(e, yearData.year, monthIndex, value)}
-                  onMouseLeave={handleMouseLeave}
+                  onMouseEnter={(e) => showTooltip(e.currentTarget, yearData.year, monthIndex, value)}
+                  onMouseLeave={hideTooltip}
+                  onFocus={(e) => showTooltip(e.currentTarget, yearData.year, monthIndex, value)}
+                  onBlur={hideTooltip}
+                  onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    showTooltip(
+                      e.currentTarget,
+                      yearData.year,
+                      monthIndex,
+                      value,
+                      { x: touch.clientX, y: touch.clientY }
+                    );
+                  }}
+                  onTouchEnd={hideTooltip}
                 >
                   <span
                     className={cn(
@@ -366,11 +392,28 @@ export function MonthlyReturnsHeatmap({
               {/* Annual Total */}
               <div
                 className="w-16 flex-shrink-0 h-10 ml-1 flex items-center justify-center rounded text-xs font-mono cursor-pointer transition-transform hover:scale-105"
+                role="gridcell"
+                tabIndex={0}
+                aria-label={`${yearData.year} total: ${formatReturnValue(yearData.total)}`}
                 style={{
                   backgroundColor: yearData.total !== null ? getReturnColor(yearData.total, isDark) : (isDark ? "#1e293b" : "#f9fafb"),
                 }}
-                onMouseEnter={(e) => handleMouseEnter(e, yearData.year, null, yearData.total)}
-                onMouseLeave={handleMouseLeave}
+                onMouseEnter={(e) => showTooltip(e.currentTarget, yearData.year, null, yearData.total)}
+                onMouseLeave={hideTooltip}
+                onFocus={(e) => showTooltip(e.currentTarget, yearData.year, null, yearData.total)}
+                onBlur={hideTooltip}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0];
+                  if (!touch) return;
+                  showTooltip(
+                    e.currentTarget,
+                    yearData.year,
+                    null,
+                    yearData.total,
+                    { x: touch.clientX, y: touch.clientY }
+                  );
+                }}
+                onTouchEnd={hideTooltip}
               >
                 <span
                   className={cn(

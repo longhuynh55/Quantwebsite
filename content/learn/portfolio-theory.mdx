@@ -1,0 +1,56 @@
+---
+slug: portfolio-theory
+title: 'Modern Portfolio Theory'
+description: 'Mean-variance optimization, estimation risk, and practical constraints for implementable portfolios.'
+level: advanced
+durationMinutes: 42
+order: 2
+---
+## Overview
+
+Modern Portfolio Theory (MPT) formalizes diversification by balancing expected return and risk under constraints. In practice, portfolio optimization is less about solving an elegant equation and more about managing estimation error: expected returns are noisy, and covariance estimates can be unstable.
+
+### Learning objectives
+
+- Understand mean-variance optimization and the efficient frontier.
+- Recognize the practical failure modes of optimization.
+- Apply constraints and robust techniques for implementable portfolios.
+
+### The mean-variance problem
+
+A canonical formulation trades off expected return and variance:
+
+$$
+\max_{w}\; \mu^\top w - \lambda\, w^\top \Sigma w
+\quad \text{s.t.}\quad \mathbf{1}^\top w = 1,\; w_i \ge 0
+$$
+
+lambda represents risk aversion. The solution depends on estimates of expected returns and the covariance matrix.
+
+### The efficient frontier
+
+The efficient frontier is the set of portfolios that maximize expected return for a given risk level. It is conceptually useful, but in real markets it can be fragile because small changes in inputs can lead to large changes in weights.
+
+### Practical enhancements
+
+- Constraints: long-only, max weight per name, sector caps.
+- Shrinkage: stabilize covariance estimates.
+- Turnover penalties: discourage excessive trading.
+- Robust optimization: reduce sensitivity to estimation error.
+
+### Constraints and trade-offs (quick reference)
+
+| Design choice | Why it helps | Typical downside |
+| --- | --- | --- |
+| Long-only constraint | Avoids shorting friction and borrow constraints | Reduces hedging flexibility |
+| Max weight per name | Prevents concentration in a few names | May reduce expected return |
+| Sector caps | Controls unintended sector bets | Can increase tracking error |
+| Turnover penalty | Limits transaction costs and churn | Slower adaptation to regime shifts |
+| Covariance shrinkage | Stabilizes risk estimates | Can under-react to structural breaks |
+
+### Implementation checklist
+
+- Are weights stable when inputs vary slightly?
+- Are constraints aligned with liquidity and risk limits?
+- Is turnover controlled and costs included?
+- Are exposures (sector, factor, beta) monitored over time?

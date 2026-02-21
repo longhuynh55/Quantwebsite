@@ -34,12 +34,14 @@ const METADATA_SORT_FIELDS = new Set([
   "icbName4",
 ]);
 const METADATA_SORT_DIRECTIONS = new Set(["asc", "desc"]);
+const RESPONSE_FORMATS = new Set(["json", "csv"]);
 const stocksApiLogger = createLogger("api.stocks");
 
 type UniverseRankingMetric = "close" | "open" | "high" | "low" | "volume";
 type UniverseRankingOrder = "asc" | "desc";
 type MetadataSortField = "symbol" | "status" | "avgVolume" | "totalTradingDays" | "listingPhase" | "icbName4";
 type MetadataSortDirection = "asc" | "desc";
+type ResponseFormat = "json" | "csv";
 
 type MetadataQueryFilters = {
   status?: string;
@@ -155,6 +157,12 @@ function parseMetadataSortDirection(raw: string | null): MetadataSortDirection {
   const value = String(raw ?? "").trim().toLowerCase();
   if (!value || !METADATA_SORT_DIRECTIONS.has(value)) return "asc";
   return value as MetadataSortDirection;
+}
+
+function parseResponseFormat(raw: string | null): ResponseFormat | null {
+  const value = String(raw ?? "json").trim().toLowerCase();
+  if (!RESPONSE_FORMATS.has(value)) return null;
+  return value as ResponseFormat;
 }
 
 function normalizeTextFilter(raw: string | null): string | undefined {
@@ -303,6 +311,55 @@ function jsonResponse(
   });
 }
 
+function escapeCsvValue(value: string | number): string {
+  const text = String(value);
+  if (!text.includes(",") && !text.includes("\"") && !text.includes("\n") && !text.includes("\r")) {
+    return text;
+  }
+  return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+function buildMetadataCsv(stocks: StockMetadata[]): string {
+  const header = [
+    "symbol",
+    "status",
+    "listingPhase",
+    "avgVolume",
+    "totalTradingDays",
+    "sector",
+    "companyName",
+  ];
+  const rows = stocks.map((stock) => ([
+    stock.symbol ?? "",
+    stock.status ?? "",
+    stock.listingPhase ?? "",
+    Number.isFinite(stock.avgVolume) ? String(stock.avgVolume) : "",
+    Number.isFinite(stock.totalTradingDays) ? String(stock.totalTradingDays) : "",
+    stock.icbName4 ?? "",
+    stock.organName ?? "",
+  ]));
+
+  return [header.join(","), ...rows.map((row) => row.map((value) => escapeCsvValue(value)).join(","))].join("\n");
+}
+
+function buildStocksCsvFilename(searchTerm?: string): string {
+  const datePart = new Date().toISOString().slice(0, 10);
+  const safeSearch = (searchTerm ?? "")
+    .trim()
+    .replace(/[^A-Z0-9_-]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 24);
+  return safeSearch ? `stocks-${safeSearch}-${datePart}.csv` : `stocks-${datePart}.csv`;
+}
+
+function csvResponse(traceId: string, csv: string, filename: string): Response {
+  const headers = new Headers();
+  headers.set(TRACE_ID_HEADER, traceId);
+  headers.set("Content-Type", "text/csv; charset=utf-8");
+  headers.set("Content-Disposition", `attachment; filename="${filename}"`);
+  return new Response(csv, { status: 200, headers });
+}
+
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const traceId = request.headers.get("x-trace-id")?.trim() || createTraceId("stocks");
@@ -335,6 +392,8 @@ export async function GET(request: Request) {
   const rankingRequested = searchParams.has("metric") || searchParams.has("order");
   const rankingMetric = parseUniverseRankingMetric(searchParams.get("metric"));
   const rankingOrder = parseUniverseRankingOrder(searchParams.get("order"));
+  const responseFormat = parseResponseFormat(searchParams.get("format"));
+  const csvRequested = responseFormat === "csv";
   const limitStrRaw = searchParams.get("limit") ?? String(DEFAULT_LIMIT);
   const limitStr = String(limitStrRaw).trim();
   const limitAll = limitStr.toLowerCase() === "all";
@@ -348,9 +407,14 @@ export async function GET(request: Request) {
     : parsePositiveIntegerParam(pageSizeRaw, DEFAULT_PAGE_SIZE, { min: 1, max: MAX_PAGE_SIZE });
   const statusFilter = normalizeTextFilter(searchParams.get("status"));
   const listingPhaseFilter = normalizeTextFilter(searchParams.get("listingPhase"));
-  const industryFilter = normalizeTextFilter(searchParams.get("industry"));
-  const minAvgVolume = parseOptionalNumericFilter(searchParams.get("minAvgVolume"));
-  const maxAvgVolume = parseOptionalNumericFilter(searchParams.get("maxAvgVolume"));
+  const sectorFilter = normalizeTextFilter(searchParams.get("sector"));
+  const industryFilter = sectorFilter ?? normalizeTextFilter(searchParams.get("industry"));
+  const minLiquidity = parseOptionalNumericFilter(searchParams.get("minLiquidity"));
+  const maxLiquidity = parseOptionalNumericFilter(searchParams.get("maxLiquidity"));
+  const minAvgVolumeRaw = parseOptionalNumericFilter(searchParams.get("minAvgVolume"));
+  const maxAvgVolumeRaw = parseOptionalNumericFilter(searchParams.get("maxAvgVolume"));
+  const minAvgVolume = minLiquidity !== undefined ? minLiquidity : minAvgVolumeRaw;
+  const maxAvgVolume = maxLiquidity !== undefined ? maxLiquidity : maxAvgVolumeRaw;
   const minTradingDays = parseOptionalNumericFilter(searchParams.get("minTradingDays"));
   const maxTradingDays = parseOptionalNumericFilter(searchParams.get("maxTradingDays"));
   const sortBy = parseMetadataSortField(searchParams.get("sortBy"));
@@ -365,6 +429,9 @@ export async function GET(request: Request) {
   const toDate = toRaw ? parseFlexibleDate(toRaw) : null;
 
   // Validate limit
+  if (!responseFormat) {
+    return jsonResponse(traceId, { error: 'Invalid format. Use "json" or "csv".' }, { status: 400 });
+  }
   let limit: number | null = null;
   if (!limitAll) {
     limit = parseInt(limitStr, 10);
@@ -436,6 +503,9 @@ export async function GET(request: Request) {
 
   try {
     if (groupBy === "icb") {
+      if (csvRequested) {
+        return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
+      }
       const grouped = await buildIcbSnapshot({
         asOfDateKey: requestedDate ? toDateKey(requestedDate) : undefined,
         requestedDate: dateRaw || undefined,
@@ -451,6 +521,9 @@ export async function GET(request: Request) {
     }
 
     if (symbol) {
+      if (csvRequested) {
+        return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
+      }
       // Validate symbol format
       if (!VALID_SYMBOL_REGEX.test(symbol)) {
         return jsonResponse(traceId, 
@@ -537,6 +610,9 @@ export async function GET(request: Request) {
     if (search) {
       const normalized = search.replace(/[^A-Z0-9]/g, "").slice(0, 10);
       if (!normalized) {
+        if (csvRequested) {
+          return csvResponse(traceId, buildMetadataCsv([]), buildStocksCsvFilename());
+        }
         return jsonResponse(traceId, { stocks: [], total: 0 });
       }
       const filtered = metadata.filter((s) => s.symbol.includes(normalized));
@@ -549,6 +625,12 @@ export async function GET(request: Request) {
         minTradingDays: typeof minTradingDays === "number" ? minTradingDays : undefined,
         maxTradingDays: typeof maxTradingDays === "number" ? maxTradingDays : undefined,
       }).sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
+      if (csvRequested) {
+        const slice = hasServerPagination
+          ? refined.slice((effectivePage - 1) * effectivePageSize, effectivePage * effectivePageSize)
+          : (limitAll ? refined : refined.slice(0, limit!));
+        return csvResponse(traceId, buildMetadataCsv(slice), buildStocksCsvFilename(normalized));
+      }
       if (hasServerPagination) {
         const offset = (effectivePage - 1) * effectivePageSize;
         const slice = refined.slice(offset, offset + effectivePageSize);
@@ -567,6 +649,9 @@ export async function GET(request: Request) {
     }
 
     if (dateRaw || searchParams.has("exchange") || searchParams.has("icb")) {
+      if (csvRequested) {
+        return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
+      }
       const universe = metadata
         .filter((stock) => stock.exchange.toUpperCase() === exchange)
         .filter((stock) => stock.status.toUpperCase() === "ACTIVE")
@@ -672,6 +757,13 @@ export async function GET(request: Request) {
       minTradingDays: typeof minTradingDays === "number" ? minTradingDays : undefined,
       maxTradingDays: typeof maxTradingDays === "number" ? maxTradingDays : undefined,
     }).sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
+
+    if (csvRequested) {
+      const slice = hasServerPagination
+        ? filteredMetadata.slice((effectivePage - 1) * effectivePageSize, effectivePage * effectivePageSize)
+        : (limitAll ? filteredMetadata : filteredMetadata.slice(0, limit!));
+      return csvResponse(traceId, buildMetadataCsv(slice), buildStocksCsvFilename(search ?? undefined));
+    }
 
     if (hasServerPagination) {
       const offset = (effectivePage - 1) * effectivePageSize;

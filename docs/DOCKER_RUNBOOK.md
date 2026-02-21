@@ -40,6 +40,8 @@ Neu ban can checklist day du cho data backend + health + assistant grounding, xe
 
 Luu y tren Windows:
 - Compose mount `../data:/workspace-data:ro`. Neu Docker Desktop chua share drive/folder chua workspace, ban can enable File Sharing (Settings -> Resources -> File Sharing) de bind mount hoat dong.
+- Khong copy/tai su dung `node_modules` giua Windows host va Linux container/WSL.
+- `smoke` / `qa` services da duoc cau hinh dung volume Linux rieng cho `/app/node_modules` de tranh xung dot native binary.
 
 ## 2. Thanh phan Docker hien co
 
@@ -77,6 +79,8 @@ Ky vong:
 pnpm run docker:smoke
 ```
 
+Lenh nay tu dong goi them `pnpm run agent:track` sau khi smoke pass de cap nhat `docs/PROGRESS.md` va artifacts tracking.
+
 Neu frontend dang duoc cap nhat va ban chi muon verify backend API:
 
 ```bash
@@ -106,6 +110,8 @@ QA se chay nhieu check hon smoke (validate data invariants, test nhieu strategy/
 ```bash
 pnpm run docker:qa
 ```
+
+Lenh nay cung tu dong goi `pnpm run agent:track` sau khi QA pass.
 
 Neu chi muon verify backend API:
 
@@ -162,6 +168,8 @@ Khong dung kill process node toan cuc tren may host.
 ```bash
 pnpm run docker:up:prod
 ```
+
+Lenh script nay da include `docker compose --profile prod up -d --build app-prod` de dam bao image prod dong bo voi codebase moi nhat.
 
 Ky vong:
 - Build thanh cong tu `Dockerfile`
@@ -291,6 +299,7 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
   - Gia tri compose mac dinh hien tai: `90000` ms.
 - Eval scripts gui header `x-assistant-eval=true`; de an toan nen dat cung mot token cho app + smoke:
   - `ASSISTANT_EVAL_AUTH_TOKEN`
+- Routing stability trong Docker da duoc chay voi nguong `ASSISTANT_EVAL_MAX_LATENCY_P95_MS=30000` trong script `pnpm run docker:eval:assistant:routing:stable` de giam false-fail do tai nguyen container.
 - Neu eval hay cham `429`, tang bucket rieng cho eval:
   - `ASSISTANT_EVAL_RATE_LIMIT_MAX` (mac dinh de xuat: `240` req/phut)
 
@@ -301,6 +310,27 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 
 ```bash
 pnpm run docker:up:prod
+```
+
+### 7.6 Loi `@lydell/node-pty` thieu `conpty.node` (Windows local)
+
+Day la loi optional native binary bi bo qua khi install tren host Windows.
+
+Khac phuc nhanh:
+
+```bash
+pnpm config set optional true
+```
+
+```powershell
+if (Test-Path node_modules) { Remove-Item node_modules -Recurse -Force }
+pnpm install
+```
+
+Neu van loi:
+
+```bash
+pnpm rebuild @lydell/node-pty
 ```
 
 ## 8. Lenh tat bang Makefile (tuy chon)

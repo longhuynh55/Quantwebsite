@@ -1,50 +1,22 @@
 # Chapter 3: System Design and Methodology
 
 ## 3.1 System Architecture
-The system uses a modular architecture:
-- UI layer: chat interface and trust-signal display.
-- API orchestration layer: request parsing, context normalization, provider routing.
-- Grounding layer: deterministic tool calls to internal financial endpoints.
-- Policy layer: evidence sufficiency checks and fallback decisions.
-- Provider layer: language model generation constrained by policy outcomes.
+QuantVN follows the layered architecture outlined in `docs/ARCHITECTURE.md`, where the Next.js 16 App Router (`src/app/`) hosts the client-rendered pages (`screener`, `backtesting`, `portfolio`, `learn`, etc.) and shares the same runtime with `/api/*` endpoints that sit beside the routes they power. The page tree imports reusable UI primitives from `src/components/ui/` and layout pieces from `src/components/layout/`, while charts and interactive analytics are factored into `src/components/charts/` (for example, `LineChart.tsx` and `CandlestickChart.tsx`). The server side orchestrates data access through `src/lib/data.ts`, enforces rate limiting with `src/lib/rateLimit.ts`, and exposes the quant library under `src/lib/quant/` (including `backtest.ts`, `portfolio.ts`, `risk.ts`, `factors.ts`, and `indicators.ts`). This modular organization lets the UI focus on composition while the shared libraries guarantee consistent results for every page and API consumer.
 
-## 3.2 Robustness Design
-The robustness strategy has three controls:
-- **Signal-based grounding requirement**: numeric financial intents trigger mandatory evidence retrieval.
-- **Policy-gated generation**: when required evidence is missing, the system falls back instead of generating unsupported numbers.
-- **Diagnostics propagation**: tool failures include structured error codes and user-visible diagnostics.
+## 3.2 Core Modules and Quant Engine
+Every API handler under `src/app/api/*/route.ts` reuses the same foundational modules. The quant library at `src/lib/quant/` implements the financial primitives that underlie the UI screens (e.g., indicator calculations, simulation logic in `backtest.ts`, and optimization routines in `portfolio.ts`), while `src/lib/data.ts` and `src/lib/dataBackend.ts` encapsulate the choice between CSV and DuckDB datasets. A dedicated manifest contract in `src/lib/dataManifest.ts` verifies row counts and freshness before any endpoint touches runtime tables, providing the data readiness guarantees documented in `docs/DATA_RELIABILITY_OPERATIONS.md`. Utility helpers (`src/lib/utils.ts`), telemetry clients (`src/lib/analytics/` and `src/lib/monitoring/`), and the configuration-driven feature flag layer (`src/lib/featureFlags.ts`) keep instrumentation and rollout logic consistent across modules.
 
-## 3.3 Evaluation Dataset and Prompt Strata
-Evaluation prompts are grouped into strata:
-- supported numeric queries (should answer with evidence),
-- unsupported or out-of-scope queries (should abstain/fallback),
-- deceptive/injection-like prompts (should resist unsafe instructions),
-- mixed-context prompts requiring selective evidence use.
+## 3.3 Data Pipeline
+Raw datasets live outside the app in `../data/`, but `scripts/prepare_data_2018_2025.mjs` pulls them in, normalizes columns, and writes the prepared CSVs plus `public/data/data_manifest_2018_2025.json` for runtime integrity checks. When DuckDB is preferred, `scripts/export_duckdb_from_runtime.mjs` packages the same runtime tables into `public/data/quant_data.duckdb`, enabling `src/lib/dataBackend.ts` to flip between CSV and DuckDB with `DATA_BACKEND` and `DATA_BACKEND_STRICT` guards. The pipeline also keeps the legacy fallback files (`public/data/HOSE_VERIFIED_2020_2025.csv`, `public/data/ohlcv_enriched.csv`, and `public/data/Market_Indices_Daily_2020_2025.csv`) in sync with the manifests described in `docs/DATA_RELIABILITY_OPERATIONS.md`. Every API route that touches this layer begins by loading the manifest through `src/lib/dataManifest.ts`, which enforces `DATA_MANIFEST_STRICT` policies and row-count tolerances before `src/lib/data.ts` exposes typed objects to the quant library.
 
-## 3.4 Metrics and Thresholds
-Primary thesis gate (five metrics):
-- `unsupportedClaimRate` (target: low),
-- `supportedClaimPrecision` (target: high),
-- `overallClaimAccuracy` (target: high),
-- `abstentionAccuracy` (target: high),
-- `groundingPassRate` (target: high).
+## 3.4 API Design
+HTTP semantics and payload contracts are codified in `docs/API.md`. For example, `/api/backtesting` (`src/app/api/backtesting/route.ts`) demands structured strategy parameters and returns backtest metrics sourced from `src/lib/quant/backtest.ts`, while `/api/optimize` (`src/app/api/optimize/route.ts`) drives the portfolio routines under `src/lib/quant/portfolio.ts`. Risk endpoints (`src/app/api/risk/route.ts`) share `risk.ts`, and `/api/market-overview/route.ts` composes market statistics and metadata loaded via `src/lib/data.ts`. Every route normalizes requests through the same rate limit guard in `src/lib/rateLimit.ts` and reuses `src/lib/utils.ts` for consistent error shaping. Instrumentation routes (e.g., `/api/telemetry/ui-kpi/route.ts`) share these helpers, keeping the same observability pipeline for assistant, quant, and telemetry workloads.
 
-Secondary diagnostics:
-- `deceptionResistanceRate`,
-- `directiveResistanceRate`,
-- `numericSymbolPassRate`.
+## 3.5 Assistant Pipeline (planner -> tools -> policy -> provider)
+Assistant traffic funnels through `src/app/api/assistant/route.ts`, which begins by parsing and normalizing the request, resolving assistant feature flags from environment configuration, and invoking `buildAssistantQueryPlan` from `src/lib/assistant/planner.ts`. The planner inspects the intent signals (`src/lib/assistant/signals.ts`) and decides whether to call grounding tools (`src/lib/assistant/tools.ts`) such as `/api/backtesting`, `/api/risk`, or `/api/market-overview`. Tool execution is split into `runGroundingTools` and the helper in `src/lib/assistant/executeTools.ts`, which marshals these calls and surfaces structured diagnostics back to the planner. Once tool data is available, `evaluateAssistantPolicy` in `src/lib/assistant/policy.ts` checks evidence sufficiency rules driven by `ASSISTANT_POLICY_MODE` and decides whether to allow, redact, or fallback. Finally, `generateWithProviderFallback` in `src/lib/assistant/providers.ts` dispatches the prepared prompts to the prioritized model chain (defaulting to OpenRouter -> GLM -> fallback) while respecting timeouts and policy directives. The composer flow (`src/lib/assistant/composerPlan.ts`) assembles multi-tool queries for longer contexts, and the provider layer emits the final response only after policy permits completion.
 
-## 3.5 Experimental Procedure
-1. Run baseline evaluation on existing branch.
-2. Apply robustness changes.
-3. Re-run identical evaluation profile.
-4. Compare deltas by metric and failure category.
-5. Accept only if all primary metrics pass thresholds.
+## 3.6 Evaluation Methodology
+The assistant evaluation suites derive from `docs/ASSISTANT_EVAL_CRITERIA.md`, the `ASSISTANT_ACCURACY_CENTRIC_EVAL_RUBRIC_V1` metrics, and the scenario catalog in `docs/ASSISTANT_REAL_WORLD_SCENARIO_CATALOG.md`. CI and local gating execute `scripts/eval-assistant.mjs`, `scripts/eval-assistant-pr-gate.mjs`, and `scripts/eval-assistant-comprehensive.mjs`, which replay stratified prompt banks such as `scripts/assistant-question-bank-v2_1.mjs`, `scripts/eval-assistant-realworld.mjs`, and `scripts/eval-assistant-requirements6-v2_1.mjs`. These runs track the five primary metrics (`unsupportedClaimRate`, `supportedClaimPrecision`, `overallClaimAccuracy`, `abstentionAccuracy`, `groundingPassRate`) defined in `docs/ASSISTANT_EVAL_CRITERIA.md`, as well as guardrail diagnostics like `deceptionResistanceRate` (`docs/ASSISTANT_POSTCHECK_EDGE_ANOMALY_PLAYBOOK_V1.md`) and `numericSymbolPassRate` (`docs/ASSISTANT_STABILITY_GATE_RUNBOOK.md`). Drift monitoring scripts (`scripts/assistant-drift-triage.mjs` and `scripts/assistant-governance-monitor.mjs`) surface regressions, while `scripts/eval-assistant-comprehensive.mjs` bundles post-check arrays from `docs/ASSISTANT_AGENT_FUNCTION_POSTCHECK_V2.md` to keep hallucination and tool-calling fidelity measurable.
 
-## 3.6 Validity and Reproducibility
-- Internal tooling and deterministic endpoint contracts improve reproducibility.
-- CI smoke runs enforce repeated checks under consistent scripts.
-- Threats to validity include data staleness, provider drift, and prompt distribution bias.
-
-## 3.7 Chapter Summary
-This chapter defines how robustness is implemented and measured. Chapter 4 reports implementation details and experimental outcomes against these gates.
+## 3.7 Summary
+This chapter ties the layered architecture (pages -> APIs -> libraries -> data), the quant and data modules, the deterministic data pipeline, and the guarded assistant stack to the evaluation routines that gate deployments. Referencing the cited modules and scripts makes the methodology concrete and sets the stage for the implementation and results discussed in Chapter 4.

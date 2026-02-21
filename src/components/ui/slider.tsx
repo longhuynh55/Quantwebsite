@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
+interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
   value?: number | [number, number];
   onChange?: (value: number | [number, number]) => void;
   min?: number;
@@ -26,20 +26,22 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
       label,
       showValue = false,
       formatValue,
+      id,
+      "aria-label": ariaLabel,
       ...props
     },
     ref
   ) => {
     const isRange = Array.isArray(value);
     const sliderRef = React.useRef<HTMLInputElement>(null);
+    const generatedId = React.useId();
+    const inputId = id || `slider-${generatedId}`;
 
     const getPercentage = (val: number) => ((val - min) / (max - min)) * 100;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = parseFloat(e.target.value);
       if (isRange) {
-        // For range slider, this is a simplified implementation
-        // In a full implementation, you'd handle both thumbs
         onChange?.([newValue, (value as [number, number])[1]]);
       } else {
         onChange?.(newValue);
@@ -55,7 +57,7 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-2">
             {label && (
-              <label className="text-sm font-medium text-gray-700">{label}</label>
+              <label htmlFor={inputId} className="text-sm font-medium text-gray-700">{label}</label>
             )}
             {showValue && (
               <span className="text-sm font-medium text-gray-500">{displayValue}</span>
@@ -65,10 +67,8 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
         <div
           className="relative w-full h-2"
         >
-          {/* Track */}
           <div className="absolute w-full h-2 bg-gray-200 rounded-full" />
 
-          {/* Fill */}
           <div
             className="absolute h-2 bg-blue-600 rounded-full transition-all duration-100"
             style={{
@@ -76,20 +76,20 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
             }}
           />
 
-          {/* Input */}
           <input
             ref={(node) => {
-              // Handle both refs
               (sliderRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
               if (typeof ref === "function") ref(node);
               else if (ref) ref.current = node;
             }}
+            id={inputId}
             type="range"
             min={min}
             max={max}
             step={step}
             value={isRange ? value[0] : (value as number)}
             onChange={handleChange}
+            aria-label={ariaLabel || (label ? undefined : "Slider")}
             className={cn(
               "absolute w-full h-2 appearance-none bg-transparent cursor-pointer",
               "[&::-webkit-slider-thumb]:appearance-none",
@@ -109,7 +109,6 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
           />
         </div>
 
-        {/* Min/Max labels */}
         <div className="flex justify-between mt-1">
           <span className="text-xs text-gray-400">{formatValue ? formatValue(min) : min}</span>
           <span className="text-xs text-gray-400">{formatValue ? formatValue(max) : max}</span>
@@ -120,8 +119,7 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
 );
 Slider.displayName = "Slider";
 
-// Range Slider with two handles
-interface RangeSliderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'> {
+interface RangeSliderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> {
   value: [number, number];
   onChange: (value: [number, number]) => void;
   min?: number;
@@ -130,6 +128,8 @@ interface RangeSliderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'o
   label?: string;
   showValue?: boolean;
   formatValue?: (value: number) => string;
+  minAriaLabel?: string;
+  maxAriaLabel?: string;
 }
 
 const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
@@ -144,6 +144,8 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
       label,
       showValue = false,
       formatValue,
+      minAriaLabel,
+      maxAriaLabel,
       ...props
     },
     ref
@@ -151,6 +153,9 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
     const [minVal, maxVal] = value;
     const minPercent = ((minVal - min) / (max - min)) * 100;
     const maxPercent = ((maxVal - min) / (max - min)) * 100;
+    const generatedId = React.useId();
+    const minInputId = `range-slider-min-${generatedId}`;
+    const maxInputId = `range-slider-max-${generatedId}`;
 
     const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newMin = Math.min(parseFloat(e.target.value), maxVal - step);
@@ -162,12 +167,15 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
       onChange([minVal, newMax]);
     };
 
+    const minLabel = minAriaLabel || (label ? `${label} minimum` : "Minimum value");
+    const maxLabel = maxAriaLabel || (label ? `${label} maximum` : "Maximum value");
+
     return (
       <div className={cn("w-full", className)} ref={ref} {...props}>
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-2">
             {label && (
-              <label className="text-sm font-medium text-gray-700">{label}</label>
+              <div className="text-sm font-medium text-gray-700">{label}</div>
             )}
             {showValue && (
               <span className="text-sm font-medium text-gray-500">
@@ -177,10 +185,8 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
           </div>
         )}
         <div className="relative w-full h-2">
-          {/* Track */}
           <div className="absolute w-full h-2 bg-gray-200 rounded-full" />
 
-          {/* Fill */}
           <div
             className="absolute h-2 bg-blue-600 rounded-full"
             style={{
@@ -189,14 +195,16 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
             }}
           />
 
-          {/* Min input */}
+          <label htmlFor={minInputId} className="sr-only">{minLabel}</label>
           <input
+            id={minInputId}
             type="range"
             min={min}
             max={max}
             step={step}
             value={minVal}
             onChange={handleMinChange}
+            aria-label={minLabel}
             className={cn(
               "absolute w-full h-2 appearance-none bg-transparent pointer-events-none",
               "[&::-webkit-slider-thumb]:appearance-none",
@@ -208,14 +216,16 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
             )}
           />
 
-          {/* Max input */}
+          <label htmlFor={maxInputId} className="sr-only">{maxLabel}</label>
           <input
+            id={maxInputId}
             type="range"
             min={min}
             max={max}
             step={step}
             value={maxVal}
             onChange={handleMaxChange}
+            aria-label={maxLabel}
             className={cn(
               "absolute w-full h-2 appearance-none bg-transparent pointer-events-none",
               "[&::-webkit-slider-thumb]:appearance-none",
@@ -228,7 +238,6 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
           />
         </div>
 
-        {/* Min/Max labels */}
         <div className="flex justify-between mt-1">
           <span className="text-xs text-gray-400">{formatValue ? formatValue(min) : min}</span>
           <span className="text-xs text-gray-400">{formatValue ? formatValue(max) : max}</span>

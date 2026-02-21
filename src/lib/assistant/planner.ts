@@ -51,6 +51,7 @@ export interface AssistantQueryPlan {
 interface BuildAssistantQueryPlanInput {
   message: string;
   contextSnapshot?: AssistantContextSnapshot;
+  conversationHistory?: string;
   baselineOnlyMode: boolean;
 }
 
@@ -189,10 +190,11 @@ export function buildAssistantQueryPlan(input: BuildAssistantQueryPlanInput): As
   const requiredSignals = collectRequiredSignals({
     message: input.message,
     contextSnapshot: input.contextSnapshot,
+    conversationHistory: input.conversationHistory,
     baselineOnlyMode: input.baselineOnlyMode,
   });
-  const symbols = getCandidateSymbols(input.message, input.contextSnapshot);
-  const filters = extractFilters(input.message, input.contextSnapshot);
+  const symbols = getCandidateSymbols(input.message, input.contextSnapshot, input.conversationHistory);
+  const filters = extractFilters(input.message, input.contextSnapshot, input.conversationHistory);
   const requiredTools = requiredSignals.map((item) => item.tool);
   const normalizedMessage = normalizeForKeywordMatch(input.message);
   const ambiguousMetricFallback = shouldApplyAmbiguousMetricFallback(
@@ -544,17 +546,27 @@ function hasFundamentalShorthandIntent(normalized: string): boolean {
   return patterns.some((pattern) => pattern.test(normalized));
 }
 
-function extractFilters(message: string, contextSnapshot?: AssistantContextSnapshot): AssistantQueryPlanFilters {
+function extractFilters(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot,
+  conversationHistory?: string
+): AssistantQueryPlanFilters {
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
   const normalizedMessage = normalizeForKeywordMatch(message);
-  const inferredRange = extractDateRangeInMessage(message);
+  const inferredRangeCurrent = extractDateRangeInMessage(message);
+  const inferredRangeHistory = conversationHistory ? extractDateRangeInMessage(conversationHistory) : null;
+  const inferredRange = inferredRangeCurrent ?? inferredRangeHistory;
+  const inferredDateCurrent = inferredRangeCurrent ? null : extractDateInMessage(message);
+  const inferredDateHistory =
+    inferredRange || !conversationHistory ? null : extractDateInMessage(conversationHistory);
 
   const date = normalizeDateLike(
     filters?.date
     ?? filters?.asOfDate
     ?? filters?.as_of_date
     ?? filters?.day
-    ?? (inferredRange ? null : extractDateInMessage(message))
+    ?? inferredDateCurrent
+    ?? inferredDateHistory
   );
   const from = normalizeDateLike(filters?.from ?? inferredRange?.from);
   const to = normalizeDateLike(filters?.to ?? inferredRange?.to);

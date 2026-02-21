@@ -89,6 +89,10 @@ A comprehensive web-based quantitative finance platform for analyzing HOSE (Ho C
    # or
    pnpm install
    ```
+   On local Windows, keep optional dependencies enabled to avoid missing native binaries:
+   ```bash
+   pnpm config set optional true
+   ```
 
 3. **Prepare data files** (see [Getting Started Guide](./docs/GETTING_STARTED.md) for details)
    - Place CSV data files in `public/data/` directory

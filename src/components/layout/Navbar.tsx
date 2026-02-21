@@ -19,7 +19,8 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useTheme } from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui";
 import {
   DropdownMenu,
@@ -68,36 +69,84 @@ const resourceItems: NavItem[] = [
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { setTheme, resolvedTheme } = useTheme();
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const firstFocusableRef = useRef<HTMLAnchorElement>(null);
 
+  // Close menu on Escape key
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === "Escape" && mobileMenuOpen) {
+      setMobileMenuOpen(false);
+      // Return focus to menu button
+      mobileMenuButtonRef.current?.focus();
+    }
+  }, [mobileMenuOpen]);
+
+  // Handle focus trap in mobile menu
   useEffect(() => {
-    // Apply persisted theme to the root HTML element.
-    // We avoid storing theme in React state; UI relies on `dark:` variants.
-    try {
-      const savedTheme = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
-      const shouldUseDark = savedTheme ? savedTheme === "dark" : prefersDark;
-      document.documentElement.classList.toggle("dark", shouldUseDark);
-    } catch {
-      // Ignore storage/DOM errors (e.g. restricted environments).
-    }
-  }, []);
+    if (!mobileMenuOpen) return;
 
-  const toggleTheme = () => {
-    try {
-      const root = document.documentElement;
-      const nextIsDark = !root.classList.contains("dark");
-      root.classList.toggle("dark", nextIsDark);
-      localStorage.setItem("theme", nextIsDark ? "dark" : "light");
-    } catch {
-      // Ignore.
+    // Add escape key listener
+    document.addEventListener("keydown", handleKeyDown);
+
+    // Focus first menu item when menu opens
+    firstFocusableRef.current?.focus();
+
+    // Trap focus within mobile menu
+    const menuElement = mobileMenuRef.current;
+    if (!menuElement) return;
+
+    const focusableElements = menuElement.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+
+      if (e.shiftKey) {
+        // Shift + Tab: if on first element, go to last
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
+        }
+      } else {
+        // Tab: if on last element, go to first
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
+    };
+
+    menuElement.addEventListener("keydown", handleTabKey);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      menuElement.removeEventListener("keydown", handleTabKey);
+    };
+  }, [mobileMenuOpen, handleKeyDown]);
+
+  // Restore focus when menu closes
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      // Small delay to ensure DOM is updated
+      const timer = setTimeout(() => {
+        mobileMenuButtonRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [mobileMenuOpen]);
 
   const isActiveInGroup = (items: NavItem[]) =>
     items.some((item) => pathname === item.href);
 
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+
   return (
-    <nav className="bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/80 supports-[backdrop-filter]:backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 shadow-sm">
+    <nav className="bg-white/95 dark:bg-slate-900/95 supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-slate-900/80 supports-[backdrop-filter]:backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 sticky top-0 z-50 shadow-sm transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex justify-between h-16">
           {/* Logo */}
@@ -111,7 +160,7 @@ export function Navbar() {
               </div>
               <div className="flex flex-col">
                 <span className="font-bold text-xl text-gray-900 dark:text-white tracking-tight">QuantVN</span>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium -mt-1 hidden sm:block">Quantitative Finance</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium -mt-1 hidden sm:block">Quantitative Finance</span>
               </div>
             </Link>
           </div>
@@ -199,12 +248,15 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-              onClick={toggleTheme}
+              className="text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               aria-label="Toggle theme"
             >
-              <Sun className="w-5 h-5 hidden dark:block" />
-              <Moon className="w-5 h-5 dark:hidden" />
+              {resolvedTheme === "dark" ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </Button>
 
             {/* AI Assistant Trigger */}
@@ -222,18 +274,25 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="text-gray-600 dark:text-gray-300"
-              onClick={toggleTheme}
+              className="text-gray-600 dark:text-slate-300"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               aria-label="Toggle theme"
             >
-              <Sun className="w-5 h-5 hidden dark:block" />
-              <Moon className="w-5 h-5 dark:hidden" />
+              {resolvedTheme === "dark" ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </Button>
             <Button
+              ref={mobileMenuButtonRef}
               variant="ghost"
               size="icon"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="text-gray-600 dark:text-gray-300"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-menu"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </Button>
@@ -243,27 +302,37 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:dark:bg-gray-900/85 supports-[backdrop-filter]:backdrop-blur-sm">
+        <div
+          ref={mobileMenuRef}
+          id="mobile-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+          className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:dark:bg-gray-900/85 supports-[backdrop-filter]:backdrop-blur-sm"
+        >
           <div className="px-3 py-4">
-            {navGroups.map((group) => (
+            {navGroups.map((group, groupIndex) => (
               <div key={group.label} className="mb-4">
-                <h3 className="px-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                <h3 className="px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                   {group.label}
                 </h3>
-                {group.items.map((item) => {
+                {group.items.map((item, itemIndex) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
+                  // First item in first group gets the ref for focus management
+                  const isFirstItem = groupIndex === 0 && itemIndex === 0;
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
+                      ref={isFirstItem ? firstFocusableRef : null}
                       className={cn(
                         "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors duration-200",
                         isActive
                           ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                           : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                       )}
-                      onClick={() => setMobileMenuOpen(false)}
+                      onClick={closeMobileMenu}
                     >
                       <Icon className="w-5 h-5" />
                       <span>{item.label}</span>
@@ -275,7 +344,7 @@ export function Navbar() {
 
             {/* Resources */}
             <div className="mb-4">
-              <h3 className="px-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+              <h3 className="px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Resources
               </h3>
               {resourceItems.map((item) => {
@@ -291,7 +360,7 @@ export function Navbar() {
                         ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                         : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                     )}
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={closeMobileMenu}
                   >
                     <Icon className="w-5 h-5" />
                     <span>{item.label}</span>
@@ -301,7 +370,7 @@ export function Navbar() {
             </div>
 
             <div className="pt-4 px-2 space-y-2 border-t border-gray-100 dark:border-gray-800">
-              <Link href="/screener" onClick={() => setMobileMenuOpen(false)}>
+              <Link href="/screener" onClick={closeMobileMenu}>
                 <Button className="w-full bg-blue-600 hover:bg-blue-700">
                   Get Started
                 </Button>

@@ -1,0 +1,210 @@
+{
+  "version": "assistant-realworld-drift-criteria-v1-2026-02-20",
+  "scope": "HOSE-only",
+  "objective": "Track real-world drift between lab eval and production-like usage for assistant routing, grounding, policy safety, and output fidelity.",
+  "scenarioMix": {
+    "real_logs": 0.6,
+    "adversarial": 0.2,
+    "regression": 0.2,
+    "complexity": {
+      "simple": 0.35,
+      "medium": 0.4,
+      "complex_multiturn": 0.25
+    },
+    "toolPlanComplexity": {
+      "single_tool": 0.4,
+      "multi_tool": 0.35,
+      "dependent_multi_step": 0.25
+    },
+    "turnStructure": {
+      "single_turn": 0.5,
+      "multi_turn_guided": 0.3,
+      "multi_turn_ambiguous": 0.2
+    }
+  },
+  "requiredScenarioFields": [
+    "scenario_id",
+    "category",
+    "severity",
+    "message",
+    "expected.intent",
+    "expected.required_tools",
+    "expected.endpoint_includes",
+    "expected.allowed_policy_statuses",
+    "expected.format_requirements",
+    "expected.reject_tools"
+  ],
+  "categories": [
+    {
+      "id": "market_scan",
+      "description": "Market overview and ranking in HOSE scope",
+      "minScenariosPerRun": 8
+    },
+    {
+      "id": "criteria_filtering",
+      "description": "Filtering by valuation and liquidity constraints",
+      "minScenariosPerRun": 8
+    },
+    {
+      "id": "drilldown",
+      "description": "Symbol-level fundamentals, valuation, risk",
+      "minScenariosPerRun": 8
+    },
+    {
+      "id": "backtest_factor_health",
+      "description": "Backtesting, factors, and data-health workflows",
+      "minScenariosPerRun": 6
+    },
+    {
+      "id": "multiturn_context",
+      "description": "Follow-up and context carry behavior",
+      "minScenariosPerRun": 8
+    },
+    {
+      "id": "noisy_typo",
+      "description": "Noisy, slang, typo, and mixed query variants",
+      "minScenariosPerRun": 6
+    },
+    {
+      "id": "policy_scope_guard",
+      "description": "Non-HOSE, future data, and fabrication resistance",
+      "minScenariosPerRun": 8
+    },
+    {
+      "id": "format_fidelity",
+      "description": "Table/citation/trace formatting requirements",
+      "minScenariosPerRun": 6
+    }
+  ],
+  "metricsThresholds": {
+    "toolRoutingAccuracy": 0.97,
+    "endpointGroundingAccuracy": 0.97,
+    "intentAccuracy": 0.95,
+    "citationCoverage": 0.95,
+    "formatCompliance": 0.95,
+    "contextCarryAccuracy": 0.9,
+    "policySafetyRate": 0.99,
+    "unsupportedClaimRateMax": 0.02,
+    "s1FailuresMax": 0
+  },
+  "driftThresholds": {
+    "intentPassRate": {
+      "baseline": 0.98,
+      "warnBelow": 0.95,
+      "criticalBelow": 0.93
+    },
+    "toolPassRate": {
+      "baseline": 0.98,
+      "warnBelow": 0.94,
+      "criticalBelow": 0.92
+    },
+    "endpointPassRate": {
+      "baseline": 0.98,
+      "warnBelow": 0.95,
+      "criticalBelow": 0.93
+    },
+    "policyPassRate": {
+      "baseline": 0.97,
+      "warnBelow": 0.93,
+      "criticalBelow": 0.9
+    },
+    "citationPassRate": {
+      "baseline": 0.95,
+      "warnBelow": 0.9,
+      "criticalBelow": 0.85
+    },
+    "realworldCitationCoveragePercent": {
+      "baseline": 0.95,
+      "warnBelow": 0.9,
+      "criticalBelow": 0.85
+    },
+    "latencyP95Ms": {
+      "baseline": 15000,
+      "warnAbove": 20000,
+      "criticalAbove": 25000
+    },
+    "flakeRate": {
+      "baseline": 0.0,
+      "warnAbove": 0.01,
+      "criticalAbove": 0.05
+    },
+    "shadowBlockedShare": {
+      "baseline": 0.25,
+      "warnAbove": 0.35,
+      "criticalAbove": 0.45
+    }
+  },
+  "stabilityThresholds": {
+    "defaultRounds": 3,
+    "maxFlakeRate": 0.2,
+    "minSuccessfulRounds": 3,
+    "suiteOverrides": {
+      "routing": {
+        "minPassRate": 1.0,
+        "maxFlakeRate": 0.1
+      },
+      "realworld": {
+        "minPassRate": 1.0,
+        "maxFlakeRate": 0.1
+      },
+      "pr-gate": {
+        "minPassRate": 1.0,
+        "maxFlakeRate": 0.1
+      },
+      "policy-matrix": {
+        "minPassRate": 0.95,
+        "maxFlakeRate": 0.2
+      },
+      "perf-reliability": {
+        "minPassRate": 1.0,
+        "maxFlakeRate": 0.2
+      },
+      "postcheck-anomaly": {
+        "minPassRate": 1.0,
+        "maxFlakeRate": 0.1
+      }
+    }
+  },
+  "stageGates": {
+    "pr": {
+      "requiredSuites": [
+        "routing",
+        "pr-gate"
+      ],
+      "minimumRounds": 2
+    },
+    "nightly": {
+      "requiredSuites": [
+        "routing",
+        "realworld",
+        "pr-gate",
+        "policy-matrix",
+        "perf-reliability",
+        "postcheck-anomaly"
+      ],
+      "minimumRounds": 3
+    },
+    "release": {
+      "requiredNightlyPasses": 2,
+      "mustHaveNoS1Failures": true
+    }
+  },
+  "telemetryRequiredFields": [
+    "trace_id",
+    "query_intent",
+    "query_plan_summary",
+    "used_tools",
+    "citations",
+    "policy_status",
+    "message_blocks",
+    "status_code",
+    "latency_ms",
+    "error_code"
+  ],
+  "incidentSla": {
+    "detectWithinMinutes": 5,
+    "ackWithinMinutes": 30,
+    "statusUpdateEveryMinutes": 30,
+    "postmortemWithinHours": 24
+  }
+}

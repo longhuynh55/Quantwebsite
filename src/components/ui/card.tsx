@@ -1,5 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { Sparkline } from "@/components/ui/professional";
+import { TrendBadge } from "@/components/ui/professional";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Enable hover effects for interactive cards */
@@ -77,32 +79,162 @@ interface MetricCardProps {
   trendValue?: string;
   className?: string;
   animated?: boolean;
+  /** Inline trend visualization data */
+  sparklineData?: number[];
+  /** Progress bar configuration */
+  progress?: { value: number; max: number };
+  /** Status indicator for live data */
+  status?: "live" | "stale" | "error";
+  /** Period comparison data */
+  comparison?: { value: number; label: string; period: string };
+  /** Size variants */
+  size?: "sm" | "md" | "lg";
 }
 
-const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
-  ({ title, value, description, trend, trendValue, className, animated = false }, ref) => {
-    const trendColors = {
-      up: "text-green-600 dark:text-green-400",
-      down: "text-red-600 dark:text-red-400",
-      neutral: "text-gray-600 dark:text-gray-400",
-    };
+// Size variants for padding and text (memoized outside component since it's static)
+const sizeStyles = {
+  sm: {
+    container: "p-3",
+    title: "text-xs",
+    value: "text-xl",
+    description: "text-xs",
+  },
+  md: {
+    container: "p-4",
+    title: "text-sm",
+    value: "text-2xl",
+    description: "text-xs",
+  },
+  lg: {
+    container: "p-6 metric-hero",
+    title: "text-sm",
+    value: "text-3xl metric-value",
+    description: "text-sm",
+  },
+} as const;
+
+const MetricCard = React.memo(
+  React.forwardRef<HTMLDivElement, MetricCardProps>(
+    (
+      {
+        title,
+        value,
+        description,
+        trend,
+        trendValue,
+        className,
+        animated = false,
+        sparklineData,
+        progress,
+        status,
+        comparison,
+        size = "md",
+      },
+      ref
+    ) => {
+      const trendColors = {
+        up: "text-green-600 dark:text-green-400",
+        down: "text-red-600 dark:text-red-400",
+        neutral: "text-gray-600 dark:text-gray-400",
+      };
+
+    // Determine trend direction from sparkline data
+    const sparklineTrend = React.useMemo(() => {
+      if (!sparklineData || sparklineData.length < 2) return undefined;
+      const validData = sparklineData.filter(
+        (v): v is number => typeof v === "number" && !isNaN(v)
+      );
+      if (validData.length < 2) return undefined;
+      const first = validData[0];
+      const last = validData[validData.length - 1];
+      if (last > first) return "up";
+      if (last < first) return "down";
+      return "neutral";
+    }, [sparklineData]);
+
+    // Calculate progress percentage
+    const progressPercent = React.useMemo(() => {
+      if (!progress) return 0;
+      const percent = (progress.value / progress.max) * 100;
+      return Math.min(100, Math.max(0, percent));
+    }, [progress]);
+
+    // Progress bar color based on percentage
+    const progressColor = React.useMemo(() => {
+      if (progressPercent >= 80) return "bg-green-500 dark:bg-green-400";
+      if (progressPercent >= 50) return "bg-blue-500 dark:bg-blue-400";
+      if (progressPercent >= 25) return "bg-yellow-500 dark:bg-yellow-400";
+      return "bg-red-500 dark:bg-red-400";
+    }, [progressPercent]);
+
+    // Comparison trend direction
+    const comparisonTrend = React.useMemo(() => {
+      if (!comparison) return undefined;
+      if (comparison.value > 0) return "up";
+      if (comparison.value < 0) return "down";
+      return "neutral";
+    }, [comparison]);
+
+    const currentSize = sizeStyles[size];
 
     return (
       <div
         ref={ref}
         className={cn(
-          "rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm",
+          "rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm",
           "transition-[transform,box-shadow,border-color] duration-300 ease-out",
           "hover:shadow-md hover:border-gray-300 dark:hover:border-gray-700",
           animated && "animate-in fade-in zoom-in-95 duration-500",
+          currentSize.container,
           className
         )}
       >
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-        <div className="flex items-baseline gap-2 mt-1">
+        {/* Status indicator in top-right corner */}
+        {status && (
+          <div className="relative float-right ml-2 mb-1">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium",
+                status === "live" && [
+                  "status-live",
+                  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                ],
+                status === "stale" && [
+                  "status-stale",
+                  "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+                ],
+                status === "error" && [
+                  "status-error",
+                  "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                ]
+              )}
+            >
+              <span
+                className={cn(
+                  "w-2 h-2 rounded-full animate-pulse",
+                  status === "live" && "bg-green-500",
+                  status === "stale" && "bg-yellow-500",
+                  status === "error" && "bg-red-500"
+                )}
+              />
+              {status === "live" && "Live"}
+              {status === "stale" && "Stale"}
+              {status === "error" && "Error"}
+            </span>
+          </div>
+        )}
+
+        {/* Title */}
+        <p className={cn("font-medium text-gray-500 dark:text-gray-400", currentSize.title)}>
+          {title}
+        </p>
+
+        {/* Value row with optional sparkline */}
+        <div className="flex items-center gap-3 mt-1">
           <p
             className={cn(
-              "text-2xl font-bold",
+              "font-bold",
+              currentSize.value,
               trend === "up" && "text-green-600 dark:text-green-400",
               trend === "down" && "text-red-600 dark:text-red-400",
               (!trend || trend === "neutral") && "text-gray-900 dark:text-white"
@@ -117,13 +249,63 @@ const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
               {trendValue}
             </span>
           )}
+          {/* Sparkline */}
+          {sparklineData && sparklineData.length >= 2 && (
+            <Sparkline
+              data={sparklineData}
+              trend={sparklineTrend}
+              width={size === "lg" ? 100 : 80}
+              height={size === "lg" ? 32 : 24}
+              showArea
+              className="opacity-80"
+            />
+          )}
         </div>
+
+        {/* Progress bar */}
+        {progress && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>{progress.value.toLocaleString()}</span>
+              <span>{progress.max.toLocaleString()}</span>
+            </div>
+            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500 ease-out progress-bar-animated",
+                  progressColor
+                )}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Comparison with TrendBadge */}
+        {comparison && (
+          <div className="mt-2 flex items-center gap-2">
+            <TrendBadge
+              trend={comparisonTrend || "neutral"}
+              value={`${comparison.value > 0 ? "+" : ""}${comparison.value}%`}
+              size="sm"
+              showIcon
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {comparison.period}
+            </span>
+          </div>
+        )}
+
+        {/* Description */}
         {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>
+          <p className={cn("text-gray-500 dark:text-gray-400 mt-1", currentSize.description)}>
+            {description}
+          </p>
         )}
       </div>
     );
   }
+)
 );
 MetricCard.displayName = "MetricCard";
 

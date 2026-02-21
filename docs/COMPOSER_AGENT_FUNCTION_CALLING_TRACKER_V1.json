@@ -1,0 +1,200 @@
+{
+  "version": "composer-agent-function-calling-tracker-v1",
+  "scope": "HOSE-only",
+  "status": "active",
+  "updatedAt": "2026-02-21",
+  "milestones": [
+    {
+      "id": "AGT-00",
+      "phase": "Sprint 1",
+      "title": "Tool registry: contracts + strict schemas",
+      "owner": "Backend",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Single tool registry metadata is the source of truth (names, args schema, endpoint mapping)",
+        "Execute validator + composer planner consume the same registry (no duplicated tool-name lists)",
+        "Arguments validated strictly per tool; response envelope consistent across tools"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Schema mismatch with underlying API routes"
+      ],
+      "signals": {
+        "toolValidationRejectRate": null,
+        "schemaDriftIncidents": null
+      },
+      "evidenceCommands": [
+        "pnpm run test:agent:contract",
+        "pnpm exec tsc --noEmit"
+      ],
+      "statusHistory": [
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-21T10:05:01.362Z",
+          "note": "Implemented shared tool registry for tool names, args, endpoint plan mapping, and default args.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "AGT-01",
+      "phase": "Sprint 1",
+      "title": "Execute dispatcher: secure + resilient",
+      "owner": "Backend",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Harden /api/assistant/execute error handling (fetch + non-JSON decode + timeouts) with structured 502/504 responses",
+        "approvalToken enforced for execution; no unsafe query pass-through",
+        "Legacy payload compatibility kept; requestId/tool trace included in response meta"
+      ],
+      "dependsOn": [
+        "AGT-00"
+      ],
+      "risks": [
+        "Unsafe query pass-through",
+        "Insufficient input sanitization"
+      ],
+      "signals": {
+        "http4xxValidationCount": null,
+        "http5xxExecutionCount": null
+      },
+      "evidenceCommands": [
+        "pnpm run test:agent:contract",
+        "pnpm run docker:smoke:prod:api"
+      ],
+      "statusHistory": [
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-21T10:05:07.943Z",
+          "note": "Hardened execute route with timeout, requestId/trace metadata, and structured network/abort/non-JSON error handling.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "AGT-02",
+      "phase": "Sprint 1",
+      "title": "Assistant orchestration mode metadata",
+      "owner": "Backend + Frontend",
+      "priority": "P1",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Assistant request supports executionMode (chat vs agent)",
+        "Assistant response meta includes orchestrationMode; visible in logs and stability reports",
+        "Planner/policy can consume conversation context safely without leaking secrets"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Mixed metrics between chat and agent flows"
+      ],
+      "signals": {
+        "agentModeRequestShare": null
+      },
+      "evidenceCommands": [
+        "pnpm run eval:assistant:routing:stable"
+      ]
+    },
+    {
+      "id": "AGT-03",
+      "phase": "Sprint 1",
+      "title": "Composer workflow integration (plan -> approve -> execute)",
+      "owner": "Frontend + Backend",
+      "priority": "P1",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Prompt -> plan preview -> approval token -> execute -> result works end-to-end",
+        "UI surfaces tool trace (usedTools/citations) and handles execution errors cleanly"
+      ],
+      "dependsOn": [
+        "AGT-01",
+        "AGT-02"
+      ],
+      "risks": [
+        "UX overload"
+      ],
+      "signals": {
+        "composerCompletionRate": null
+      },
+      "evidenceCommands": [
+        "pnpm run docker:qa:prod"
+      ]
+    },
+    {
+      "id": "AGT-04",
+      "phase": "Sprint 2",
+      "title": "Reliability hardening (rate limit, retries, budgets)",
+      "owner": "Backend + QA",
+      "priority": "P0",
+      "status": "todo",
+      "definitionOfDone": [
+        "Define tool budgets (timeouts, retries, per-turn tool cap) and enforce consistently",
+        "Distributed rate-limit plan approved; tool-call alerts defined",
+        "Retry/circuit policy documented + implemented for transient failures"
+      ],
+      "dependsOn": [
+        "AGT-01"
+      ],
+      "risks": [
+        "Non-deterministic production behavior under scale"
+      ],
+      "signals": {
+        "toolCallSuccessRate": null,
+        "policyFallbackRate": null
+      },
+      "evidenceCommands": [
+        "pnpm run eval:assistant:perf-reliability:stable"
+      ]
+    },
+    {
+      "id": "AGT-05",
+      "phase": "Sprint 2",
+      "title": "Eval + release gates (stable and automated)",
+      "owner": "QA + Product",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "CI/PR gate runs merge + integration + assistant stability suites with artifacts",
+        "Stability gate all suites passes (routing, realworld, pr-gate, policy-matrix, perf, postcheck-anomaly)",
+        "Expand numeric fidelity beyond backtest (risk/valuation/fundamentals) with tolerances"
+      ],
+      "dependsOn": [
+        "AGT-04"
+      ],
+      "risks": [
+        "Docker/env instability",
+        "Provider throttling causes noisy flakes"
+      ],
+      "signals": {
+        "unsupportedClaimRate": null,
+        "supportedClaimPrecision": null,
+        "numericSymbolPassRate": null
+      },
+      "evidenceCommands": [
+        "pnpm run docker:eval:assistant:stable:all",
+        "pnpm run docker:qa:prod"
+      ]
+    }
+  ],
+  "qualityGates": {
+    "merge": [
+      "pnpm run lint",
+      "pnpm exec tsc --noEmit",
+      "pnpm run build",
+      "pnpm run verify:agent:advanced"
+    ],
+    "integration": [
+      "pnpm run docker:smoke",
+      "pnpm run docker:qa"
+    ],
+    "assistant": [
+      "pnpm run eval:assistant:pr-gate",
+      "pnpm run eval:assistant:perf-reliability",
+      "pnpm run eval:assistant:stable:all",
+      "pnpm run eval:assistant:drift:monitor:skip-run"
+    ]
+  }
+}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -19,6 +20,25 @@ const Command = React.forwardRef<
   />
 ));
 Command.displayName = CommandPrimitive.displayName;
+
+interface CommandDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: React.ReactNode;
+}
+
+const CommandDialog = React.memo(function CommandDialog({ open, onOpenChange, children }: CommandDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="overflow-hidden p-0 shadow-2xl border-gray-200 dark:border-gray-700 max-w-lg">
+        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-gray-500 dark:[&_[cmdk-group-heading]]:text-gray-400 [&_[cmdk-group-heading]]:text-xs">
+          {children}
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+});
+CommandDialog.displayName = "CommandDialog";
 
 const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
@@ -112,24 +132,25 @@ const CommandItem = React.forwardRef<
 ));
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
-const CommandShortcut = ({
+const CommandShortcut = React.memo(function CommandShortcut({
   className,
   ...props
-}: React.HTMLAttributes<HTMLSpanElement>) => {
+}: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       className={cn(
-        "ml-auto text-xs tracking-widest text-gray-400 dark:text-gray-500",
+        "ml-auto text-xs tracking-widest text-gray-500 dark:text-gray-400",
         className
       )}
       {...props}
     />
   );
-};
+});
 CommandShortcut.displayName = "CommandShortcut";
 
 export {
   Command,
+  CommandDialog,
   CommandInput,
   CommandList,
   CommandEmpty,

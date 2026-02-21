@@ -1,0 +1,53 @@
+---
+slug: simple-strategies
+title: 'Building Simple Trading Strategies'
+description: 'Turn a hypothesis into executable rules, then validate with costs, constraints, and robustness checks.'
+level: intermediate
+durationMinutes: 34
+order: 2
+---
+## Overview
+
+A rule-based trading strategy is an explicit mapping from information to actions. The value of rules is not that they are perfect; it is that they can be tested, debugged, and improved without ambiguity.
+
+A strategy that cannot be described precisely cannot be evaluated reliably.
+
+### Learning objectives
+
+- Convert a hypothesis into executable entry and exit rules.
+- Add realistic constraints, costs, and sizing.
+- Validate a strategy with robustness checks, not just headline returns.
+
+### The strategy specification
+
+A minimal specification includes:
+
+- Universe: which symbols are eligible.
+- Signal: how you decide when to enter and exit.
+- Portfolio rule: how you size positions and allocate capital.
+- Execution rule: when and how trades are placed (next bar, close, open).
+- Risk rules: stop logic, exposure caps, and drawdown controls.
+
+### Example rule set (illustrative)
+
+```
+Entry: Close > SMA(50) and RSI(14) between 50 and 65
+Exit:  Close < SMA(20) or RSI(14) > 75
+Sizing: Equal-weight, max 10 positions
+Costs:  Fees + slippage per trade
+```
+
+### Validation checklist (what to test)
+
+- Costs and delays: do results survive fees, slippage, and execution delay?
+- Concentration: are returns dominated by a few names or one sector?
+- Stability: do small parameter changes break performance?
+- Regimes: does the strategy fail in specific market conditions?
+- Turnover and capacity: is it realistic for the intended capital size?
+
+### Practical checklist
+
+- Are all rules unambiguous and implementable?
+- Is the time horizon consistent across signal, execution, and holding period?
+- Are constraints encoded (max weight, liquidity filter, turnover cap)?
+- Is there a plan for monitoring and de-risking after deployment?

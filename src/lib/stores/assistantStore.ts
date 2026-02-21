@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AssistantUIMode, Message, PageContext, ExperienceLevel } from '@/types/assistant';
+import type {
+  AssistantContextSnapshot,
+  AssistantUIMode,
+  Message,
+  PageContext,
+  ExperienceLevel,
+} from '@/types/assistant';
 
 const MAX_IN_MEMORY_MESSAGES = 50;
 const MAX_PERSISTED_MESSAGES = 25;
@@ -13,6 +19,9 @@ interface AssistantState {
   currentContext: PageContext | null;
   experienceLevel: ExperienceLevel;
   uiMode: AssistantUIMode;
+  conversationScope: Partial<
+    Pick<AssistantContextSnapshot, 'symbol' | 'symbols' | 'filters' | 'timeframe'>
+  > | null;
 
   // Actions
   togglePanel: () => void;
@@ -23,6 +32,10 @@ interface AssistantState {
   setContext: (context: PageContext) => void;
   setLoading: (loading: boolean) => void;
   setExperienceLevel: (level: ExperienceLevel) => void;
+  setConversationScope: (
+    scope: Partial<Pick<AssistantContextSnapshot, 'symbol' | 'symbols' | 'filters' | 'timeframe'>> | null
+  ) => void;
+  clearConversationScope: () => void;
   setUIMode: (mode: AssistantUIMode) => void;
 }
 
@@ -36,6 +49,7 @@ export const useAssistantStore = create<AssistantState>()(
       currentContext: null,
       experienceLevel: 'intermediate',
       uiMode: 'copilot',
+      conversationScope: null,
 
       // Actions
       togglePanel: () => set((state) => ({ isOpen: !state.isOpen })),
@@ -57,13 +71,15 @@ export const useAssistantStore = create<AssistantState>()(
           };
         }),
 
-      clearMessages: () => set({ messages: [] }),
+      clearMessages: () => set({ messages: [], conversationScope: null }),
 
       setContext: (context) => set({ currentContext: context }),
 
       setLoading: (loading) => set({ isLoading: loading }),
 
       setExperienceLevel: (level) => set({ experienceLevel: level }),
+      setConversationScope: (scope) => set({ conversationScope: scope ? { ...scope } : null }),
+      clearConversationScope: () => set({ conversationScope: null }),
       setUIMode: (mode) => set({ uiMode: mode }),
     }),
     {
@@ -73,7 +89,8 @@ export const useAssistantStore = create<AssistantState>()(
           id: message.id,
           role: message.role,
           content: message.content,
-          timestamp: message.timestamp,
+          // Serialize Date to ISO string for localStorage persistence
+          timestamp: message.timestamp instanceof Date ? message.timestamp.toISOString() : message.timestamp,
           grounded: message.grounded,
           policyStatus: message.policyStatus,
           policyReason: message.policyReason,
@@ -82,6 +99,14 @@ export const useAssistantStore = create<AssistantState>()(
         experienceLevel: state.experienceLevel,
         uiMode: state.uiMode,
       }),
+      // Rehydrate timestamp strings back to Date objects
+      onRehydrateStorage: () => (state) => {
+        if (!state?.messages) return;
+        state.messages = state.messages.map((message) => ({
+          ...message,
+          timestamp: typeof message.timestamp === 'string' ? new Date(message.timestamp) : message.timestamp,
+        }));
+      },
     }
   )
 );

@@ -14,6 +14,7 @@ import {
   normalizeForKeywordMatch,
 } from '@/lib/assistant/signals';
 import type { AssistantQueryPlan } from '@/lib/assistant/planner';
+import { loadStockMetadata } from '@/lib/data';
 import { createLogger, hashText } from '@/lib/logger';
 
 const TOOL_TIMEOUT_MS = resolveToolTimeoutMs();
@@ -26,6 +27,7 @@ const MAX_MESSAGE_BLOCKS = 6;
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
 const QUERY_PLAN_STRICT_MODE = String(process.env.ASSISTANT_QUERY_PLAN_STRICT ?? "true").trim().toLowerCase() === "true";
 const groundingToolsLogger = createLogger('assistant.tools');
+let hoseSymbolUniversePromise: Promise<Set<string>> | null = null;
 
 interface GroundingInput {
   baseUrl?: string;
@@ -76,7 +78,14 @@ interface RequestedDateRange {
 export async function runGroundingTools(input: GroundingInput): Promise<GroundingResult> {
   const startedAt = Date.now();
   const logger = groundingToolsLogger.child({ requestId: input.requestId ?? '' });
-  const symbols = getCandidateSymbols(input.message, input.contextSnapshot);
+  const planSymbols = Array.isArray(input.queryPlan?.symbols)
+    ? input.queryPlan.symbols
+        .map((symbol) => String(symbol ?? "").trim().toUpperCase())
+        .filter((symbol) => symbol.length > 0)
+    : [];
+  const symbols = planSymbols.length > 0
+    ? planSymbols
+    : getCandidateSymbols(input.message, input.contextSnapshot);
   const symbolScope = buildSymbolGroundingScope(input.message, symbols, input.contextSnapshot);
   const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan);
   logger.debug('grounding.started', {
@@ -164,7 +173,18 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     }
 
     const normalizedError = normalizeHttpError(item.error);
+    const errorMeta = extractToolErrorMetadata(item.error);
     const errorCode = deriveToolErrorCode(normalizedError);
+    if (errorMeta.endpoint) {
+      citations.push(
+        buildCitation(
+          `${item.task.name}-error-${citations.length + 1}`,
+          errorMeta.title ?? `${item.task.name} error trace`,
+          errorMeta.endpoint,
+          errorMeta.symbol
+        )
+      );
+    }
     errorSummaries.push(`${item.task.name}: ${normalizedError.status ? `HTTP ${normalizedError.status}` : normalizedError.message}`);
     usedTools.push({
       name: item.task.name,
@@ -299,6 +319,7 @@ function buildToolTasks(
   const needsMarket = requiredToolSet.has("marketSnapshot");
   const needsIcbSnapshot = requiredToolSet.has("icbSnapshot");
   const needsValuationRanking = requiredToolSet.has("valuationRanking");
+  const queryPlanFilters = queryPlan?.filters;
   const requiresStockSnapshotSignal = requiredToolSet.has("stockSnapshot");
   const needsSymbolScopedSignals = needsFundamentals
     || needsHealthScore
@@ -333,14 +354,22 @@ function buildToolTasks(
       if (hasSymbolTargets) {
         addTaskForSymbols(
           name,
-          (symbol) => fetchStockSnapshot(baseUrl, symbol, contextSnapshot?.timeframe, message, contextSnapshot)
+          (symbol) =>
+            fetchStockSnapshot(
+              baseUrl,
+              symbol,
+              contextSnapshot?.timeframe,
+              message,
+              contextSnapshot,
+              queryPlanFilters
+            )
         );
         return;
       }
       if (!requestsUniverseStockRanking && queryPlan?.intent !== "stock_snapshot" && !requiresStockSnapshotSignal) {
         return;
       }
-      addTask(name, () => fetchStockUniverseSnapshot(baseUrl, message, contextSnapshot));
+      addTask(name, () => fetchStockUniverseSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters));
       return;
     }
     if (name === "fundamentalSnapshot") {
@@ -573,11 +602,15 @@ async function fetchStockSnapshot(
   symbol: string,
   timeframe?: string,
   message?: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlanFilters?: AssistantQueryPlan["filters"]
 ): Promise<ToolRunOutput> {
+  await ensureResolvableHoseSymbol(symbol);
   const limit = resolveStockSnapshotLimit(timeframe, message, contextSnapshot);
-  const requestedRange = extractRequestedDateRange(message ?? "", contextSnapshot);
-  const requestedDate = requestedRange ? null : extractRequestedDate(message ?? "", contextSnapshot);
+  const plannedRange = extractRequestedDateRangeFromPlan(queryPlanFilters);
+  const requestedRange = plannedRange ?? extractRequestedDateRange(message ?? "", contextSnapshot);
+  const plannedDate = normalizeDateLike(queryPlanFilters?.date);
+  const requestedDate = requestedRange ? null : (plannedDate ?? extractRequestedDate(message ?? "", contextSnapshot));
   const endpoint = requestedRange
     ? `/api/stocks?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(requestedRange.from)}&to=${encodeURIComponent(requestedRange.to)}&limit=all`
     : requestedDate
@@ -644,12 +677,19 @@ async function fetchStockSnapshot(
 async function fetchStockUniverseSnapshot(
   baseUrl: string,
   message: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlanFilters?: AssistantQueryPlan["filters"]
 ): Promise<ToolRunOutput> {
-  const requestedDate = extractRequestedDate(message, contextSnapshot);
+  const plannedDate = normalizeDateLike(queryPlanFilters?.date);
+  const requestedDate = plannedDate ?? extractRequestedDate(message, contextSnapshot);
   const metric = extractStockUniverseMetric(message, contextSnapshot);
-  const order = extractRankingOrder(message, contextSnapshot);
-  const limit = extractTopLimit(message, contextSnapshot, 10) ?? 10;
+  const order = queryPlanFilters?.order === "asc" || queryPlanFilters?.order === "desc"
+    ? queryPlanFilters.order
+    : extractRankingOrder(message, contextSnapshot);
+  const limitFromPlan = Number.isFinite(queryPlanFilters?.limit)
+    ? Math.min(50, Math.max(1, Number(queryPlanFilters?.limit)))
+    : null;
+  const limit = limitFromPlan ?? (extractTopLimit(message, contextSnapshot, 10) ?? 10);
   const requestedExchange = extractStockUniverseExchange(message, contextSnapshot);
   const exchange = "HOSE";
   const icbFilter = extractIcbFilter(message, contextSnapshot);
@@ -1598,6 +1638,52 @@ function pickLatestFromRatioCollection(
   return null;
 }
 
+async function ensureResolvableHoseSymbol(symbol: string): Promise<void> {
+  const normalized = String(symbol ?? "").trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9]{1,5}$/.test(normalized)) {
+    throw {
+      message: `Invalid ticker ${normalized || "n/a"}. Symbol is not available in grounded HOSE dataset.`,
+      endpoint: `/api/stocks?symbol=${encodeURIComponent(normalized || "n/a")}&limit=1`,
+      symbol: normalized || undefined,
+      title: "Invalid ticker",
+    };
+  }
+
+  const universe = await loadHoseSymbolUniverse();
+  if (universe.size === 0) return;
+  if (universe.has(normalized)) return;
+
+  throw {
+    message: `Invalid ticker ${normalized}. Symbol is not available in grounded HOSE dataset.`,
+    endpoint: `/api/stocks?symbol=${encodeURIComponent(normalized)}&limit=1`,
+    symbol: normalized,
+    title: "Invalid ticker",
+  };
+}
+
+async function loadHoseSymbolUniverse(): Promise<Set<string>> {
+  if (!hoseSymbolUniversePromise) {
+    hoseSymbolUniversePromise = (async () => {
+      try {
+        const metadata = await loadStockMetadata();
+        const hoseRows = metadata.filter((row) => {
+          const exchange = normalizeForKeywordMatch(String(row.exchange ?? ""));
+          return exchange.includes("hose") || exchange.includes("hsx");
+        });
+        const source = hoseRows.length > 0 ? hoseRows : metadata;
+        return new Set(
+          source
+            .map((row) => String(row.symbol ?? "").trim().toUpperCase())
+            .filter((value) => value.length > 0)
+        );
+      } catch {
+        return new Set<string>();
+      }
+    })();
+  }
+  return hoseSymbolUniversePromise;
+}
+
 function normalizeCitations(
   citations: AssistantCitation[] | undefined,
   symbol: string,
@@ -1676,6 +1762,15 @@ function normalizeHttpError(error: unknown): HttpErrorShape {
   }
   if (error instanceof Error) return { message: sanitizeToolErrorMessage(error.message) };
   return { message: sanitizeToolErrorMessage(String(error)) };
+}
+
+function extractToolErrorMetadata(error: unknown): { endpoint?: string; symbol?: string; title?: string } {
+  if (!error || typeof error !== "object") return {};
+  const candidate = error as { endpoint?: unknown; symbol?: unknown; title?: unknown };
+  const endpoint = typeof candidate.endpoint === "string" ? candidate.endpoint : undefined;
+  const symbol = typeof candidate.symbol === "string" ? candidate.symbol : undefined;
+  const title = typeof candidate.title === "string" ? candidate.title : undefined;
+  return { endpoint, symbol, title };
 }
 
 function deriveToolErrorCode(error: HttpErrorShape): string {
@@ -1981,6 +2076,15 @@ function extractRequestedDateRange(
   if (matches.length < 2) return null;
   const from = normalizeDateLike(matches[0]);
   const to = normalizeDateLike(matches[1]);
+  if (!from || !to) return null;
+  return { from, to };
+}
+
+function extractRequestedDateRangeFromPlan(
+  filters?: AssistantQueryPlan["filters"]
+): RequestedDateRange | null {
+  const from = normalizeDateLike(filters?.from);
+  const to = normalizeDateLike(filters?.to);
   if (!from || !to) return null;
   return { from, to };
 }

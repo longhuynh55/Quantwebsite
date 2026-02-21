@@ -13,7 +13,17 @@ const suiteCanonicalReportHints = {
   "pr-gate": "artifacts/assistant-pr-gate-report.json",
   "policy-matrix": "artifacts/assistant-policy-matrix-report.json",
   "perf-reliability": "artifacts/assistant-perf-reliability-report.json",
+  "postcheck-anomaly": "artifacts/assistant-postcheck-anomaly-v1-report.json",
   full: "artifacts/assistant-eval-comprehensive-report.json",
+};
+
+const suiteStabilityReportHints = {
+  routing: "artifacts/assistant-routing-stability-report.json",
+  realworld: "artifacts/assistant-realworld-stability-report.json",
+  "pr-gate": "artifacts/assistant-pr-gate-stability-report.json",
+  "policy-matrix": "artifacts/assistant-policy-matrix-stability-report.json",
+  "perf-reliability": "artifacts/assistant-perf-reliability-stability-report.json",
+  "postcheck-anomaly": "artifacts/assistant-postcheck-anomaly-stability-report.json",
 };
 
 function parseCli(argv) {
@@ -89,6 +99,12 @@ function compareMetric(actual, threshold, comparator) {
   if (actual === null || threshold === null) return null;
   if (comparator === "lte") return actual <= threshold;
   return actual >= threshold;
+}
+
+function toTimestamp(value) {
+  if (!value) return null;
+  const ts = Date.parse(String(value));
+  return Number.isFinite(ts) ? ts : null;
 }
 
 function createMetricResult({ id, label, actual, threshold, comparator = "gte", required = true, source }) {
@@ -231,7 +247,7 @@ async function main() {
   const criteria = readJsonFile(criteriaPath);
   const nightlySuites = Array.isArray(criteria?.stageGates?.nightly?.requiredSuites)
     ? criteria.stageGates.nightly.requiredSuites
-    : ["routing", "realworld", "pr-gate", "policy-matrix", "perf-reliability"];
+    : ["routing", "realworld", "pr-gate", "policy-matrix", "perf-reliability", "postcheck-anomaly"];
   const nightlySuiteArg = nightlySuites.join(",");
 
   const notes = [];
@@ -251,8 +267,33 @@ async function main() {
 
   const stabilityReport = readJsonFile(stabilityReportPath);
   const suites = Array.isArray(stabilityReport?.suites) ? stabilityReport.suites : [];
+  const mergedSuites = new Map(suites.map((suite) => [String(suite?.suite ?? "unknown"), suite]));
 
-  const suiteResults = suites.map((suite) => {
+  for (const [suiteId, reportPath] of Object.entries(suiteStabilityReportHints)) {
+    const suiteStabilityReport = tryReadJsonFile(reportPath);
+    const latestSuite = Array.isArray(suiteStabilityReport?.suites)
+      ? suiteStabilityReport.suites.find((suite) => String(suite?.suite ?? "") === suiteId)
+      : null;
+    if (!latestSuite) continue;
+
+    const currentSuite = mergedSuites.get(suiteId);
+    const currentTimestamp = toTimestamp(currentSuite?.runAt);
+    const latestTimestamp = toTimestamp(latestSuite?.runAt);
+    const shouldReplace =
+      !currentSuite ||
+      (latestTimestamp !== null && currentTimestamp !== null && latestTimestamp > currentTimestamp) ||
+      (latestTimestamp !== null && currentTimestamp === null);
+
+    if (shouldReplace) {
+      mergedSuites.set(suiteId, latestSuite);
+    }
+  }
+
+  if (skipStabilityRun) {
+    notes.push("Applied latest per-suite stability snapshots when newer than the aggregate stability report.");
+  }
+
+  const suiteResults = Array.from(mergedSuites.values()).map((suite) => {
     const roundsConfigured = toNumber(suite?.thresholds?.rounds) ?? null;
     const successfulRounds = toNumber(suite?.summary?.successfulRounds) ?? 0;
     const flakeRate = toNumber(suite?.summary?.flakeRate);

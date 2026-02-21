@@ -1,0 +1,69 @@
+## Overview
+
+Quantitative finance is the systematic use of data, mathematics, and computation to make financial decisions under uncertainty. The core idea is simple: convert an investment hypothesis into an explicit procedure, test it under stated assumptions, and manage the risks that arise when the world deviates from those assumptions.
+
+A practical definition is not "more math." It is clarity: a quant process forces you to specify your objective, your constraints, what information you are allowed to use, how you will trade, and how you will measure success.
+
+### Learning objectives
+
+- Distinguish quantitative finance from discretionary trading.
+- Understand the research-to-production workflow used for systematic strategies.
+- Identify the most common failure modes (bias, costs, instability, and model risk).
+
+### What "quantitative" means in practice
+
+Quant work is not limited to prediction. Many high-impact problems are descriptive or risk-focused: estimating volatility, building robust portfolios, measuring exposure to market factors, and monitoring drawdown.
+
+Most quant decisions can be framed as an optimization problem:
+
+- Inputs: data and assumptions.
+- Decision: what to buy or sell, and how much.
+- Objective: a performance criterion (often risk-adjusted).
+- Constraints: liquidity, leverage, concentration, turnover, and regulatory limits.
+
+### A minimal research-to-production workflow
+
+- Formulate a hypothesis with an economic rationale.
+- Define the trading universe and data sources.
+- Engineer signals using only information available at decision time.
+- Build a portfolio rule (weights, constraints, and rebalancing schedule).
+- Simulate performance with a realistic cost model.
+- Stress test across regimes and run robustness checks.
+- Deploy small, monitor drift, and update conservatively.
+
+### A small example: ranking and rebalancing
+
+A canonical cross-sectional strategy ranks stocks each rebalance date and holds the top segment.
+
+- Compute a score for each stock (for example, a momentum or value score).
+- Rank stocks by score.
+- Allocate weights subject to constraints (for example, max weight per name).
+- Rebalance at a fixed frequency.
+
+This can be written as a deterministic pipeline:
+
+```
+Data -> Scores -> Ranks -> Weights -> Trades -> Costs -> Metrics
+```
+
+### Common pitfalls
+
+- Look-ahead bias: using information that was not available at the decision time.
+- Overfitting: tuning until noise looks like signal.
+- Ignoring costs: a paper strategy can vanish after fees and slippage.
+- Capacity and liquidity: a strategy can work at small size and fail when scaled.
+- Model risk: relationships change; monitoring and governance are part of the strategy.
+
+### Checklist
+
+- Is the objective explicit and measurable?
+- Are constraints stated (position limits, turnover, liquidity filters)?
+- Are transaction costs modeled plausibly?
+- Is there an out-of-sample evaluation and regime analysis?
+- Is the strategy implementable for the intended capital size?
+
+### Next steps
+
+- Read OHLCV data and basic return definitions.
+- Learn backtesting basics and bias control.
+- Then progress to risk management and portfolio construction.

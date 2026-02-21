@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { formatDate, cn } from "@/lib/utils";
 
-interface DrawdownChartProps {
+export interface DrawdownChartProps {
   equityCurve: { date: Date; equity: number }[];
   height?: number;
   className?: string;

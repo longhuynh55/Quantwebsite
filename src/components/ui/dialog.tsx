@@ -25,7 +25,7 @@ interface DialogProps {
   children: React.ReactNode;
 }
 
-export function Dialog({ open = false, onOpenChange, children }: DialogProps) {
+const Dialog = React.memo(function Dialog({ open = false, onOpenChange, children }: DialogProps) {
   const [internalOpen, setInternalOpen] = React.useState(open);
   const isControlled = onOpenChange !== undefined;
   const isOpen = isControlled ? open : internalOpen;
@@ -58,7 +58,8 @@ export function Dialog({ open = false, onOpenChange, children }: DialogProps) {
       {children}
     </DialogContext.Provider>
   );
-}
+});
+Dialog.displayName = "Dialog";
 
 interface DialogTriggerProps {
   children: React.ReactNode;
@@ -66,7 +67,7 @@ interface DialogTriggerProps {
   className?: string;
 }
 
-export function DialogTrigger({ children, asChild, className }: DialogTriggerProps) {
+const DialogTrigger = React.memo(function DialogTrigger({ children, asChild, className }: DialogTriggerProps) {
   const { onOpenChange } = useDialog();
 
   if (asChild && React.isValidElement(children)) {
@@ -85,13 +86,14 @@ export function DialogTrigger({ children, asChild, className }: DialogTriggerPro
       {children}
     </button>
   );
-}
+});
+DialogTrigger.displayName = "DialogTrigger";
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
-export function DialogContent({ children, className, ...props }: DialogContentProps) {
+const DialogContent = React.memo(function DialogContent({ children, className, ...props }: DialogContentProps) {
   const { open, onOpenChange } = useDialog();
   const contentRef = React.useRef<HTMLDivElement>(null);
   const previousActiveElement = React.useRef<HTMLElement | null>(null);
@@ -102,10 +104,10 @@ export function DialogContent({ children, className, ...props }: DialogContentPr
       // Store the previously focused element
       previousActiveElement.current = document.activeElement as HTMLElement;
 
-      // Focus the dialog content
-      const timer = setTimeout(() => {
+      // Use requestAnimationFrame for more reliable focus timing
+      const rafId = requestAnimationFrame(() => {
         contentRef.current?.focus();
-      }, 0);
+      });
 
       // Handle Tab key for focus trap
       const handleTab = (e: KeyboardEvent) => {
@@ -133,7 +135,7 @@ export function DialogContent({ children, className, ...props }: DialogContentPr
       document.addEventListener("keydown", handleTab);
 
       return () => {
-        clearTimeout(timer);
+        cancelAnimationFrame(rafId);
         document.removeEventListener("keydown", handleTab);
       };
     } else {
@@ -170,15 +172,17 @@ export function DialogContent({ children, className, ...props }: DialogContentPr
       </div>
     </div>
   );
-}
+});
+DialogContent.displayName = "DialogContent";
 
-export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+const DialogHeader = React.memo(function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div className={cn("mb-4", className)} {...props} />
   );
-}
+});
+DialogHeader.displayName = "DialogHeader";
 
-export function DialogTitle({ className, id, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { id?: string }) {
+const DialogTitle = React.memo(function DialogTitle({ className, id, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { id?: string }) {
   return (
     <h2
       id={id}
@@ -186,25 +190,28 @@ export function DialogTitle({ className, id, ...props }: React.HTMLAttributes<HT
       {...props}
     />
   );
-}
+});
+DialogTitle.displayName = "DialogTitle";
 
-export function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+const DialogDescription = React.memo(function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
       className={cn("text-sm text-gray-500 dark:text-gray-400 mt-1", className)}
       {...props}
     />
   );
-}
+});
+DialogDescription.displayName = "DialogDescription";
 
-export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+const DialogFooter = React.memo(function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn("flex justify-end gap-3 mt-6", className)}
       {...props}
     />
   );
-}
+});
+DialogFooter.displayName = "DialogFooter";
 
 // Confirmation Dialog Component
 interface ConfirmDialogProps {
@@ -219,7 +226,7 @@ interface ConfirmDialogProps {
   loading?: boolean;
 }
 
-export function ConfirmDialog({
+const ConfirmDialog = React.memo(function ConfirmDialog({
   open,
   onOpenChange,
   title,
@@ -265,4 +272,16 @@ export function ConfirmDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
+ConfirmDialog.displayName = "ConfirmDialog";
+
+export {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  ConfirmDialog,
+};

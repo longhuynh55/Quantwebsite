@@ -1,17 +1,26 @@
 "use client";
 
+import * as React from 'react';
 import { useEffect, useRef, useCallback, useState, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X, Trash2, Bot, AlertCircle, ShieldCheck, Database, ScrollText, PanelTop, Table2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAssistantStore } from '@/lib/stores/assistantStore';
 import { MemoizedChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
-import { QuickActions } from './QuickActions';
+import { QuickActions, type QuickActionInvocationMeta } from './QuickActions';
 import { TypingIndicator } from './TypingIndicator';
+import { ComposerWorkflow } from './ComposerWorkflow';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { AssistantContextSnapshot, AssistantResponse, AssistantPreferences } from '@/types/assistant';
+import type {
+  AssistantContextSnapshot,
+  AssistantResponse,
+  AssistantResponseMeta,
+  AssistantPreferences,
+} from '@/types/assistant';
+import { uiFeatureFlags } from "@/lib/featureFlags";
 import { logUiEvent } from '@/lib/frontendTelemetry';
+import { trackUiKpiEvent } from "@/lib/uiKpi";
 
 type AssistantUiError = {
   message: string;
@@ -20,7 +29,7 @@ type AssistantUiError = {
   recoveryHint: string;
 };
 
-export function AiAssistantPanel() {
+const AiAssistantPanel = React.memo(function AiAssistantPanel() {
   const router = useRouter();
   const {
     isOpen,
@@ -33,6 +42,9 @@ export function AiAssistantPanel() {
     experienceLevel,
     uiMode,
     setUIMode,
+    conversationScope,
+    setConversationScope,
+    clearConversationScope,
   } = useAssistantStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -42,6 +54,8 @@ export function AiAssistantPanel() {
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<AssistantUiError | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
   const pathname = usePathname();
   const renderedMessages = useMemo(() => messages.slice(-30), [messages]);
 
@@ -67,6 +81,8 @@ export function AiAssistantPanel() {
   useEffect(() => {
     if (!isOpen) {
       setConfirmClear(false);
+      setShowQuickActions(false);
+      setShowComposer(false);
       if (lastFocusedElementRef.current) {
         lastFocusedElementRef.current.focus();
       }
@@ -88,6 +104,10 @@ export function AiAssistantPanel() {
 
     return () => window.clearTimeout(focusTimer);
   }, [isOpen]);
+
+  useEffect(() => {
+    clearConversationScope();
+  }, [pathname, clearConversationScope]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -132,21 +152,19 @@ export function AiAssistantPanel() {
                         ? 'learn'
                         : 'home';
 
-    const filters: Record<string, string> = {};
+    const filters: Record<string, unknown> = {};
     currentSearchParams.forEach((value, key) => {
       filters[key] = value;
     });
 
-    const symbol = (currentSearchParams.get('symbol') || '').trim().toUpperCase() || undefined;
-    const symbolsParam = currentSearchParams.get('symbols') || '';
-    const symbols = symbolsParam
-      .split(',')
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean)
-      .slice(0, 20);
+    const symbol = normalizeContextSymbol(currentSearchParams.get('symbol')) || undefined;
+    const querySymbols = parseSymbolList(currentSearchParams.get('symbols'), 20);
+    const watchlistSymbols = parseSymbolList(currentSearchParams.get('watchlist'), 20);
+    const symbols = mergeUniqueSymbols([querySymbols, watchlistSymbols], 20);
 
     const timeframe =
       currentSearchParams.get('timeframe') ||
+      currentSearchParams.get('timeRange') ||
       currentSearchParams.get('range') ||
       currentSearchParams.get('period') ||
       undefined;
@@ -157,16 +175,106 @@ export function AiAssistantPanel() {
       .filter(Boolean)
       .slice(0, 20);
 
+    const scopeFilters = toContextFilterRecord(conversationScope?.filters);
+    const mergedFilters: Record<string, unknown> = {
+      ...scopeFilters,
+      ...filters,
+    };
+    if (page === "charts" && watchlistSymbols.length > 0) {
+      mergedFilters.watchlist = watchlistSymbols.join(",");
+      mergedFilters.symbols = watchlistSymbols;
+      mergedFilters.watchlistCount = watchlistSymbols.length;
+      mergedFilters.watchlistQuerySource = true;
+      mergedFilters.contextSource = "watchlist_query";
+    }
+
+    const scopedSymbols = Array.isArray(conversationScope?.symbols)
+      ? mergeUniqueSymbols([conversationScope.symbols], 20)
+      : [];
+    const finalSymbols =
+      symbols.length > 0
+        ? symbols
+        : scopedSymbols.length > 0
+          ? scopedSymbols
+          : undefined;
+    const finalSymbol =
+      symbol
+      || normalizeContextSymbol(conversationScope?.symbol)
+      || (finalSymbols && finalSymbols.length > 0 ? finalSymbols[0] : undefined);
+    const finalTimeframe = normalizeContextText(timeframe || conversationScope?.timeframe, 32) || undefined;
+    if (finalSymbol) {
+      mergedFilters.symbol = finalSymbol;
+    }
+    if (finalSymbols && finalSymbols.length > 0) {
+      mergedFilters.symbols = finalSymbols;
+      if (page === "charts") {
+        mergedFilters.watchlist = finalSymbols.join(",");
+        mergedFilters.watchlistCount = finalSymbols.length;
+      }
+    }
+    if (finalTimeframe) {
+      mergedFilters.timeRange = finalTimeframe;
+    }
+
+    const hasMergedFilters = Object.keys(mergedFilters).length > 0;
+    const finalFilters = hasMergedFilters ? mergedFilters : undefined;
+    const navGroup =
+      page === "home"
+        ? "home"
+        : page === "learn"
+          ? "learn"
+          : page === "screener" || page === "charts"
+            ? "analysis"
+            : page === "backtesting" || page === "portfolio"
+            ? "strategies"
+            : "advanced";
+
+    const exportFilters = Object.fromEntries(
+      Object.entries(mergedFilters).filter(([, value]) =>
+        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      )
+    ) as Record<string, string | number | boolean>;
+    if (page === "charts") {
+      if (finalSymbol) {
+        exportFilters.symbol = finalSymbol;
+      }
+      if (finalTimeframe) {
+        exportFilters.timeRange = finalTimeframe;
+      }
+      if (finalSymbols && finalSymbols.length > 0) {
+        exportFilters.watchlist = finalSymbols.join(",");
+      }
+    }
+
+    const exportContext = {
+      reportType:
+        page === "backtesting"
+          ? "backtesting"
+          : page === "portfolio"
+            ? "portfolio"
+            : page === "risk"
+              ? "risk"
+              : page === "screener"
+                ? "screener"
+                : page === "charts"
+                  ? "charts"
+                : undefined,
+      filters: Object.keys(exportFilters).length > 0 ? exportFilters : undefined,
+      timeframe: finalTimeframe,
+    };
+
     return {
       page,
       uiMode,
-      symbol,
-      symbols: symbols.length > 0 ? symbols : undefined,
-      timeframe,
+      symbol: finalSymbol,
+      symbols: finalSymbols,
+      timeframe: finalTimeframe,
       selectedIndicators: indicators.length > 0 ? indicators : undefined,
-      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      filters: finalFilters,
+      navGroup,
+      exportContext,
     };
-  }, [pathname, uiMode]);
+  }, [conversationScope, pathname, uiMode]);
 
   const buildPreferences = useCallback((): AssistantPreferences => {
     const detailLevel =
@@ -181,7 +289,25 @@ export function AiAssistantPanel() {
     };
   }, [experienceLevel]);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const updateConversationScopeFromMeta = useCallback(
+    (meta?: AssistantResponseMeta) => {
+      if (!meta) return;
+      const filters = meta.queryPlanFilters ?? undefined;
+      const symbols =
+        Array.isArray(meta.queryPlanSymbols) && meta.queryPlanSymbols.length > 0
+          ? meta.queryPlanSymbols
+          : undefined;
+      if (!filters && !symbols) return;
+      setConversationScope({
+        filters,
+        symbols,
+        symbol: symbols?.[0] ?? undefined,
+      });
+    },
+    [setConversationScope]
+  );
+
+  const sendMessage = useCallback(async (content: string, quickActionMeta?: QuickActionInvocationMeta) => {
     const trimmedContent = content.trim();
     if (!trimmedContent) return;
 
@@ -191,17 +317,36 @@ export function AiAssistantPanel() {
         ? crypto.randomUUID()
         : `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const startedAt = Date.now();
-    const contextSnapshot = buildContextSnapshot();
+    const contextSnapshot = mergeQuickActionContextSnapshot(buildContextSnapshot(), quickActionMeta);
     const storeMessages = useAssistantStore.getState().messages;
     const conversationHistory = storeMessages.slice(-10).map((message) => ({
       role: message.role,
       content: message.content,
     }));
+
+    if (quickActionMeta?.source === "contextual" && uiFeatureFlags.assistantContextualActions) {
+      trackUiKpiEvent({
+        metric: "assistant_contextual_action_ctr",
+        event: "assistant_contextual_action_clicked",
+        page: contextSnapshot.page,
+        source: quickActionMeta.actionId,
+        symbol: contextSnapshot.symbol,
+        count: 1,
+        detail: {
+          fromWatchlistQuery: quickActionMeta.fromWatchlistQuery === true,
+          timeframe: quickActionMeta.timeframe ?? contextSnapshot.timeframe ?? null,
+        },
+      });
+    }
+
     logUiEvent('info', 'assistant.request.started', {
       requestId,
       page: contextSnapshot.page,
       messageChars: trimmedContent.length,
       uiMode,
+      quickActionId: quickActionMeta?.actionId ?? null,
+      quickActionSource: quickActionMeta?.source ?? null,
+      quickActionFromWatchlistQuery: quickActionMeta?.fromWatchlistQuery ?? null,
     });
 
     // Add user message
@@ -260,6 +405,7 @@ export function AiAssistantPanel() {
         messageBlocks: data.messageBlocks,
         meta: data.meta,
       });
+      updateConversationScopeFromMeta(data.meta);
       logUiEvent('info', 'assistant.request.completed', {
         requestId,
         status: response.status,
@@ -284,7 +430,14 @@ export function AiAssistantPanel() {
       inFlightRequestsRef.current = Math.max(0, inFlightRequestsRef.current - 1);
       setLoading(inFlightRequestsRef.current > 0);
     }
-  }, [addMessage, setLoading, buildContextSnapshot, buildPreferences, uiMode]);
+  }, [
+    addMessage,
+    setLoading,
+    buildContextSnapshot,
+    buildPreferences,
+    uiMode,
+    updateConversationScopeFromMeta,
+  ]);
 
   const switchToCopilotMode = () => {
     setUIMode('copilot');
@@ -352,6 +505,8 @@ export function AiAssistantPanel() {
   }, [isOpen, closePanel]);
 
   if (!isOpen) return null;
+
+  const shouldShowQuickActions = messages.length === 0 || showQuickActions;
 
   return (
     <>
@@ -498,8 +653,57 @@ export function AiAssistantPanel() {
             </div>
           )}
 
+          {messages.length > 0 && !showQuickActions && (
+            <div className="px-4 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowQuickActions(true)}
+                className="w-full"
+              >
+                Need ideas? Show quick actions
+              </Button>
+            </div>
+          )}
+
+          {!showComposer && (
+            <div className="px-4 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowComposer(true)}
+                className="w-full"
+              >
+                Open Composer (Agent Tool Calling)
+              </Button>
+            </div>
+          )}
+
+          {showComposer && (
+            <div className="px-4 pt-3">
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setShowComposer(false)}>
+                  Hide Composer
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {showComposer && <ComposerWorkflow contextSnapshot={buildContextSnapshot()} disabled={isLoading} />}
+
           {/* Quick Actions */}
-          {messages.length === 0 && <QuickActions onAction={sendMessage} disabled={isLoading} />}
+          {shouldShowQuickActions && (
+            <div className="px-4 pt-3 space-y-2">
+              {messages.length > 0 && showQuickActions && (
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => setShowQuickActions(false)}>
+                    Hide quick actions
+                  </Button>
+                </div>
+              )}
+              <QuickActions onAction={sendMessage} disabled={isLoading} context={buildContextSnapshot()} />
+            </div>
+          )}
 
           {/* Messages */}
           {renderedMessages.map((message) => (
@@ -548,6 +752,128 @@ export function AiAssistantPanel() {
       </div>
     </>
   );
+});
+
+AiAssistantPanel.displayName = "AiAssistantPanel";
+
+function normalizeContextText(value: unknown, maxLength: number): string {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLength);
+}
+
+function normalizeContextSymbol(value: unknown): string {
+  const normalized = normalizeContextText(value, 10).toUpperCase();
+  if (!normalized) return "";
+  if (!/^[A-Z0-9]{1,10}$/.test(normalized)) return "";
+  return normalized;
+}
+
+function parseSymbolList(raw: string | null | undefined, limit: number): string[] {
+  if (typeof raw !== "string") return [];
+  const candidates = raw
+    .split(/[,\s;|]+/)
+    .map((item) => normalizeContextSymbol(item))
+    .filter(Boolean);
+  return mergeUniqueSymbols([candidates], limit);
+}
+
+function mergeUniqueSymbols(lists: string[][], limit: number): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const value of list) {
+      const normalized = normalizeContextSymbol(value);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(normalized);
+      if (merged.length >= limit) return merged;
+    }
+  }
+  return merged;
+}
+
+function toContextFilterRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  return { ...(value as Record<string, unknown>) };
+}
+
+function mergeQuickActionContextSnapshot(
+  base: AssistantContextSnapshot,
+  quickActionMeta?: QuickActionInvocationMeta
+): AssistantContextSnapshot {
+  if (!quickActionMeta) return base;
+
+  const actionSymbol = normalizeContextSymbol(quickActionMeta.symbol) || undefined;
+  const actionSymbols = Array.isArray(quickActionMeta.symbols)
+    ? mergeUniqueSymbols([quickActionMeta.symbols], 20)
+    : [];
+  const actionTimeframe = normalizeContextText(quickActionMeta.timeframe, 32) || undefined;
+
+  const mergedFilters = toContextFilterRecord(base.filters);
+  mergedFilters.quickActionId = quickActionMeta.actionId;
+  mergedFilters.quickActionSource = quickActionMeta.source;
+  if (quickActionMeta.fromWatchlistQuery === true) {
+    mergedFilters.watchlistQuerySource = true;
+  }
+  if (typeof quickActionMeta.watchlistCount === "number" && Number.isFinite(quickActionMeta.watchlistCount)) {
+    mergedFilters.watchlistCount = Math.max(1, Math.trunc(quickActionMeta.watchlistCount));
+  }
+  if (actionSymbol) {
+    mergedFilters.symbol = actionSymbol;
+  }
+  if (actionSymbols.length > 0) {
+    mergedFilters.symbols = actionSymbols;
+    mergedFilters.watchlist = actionSymbols.join(",");
+    mergedFilters.watchlistCount = actionSymbols.length;
+  }
+  if (actionTimeframe) {
+    mergedFilters.timeRange = actionTimeframe;
+  }
+
+  const finalSymbols = actionSymbols.length > 0 ? actionSymbols : base.symbols;
+  const finalSymbol = actionSymbol || base.symbol || (finalSymbols && finalSymbols.length > 0 ? finalSymbols[0] : undefined);
+  const finalTimeframe = actionTimeframe || base.timeframe;
+
+  const exportFilters: Record<string, string | number | boolean> = {
+    ...(base.exportContext?.filters ?? {}),
+    quickActionId: quickActionMeta.actionId,
+    quickActionSource: quickActionMeta.source,
+  };
+  if (quickActionMeta.fromWatchlistQuery === true) {
+    exportFilters.watchlistQuerySource = true;
+  }
+  if (actionSymbol) {
+    exportFilters.symbol = actionSymbol;
+  }
+  if (actionSymbols.length > 0) {
+    exportFilters.watchlist = actionSymbols.join(",");
+    exportFilters.watchlistCount = actionSymbols.length;
+  }
+  if (actionTimeframe) {
+    exportFilters.timeRange = actionTimeframe;
+  }
+
+  const exportReportType = quickActionMeta.exportReportType || base.exportContext?.reportType;
+  const exportTimeframe = finalTimeframe || base.exportContext?.timeframe;
+  const hasExportFilters = Object.keys(exportFilters).length > 0;
+  const nextExportContext =
+    exportReportType || exportTimeframe || hasExportFilters
+      ? {
+          reportType: exportReportType,
+          timeframe: exportTimeframe,
+          filters: hasExportFilters ? exportFilters : undefined,
+        }
+      : undefined;
+
+  return {
+    ...base,
+    symbol: finalSymbol,
+    symbols: finalSymbols,
+    timeframe: finalTimeframe,
+    navGroup: quickActionMeta.navGroup || base.navGroup,
+    filters: Object.keys(mergedFilters).length > 0 ? mergedFilters : undefined,
+    exportContext: nextExportContext,
+  };
 }
 
 function buildRecoveryHint(
@@ -568,3 +894,5 @@ function buildRecoveryHint(
   }
   return "Retry with a more specific prompt (symbol, metric, timeframe) to improve execution reliability.";
 }
+
+export { AiAssistantPanel };

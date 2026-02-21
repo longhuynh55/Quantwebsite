@@ -1,0 +1,45 @@
+## Overview
+
+A market index is a benchmark: it represents the performance of a defined basket of securities under a specified construction rule. Benchmarks matter because they define what "outperformance" means and help you separate market exposure (beta) from strategy-specific value add (alpha).
+
+### Learning objectives
+
+- Understand index constituents, weighting, and rebalancing.
+- Learn why concentration and sector composition affect interpretation.
+- Measure relative performance in a disciplined way.
+
+### How indices are constructed
+
+An index is defined by rules:
+
+- Universe and eligibility criteria.
+- Constituent selection (the names included).
+- Weighting method (market-cap weighted, equal-weighted, or rule-based).
+- Rebalancing schedule and corporate action adjustments.
+
+### Concentration risk
+
+Many benchmarks are dominated by a small number of large-cap names. This can make index moves appear broad-based even when most constituents are flat, or vice versa.
+
+A simple concentration check is to compute the cumulative weight of the top N constituents and monitor how it changes.
+
+### Measuring performance relative to a benchmark
+
+The basic quantity is excess return:
+
+```
+Excess Return = Strategy Return - Benchmark Return
+```
+
+However, excess return can be unstable and regime-dependent. In practice, you also monitor tracking error (the variability of the strategy minus benchmark) and exposure to sectors and factors.
+
+### Vietnam market context
+
+In Vietnamese equities, liquidity and large-cap concentration can meaningfully affect benchmark behavior and implementation costs. Always interpret relative performance in the context of liquidity constraints and investability.
+
+### Checklist
+
+- Do you understand the benchmark construction rules?
+- Is the benchmark investable for your strategy size?
+- Are sector and large-cap exposures driving relative performance?
+- Is excess return robust across market regimes?

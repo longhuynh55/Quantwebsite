@@ -46,6 +46,12 @@ const suites = {
     reportPathEnv: "ASSISTANT_PERF_REL_REPORT_PATH",
     defaultRoundReportPath: "artifacts/assistant-perf-reliability-report.json",
   },
+  "postcheck-anomaly": {
+    id: "postcheck-anomaly",
+    scriptPath: "scripts/eval-assistant-postcheck-anomaly-v1.mjs",
+    reportPathEnv: "ASSISTANT_EVAL_REPORT_PATH",
+    defaultRoundReportPath: "artifacts/assistant-postcheck-anomaly-v1-report.json",
+  },
   full: {
     id: "full",
     scriptPath: "scripts/eval-assistant-comprehensive.mjs",
