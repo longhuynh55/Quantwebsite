@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type {
   AssistantCitation,
   AssistantContextSnapshot,
+  AssistantExportContext,
   AssistantMessageBlock,
   AssistantPreferences,
   AssistantRequest,
@@ -11,9 +12,9 @@ import type {
 import { SYSTEM_PROMPT } from '@/types/assistant';
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/providers';
-import { runGroundingTools } from '@/lib/assistant/tools';
+import { runGroundingTools, type GroundingResult } from '@/lib/assistant/tools';
 import { evaluateAssistantPolicy } from '@/lib/assistant/policy';
-import { buildAssistantQueryPlan } from '@/lib/assistant/planner';
+import { buildAssistantQueryPlan, type AssistantQueryPlan } from '@/lib/assistant/planner';
 import { createLogger, hashText, toErrorMeta } from '@/lib/logger';
 
 const MAX_TEXT_LENGTH = 4_000;
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
       requestId: '',
       groundingMode: toolBaseResolution.baseUrl ? ('enabled' as const) : ('disabled' as const),
       toolBaseUrlSource: toolBaseResolution.source,
+      featureFlags: resolveAssistantFeatureFlags(),
     };
 
     let body: Partial<AssistantRequest>;
@@ -120,8 +122,10 @@ export async function POST(request: NextRequest) {
     }
     const message = normalizeText(body.message, MAX_TEXT_LENGTH);
     const conversationHistory = sanitizeConversationHistory(body.conversationHistory);
+    const plannerConversationContext = buildPlannerConversationContext(conversationHistory);
     const contextSnapshot = sanitizeContextSnapshot(body.contextSnapshot ?? legacyContextToSnapshot(body.context));
     const preferences = sanitizePreferences(body.preferences);
+    const executionMode = sanitizeExecutionMode(body.executionMode);
     const requestedRequestId = normalizeText(body.requestId, 80);
     if (requestedRequestId && requestedRequestId !== requestId) {
       requestId = requestedRequestId;
@@ -137,10 +141,12 @@ export async function POST(request: NextRequest) {
       historyItems: conversationHistory.length,
       detailLevel: preferences.detailLevel,
       language: preferences.language,
+      executionMode,
     });
     const queryPlan = buildAssistantQueryPlan({
       message,
       contextSnapshot,
+      conversationHistory: plannerConversationContext,
       baselineOnlyMode: BASELINE_ONLY_MODE,
     });
     logger.debug('query_plan.generated', {
@@ -149,6 +155,10 @@ export async function POST(request: NextRequest) {
       plannedToolCount: queryPlan.steps.length,
       plannedTools: queryPlan.steps.map((step) => step.tool),
     });
+    const planContextMeta = {
+      queryPlanFilters: queryPlan.filters as Record<string, string | number | undefined>,
+      queryPlanSymbols: queryPlan.symbols.length > 0 ? queryPlan.symbols : undefined,
+    };
 
     if (!message) {
       logger.warn('request.validation_failed', {
@@ -176,7 +186,7 @@ export async function POST(request: NextRequest) {
     const toolStatusSummary = grounding.usedTools
       .map((tool) => `${tool.name}:${tool.status}`)
       .join(', ');
-    const nonHoseScopeGuard = detectNonHoseScopeGuard(grounding.usedTools);
+    const nonHoseScopeGuard = detectNonHoseScopeGuard(grounding.usedTools, message, contextSnapshot);
     if (nonHoseScopeGuard) {
       const scopeGuardMessage = buildNonHoseScopeGuardMessage(nonHoseScopeGuard.requestedExchange);
       logger.info("response.scope_guard_bypass", {
@@ -197,34 +207,39 @@ export async function POST(request: NextRequest) {
         citations: responseCitations,
         usedTools: grounding.usedTools,
         messageBlocks: grounding.messageBlocks,
-        meta: {
-          providerUsed: "policy",
-          fallbackUsed: false,
-          latencyMs: 0,
-          ...metaBase,
-          policyMode: "shadow",
-          groundingRequired: true,
-          groundingSatisfied: true,
-          policyReasonCode: "non_hose_scope_guard",
-          groundedFactsCount: grounding.facts.length,
-          citationCount: responseCitations.length,
-          toolStatusSummary,
-          queryIntent: queryPlan.intent,
-          queryPlanSummary: queryPlan.summary,
-          plannedToolCount: queryPlan.steps.length,
-          plannedTools: queryPlan.steps.map((step) => step.tool),
-        },
+      meta: {
+        providerUsed: "policy",
+        fallbackUsed: false,
+        latencyMs: 0,
+        ...metaBase,
+        ...planContextMeta,
+        policyMode: "shadow",
+        groundingRequired: true,
+        groundingSatisfied: true,
+        policyReasonCode: "non_hose_scope_guard",
+        groundedFactsCount: grounding.facts.length,
+        citationCount: responseCitations.length,
+        toolStatusSummary,
+        queryIntent: queryPlan.intent,
+        queryPlanSummary: queryPlan.summary,
+        plannedToolCount: queryPlan.steps.length,
+        plannedTools: queryPlan.steps.map((step) => step.tool),
+      },
       });
     }
 
     const policy = evaluateAssistantPolicy({
       message,
       contextSnapshot,
+      conversationHistory: plannerConversationContext,
+      queryPlan,
       grounding,
     });
     const policyMeta = {
       ...metaBase,
+      ...planContextMeta,
       policyMode: policy.mode,
+      orchestrationMode: executionMode,
       groundingRequired: policy.groundingRequired,
       groundingSatisfied: policy.groundingSatisfied,
       policyReasonCode: policy.reasonCode,
@@ -274,10 +289,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const deterministicBacktestMessage = buildDeterministicBacktestResponse(message, queryPlan, grounding);
+    if (deterministicBacktestMessage) {
+      logger.info("response.deterministic_backtest", {
+        policyStatus: policy.status,
+        groundedFactsCount: grounding.facts.length,
+        citationCount: responseCitations.length,
+        responseChars: deterministicBacktestMessage.length,
+        responseDigest: hashText(deterministicBacktestMessage),
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json<AssistantResponse>({
+        message: deterministicBacktestMessage,
+        success: true,
+        grounded: responseCitations.length > 0,
+        policyStatus: policy.status,
+        policyReason: policy.reason,
+        dataConfidence: "high",
+        citations: responseCitations,
+        usedTools: grounding.usedTools,
+        messageBlocks: grounding.messageBlocks,
+        meta: {
+          providerUsed: "grounded-deterministic",
+          fallbackUsed: false,
+          latencyMs: 0,
+          ...policyMeta,
+        },
+      });
+    }
+
     const llmMessages: LlmMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'system', content: buildStylePrompt(preferences) },
     ];
+    if (executionMode === "agent") {
+      llmMessages.push({
+        role: "system",
+        content:
+          "Execution mode is agent-prep. Prefer deterministic, tool-grounded reasoning and mention missing tool evidence explicitly.",
+      });
+    }
 
     const contextMessage = buildContextMessage(contextSnapshot);
     if (contextMessage) {
@@ -441,6 +492,15 @@ function sanitizeConversationHistory(raw: unknown): ConversationHistoryItem[] {
   return items;
 }
 
+function buildPlannerConversationContext(history: ConversationHistoryItem[]): string {
+  return history
+    .filter((item) => item.role === "user")
+    .map((item) => item.content.trim())
+    .filter(Boolean)
+    .slice(-6)
+    .join("\n");
+}
+
 function sanitizeContextSnapshot(raw: unknown): AssistantContextSnapshot | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
 
@@ -468,6 +528,35 @@ function sanitizeContextSnapshot(raw: unknown): AssistantContextSnapshot | undef
 
   const filters = isRecord(source.filters) ? source.filters : undefined;
   const lastApiPayload = isRecord(source.lastApiPayload) ? source.lastApiPayload : undefined;
+  const navGroupRaw = typeof source.navGroup === "string" ? source.navGroup : "";
+  const navGroup = isAllowedNavGroup(navGroupRaw) ? navGroupRaw : undefined;
+  const exportContextSource = isRecord(source.exportContext) ? source.exportContext : undefined;
+
+  const exportContextFilters: AssistantExportContext["filters"] | undefined = exportContextSource &&
+    isRecord(exportContextSource.filters)
+      ? (Object.fromEntries(
+          Object.entries(exportContextSource.filters)
+            .filter(
+              ([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+            )
+            .slice(0, 30)
+        ) as AssistantExportContext["filters"])
+      : undefined;
+
+  const exportContextReportType = exportContextSource
+    ? normalizeSystemInline(exportContextSource.reportType, 32)
+    : '';
+  const exportContextTimeframe = exportContextSource
+    ? normalizeSystemInline(exportContextSource.timeframe, 32)
+    : '';
+
+  const exportContext: AssistantExportContext | undefined = exportContextSource
+    ? {
+        ...(exportContextReportType ? { reportType: exportContextReportType } : {}),
+        ...(exportContextTimeframe ? { timeframe: exportContextTimeframe } : {}),
+        ...(exportContextFilters ? { filters: exportContextFilters } : {}),
+      }
+    : undefined;
 
   return {
     page,
@@ -477,6 +566,8 @@ function sanitizeContextSnapshot(raw: unknown): AssistantContextSnapshot | undef
     selectedIndicators,
     filters,
     lastApiPayload,
+    navGroup,
+    exportContext,
   };
 }
 
@@ -494,6 +585,11 @@ function sanitizePreferences(raw: unknown): AssistantPreferences {
   }
 
   return { language, detailLevel };
+}
+
+function sanitizeExecutionMode(raw: unknown): "chat" | "agent" {
+  if (raw === "agent") return "agent";
+  return "chat";
 }
 
 function buildStylePrompt(preferences: AssistantPreferences): string {
@@ -599,7 +695,9 @@ function buildGroundedFallbackMessage(facts: string[], usedTools: AssistantToolU
 }
 
 function detectNonHoseScopeGuard(
-  usedTools: AssistantToolUsage[]
+  usedTools: AssistantToolUsage[],
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
 ): { requestedExchange: string; tool: AssistantToolUsage["name"] } | null {
   for (const tool of usedTools) {
     if (tool.status !== "success") continue;
@@ -609,6 +707,10 @@ function detectNonHoseScopeGuard(
       .toUpperCase();
     if (!requestedExchange || requestedExchange === "HOSE") continue;
     return { requestedExchange, tool: tool.name };
+  }
+  const hintedExchange = detectRequestedExchangeHint(message, contextSnapshot);
+  if (hintedExchange && hintedExchange !== "HOSE") {
+    return { requestedExchange: hintedExchange, tool: "stockSnapshot" };
   }
   return null;
 }
@@ -621,15 +723,40 @@ function buildNonHoseScopeGuardMessage(requestedExchange: string): string {
   ].join("\n");
 }
 
+function detectRequestedExchangeHint(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): "HOSE" | "HNX" | "UPCOM" | null {
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const exchangeFilter = normalizeKeywordToken(
+    String(filters?.exchange ?? filters?.market ?? filters?.san ?? "")
+  );
+  const combined = `${exchangeFilter} ${normalizeKeywordToken(message)}`.trim();
+  if (combined.includes("hnx") || combined.includes("ha noi")) return "HNX";
+  if (combined.includes("upcom") || combined.includes("up com")) return "UPCOM";
+  if (combined.includes("hose") || combined.includes("hsx") || combined.includes("ho chi minh")) return "HOSE";
+  return null;
+}
+
+function normalizeKeywordToken(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d");
+}
+
 function buildContextMessage(contextSnapshot?: AssistantContextSnapshot): string | null {
   if (!contextSnapshot) return null;
 
   const payload = {
     page: contextSnapshot.page,
+    navGroup: contextSnapshot.navGroup ?? null,
     symbol: contextSnapshot.symbol ?? null,
     symbols: contextSnapshot.symbols ?? null,
     timeframe: contextSnapshot.timeframe ?? null,
     selectedIndicators: contextSnapshot.selectedIndicators ?? null,
+    exportContext: contextSnapshot.exportContext ?? null,
   };
 
   return [
@@ -674,6 +801,96 @@ function buildTrendCoveragePrompt(messageBlocks: AssistantMessageBlock[] | undef
     "Do not claim that these quarters are missing.",
     "Summarize trend directly from these periods when the user asks for multi-quarter trend.",
   ].join("\n");
+}
+
+function buildDeterministicBacktestResponse(
+  message: string,
+  queryPlan: AssistantQueryPlan,
+  grounding: GroundingResult
+): string | null {
+  if (queryPlan.intent !== "backtesting") return null;
+  const normalized = normalizeKeywordToken(message);
+  const asksFourLines =
+    normalized.includes("exactly 4 lines")
+    || normalized.includes("4 lines")
+    || normalized.includes("dung 4 dong")
+    || normalized.includes("4 dong");
+  const asksMetricTemplate =
+    normalized.includes("net_return=")
+    || (
+      normalized.includes("net_return")
+      && normalized.includes("sharpe")
+      && normalized.includes("max_drawdown")
+      && normalized.includes("total_trades")
+    );
+  if (!asksFourLines && !asksMetricTemplate) return null;
+
+  const hasBacktestSuccess = grounding.usedTools.some(
+    (tool) => tool.name === "backtestSummary" && tool.status === "success"
+  );
+  if (!hasBacktestSuccess) return null;
+
+  const backtestFacts = grounding.facts.filter((fact) => /backtest snapshot/i.test(fact));
+  const requestedSymbol = Array.isArray(queryPlan.symbols) && queryPlan.symbols.length > 0
+    ? String(queryPlan.symbols[0] ?? "").trim().toUpperCase()
+    : "";
+  const symbolScopedFacts =
+    requestedSymbol.length > 0
+      ? backtestFacts.filter((fact) => fact.toUpperCase().includes(`BACKTEST SNAPSHOT ${requestedSymbol}`))
+      : [];
+  const sourceFacts =
+    symbolScopedFacts.length > 0
+      ? symbolScopedFacts
+      : backtestFacts.length > 0
+        ? backtestFacts
+        : grounding.facts;
+
+  const netReturn =
+    normalizeDeterministicBacktestMetric("net_return", extractMetricFromGroundingFacts(sourceFacts, "net_return"))
+    ?? "n/a";
+  const sharpe =
+    normalizeDeterministicBacktestMetric("sharpe", extractMetricFromGroundingFacts(sourceFacts, "sharpe"))
+    ?? "n/a";
+  const maxDrawdown =
+    normalizeDeterministicBacktestMetric("max_drawdown", extractMetricFromGroundingFacts(sourceFacts, "max_drawdown"))
+    ?? "n/a";
+  const totalTrades =
+    normalizeDeterministicBacktestMetric("total_trades", extractMetricFromGroundingFacts(sourceFacts, "total_trades"))
+    ?? "n/a";
+
+  return [
+    `net_return=${netReturn}`,
+    `sharpe=${sharpe}`,
+    `max_drawdown=${maxDrawdown}`,
+    `total_trades=${totalTrades}`,
+  ].join("\n");
+}
+
+function extractMetricFromGroundingFacts(facts: string[], key: string): string | null {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`\\b${escapedKey}\\s*=\\s*([^,\\n]+)`, "i");
+  for (const fact of facts) {
+    const match = regex.exec(fact);
+    if (!match) continue;
+    const value = normalizeSystemInline(match[1].replace(/[.;]+$/g, ""), 40);
+    if (!value) continue;
+    return value;
+  }
+  return null;
+}
+
+function normalizeDeterministicBacktestMetric(
+  key: "net_return" | "sharpe" | "max_drawdown" | "total_trades",
+  value: string | null
+): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^n\/?a$/i.test(trimmed)) return "n/a";
+  if (key === "net_return") {
+    return normalizeSystemInline(trimmed.replace(/%$/g, ""), 40);
+  }
+  return trimmed;
 }
 
 function legacyContextToSnapshot(context: AssistantRequest['context']): AssistantContextSnapshot | undefined {
@@ -737,6 +954,16 @@ function isAllowedPage(value: string): value is AssistantContextSnapshot['page']
   );
 }
 
+function isAllowedNavGroup(value: string): value is NonNullable<AssistantContextSnapshot["navGroup"]> {
+  return (
+    value === "home" ||
+    value === "analysis" ||
+    value === "strategies" ||
+    value === "advanced" ||
+    value === "learn"
+  );
+}
+
 function resolveTrustedToolBaseUrl(logger: ReturnType<typeof createLogger>): { baseUrl?: string; source: string } {
   for (const key of TRUSTED_TOOL_BASE_URL_ENV_KEYS) {
     const value = process.env[key]?.trim();
@@ -763,6 +990,28 @@ function resolveTrustedToolBaseUrl(logger: ReturnType<typeof createLogger>): { b
   return {
     source: 'none',
   };
+}
+
+function resolveAssistantFeatureFlags(): {
+  screenerPresets: boolean;
+  watchlistBridge: boolean;
+  assistantContextualActions: boolean;
+  uiKpiTelemetry: boolean;
+} {
+  return {
+    screenerPresets: parseFeatureFlag(process.env.NEXT_PUBLIC_FF_SCREENER_PRESETS, true),
+    watchlistBridge: parseFeatureFlag(process.env.NEXT_PUBLIC_FF_WATCHLIST_BRIDGE, true),
+    assistantContextualActions: parseFeatureFlag(process.env.NEXT_PUBLIC_FF_ASSISTANT_CONTEXTUAL_ACTIONS, true),
+    uiKpiTelemetry: parseFeatureFlag(process.env.NEXT_PUBLIC_FF_UI_KPI_TELEMETRY, true),
+  };
+}
+
+function parseFeatureFlag(raw: string | undefined, fallback: boolean): boolean {
+  if (!raw) return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
 }
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {
@@ -894,5 +1143,3 @@ function selectResponseCitations(citations: AssistantCitation[], limit: number):
 function citationKey(citation: AssistantCitation): string {
   return `${citation.id}|${citation.endpoint ?? ''}|${citation.symbol ?? ''}|${citation.period ?? ''}`;
 }
-
-

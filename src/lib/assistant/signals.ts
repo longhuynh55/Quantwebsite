@@ -317,6 +317,12 @@ const FABRICATION_DIRECTIVE_KEYWORDS = [
   "made up data",
   "make up data",
   "fake data",
+  "guess",
+  "do not call api",
+  "do not call apis",
+  "bypass data checks",
+  "ignore internal tools",
+  "pretend",
 ];
 const DATA_DEBUG_KEYWORDS = [
   "missing data",
@@ -376,6 +382,7 @@ const VALUATION_RANKING_KEYWORDS = [
 export function collectRequiredSignals(input: {
   message: string;
   contextSnapshot?: AssistantContextSnapshot;
+  conversationHistory?: string;
   baselineOnlyMode: boolean;
 }): RequiredSignal[] {
   const messageLower = normalizeForKeywordMatch(input.message);
@@ -397,7 +404,11 @@ export function collectRequiredSignals(input: {
     ["pe", "p/e", "pb", "p/b", "ev/ebitda", "ev_ebitda"]
   );
   const asksUniverseFilters = hasDateFilter || hasIcbFilter || hasHoseFilter;
-  const hasCandidateSymbol = hasResolvableSymbol(input.message, input.contextSnapshot);
+  const hasCandidateSymbol = hasResolvableSymbol(
+    input.message,
+    input.contextSnapshot,
+    input.conversationHistory
+  );
   const asksIcb = hasAnyKeyword(messageLower, ICB_KEYWORDS);
   const asksHoseUniverse = hasAnyKeyword(messageLower, HOSE_KEYWORDS);
   const asksRanking = hasAnyKeyword(messageLower, RANKING_KEYWORDS);
@@ -541,8 +552,12 @@ export function collectRequiredSignals(input: {
   return signals;
 }
 
-export function hasResolvableSymbol(message: string, contextSnapshot: AssistantContextSnapshot | undefined): boolean {
-  return getCandidateSymbols(message, contextSnapshot).length > 0;
+export function hasResolvableSymbol(
+  message: string,
+  contextSnapshot: AssistantContextSnapshot | undefined,
+  conversationHistory?: string
+): boolean {
+  return getCandidateSymbols(message, contextSnapshot, conversationHistory).length > 0;
 }
 
 export function isFabricationDirective(message: string): boolean {
@@ -652,12 +667,18 @@ export function isStockUniverseRankingIntent(
   );
 }
 
-export function getCandidateSymbols(message: string, contextSnapshot?: AssistantContextSnapshot): string[] {
+export function getCandidateSymbols(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot,
+  conversationHistory?: string
+): string[] {
   const contextSymbols: string[] = [];
+  const contextSymbolSet = new Set<string>();
   const pushContextSymbol = (candidate: unknown) => {
     const normalized = normalizeSymbol(candidate);
     if (!normalized) return;
     contextSymbols.push(normalized);
+    contextSymbolSet.add(normalized);
   };
   if (contextSnapshot?.symbol) {
     pushContextSymbol(contextSnapshot.symbol);
@@ -692,11 +713,17 @@ export function getCandidateSymbols(message: string, contextSnapshot?: Assistant
 
   const explicitMessageSymbols = extractExplicitSymbolHints(message);
   const compareMessageSymbols = extractCompareSymbolHints(message);
+  const historyText = typeof conversationHistory === "string" ? conversationHistory : "";
+  const explicitHistorySymbols = historyText ? extractExplicitSymbolHints(historyText) : [];
+  const compareHistorySymbols = historyText ? extractCompareSymbolHints(historyText) : [];
+  const historyUppercaseTokens = historyText ? extractUppercaseSymbolTokens(historyText) : [];
   if (
     looksLikeUniverseStockRanking(message, contextSnapshot)
     && contextSymbols.length === 0
     && explicitMessageSymbols.length === 0
     && compareMessageSymbols.length === 0
+    && explicitHistorySymbols.length === 0
+    && compareHistorySymbols.length === 0
   ) {
     return [];
   }
@@ -707,10 +734,17 @@ export function getCandidateSymbols(message: string, contextSnapshot?: Assistant
       ...contextSymbols,
       ...explicitMessageSymbols,
       ...compareMessageSymbols,
+      ...explicitHistorySymbols,
+      ...compareHistorySymbols,
       ...messageUppercaseTokens,
+      ...historyUppercaseTokens,
     ])
   )
-    .filter((symbol) => isLikelySymbolToken(symbol));
+    .filter((symbol) =>
+      contextSymbolSet.has(symbol)
+        ? isLikelyContextSymbolToken(symbol)
+        : isLikelySymbolToken(symbol)
+    );
 
   return unique.slice(0, 3);
 }
@@ -792,6 +826,14 @@ function looksLikeUniverseStockRanking(message: string, contextSnapshot?: Assist
 
 function isLikelySymbolToken(symbol: string): boolean {
   if (!SYMBOL_TOKEN_PATTERN.test(symbol)) return false;
+  if (BANNED_SYMBOLS.has(symbol)) return false;
+  if (COMMON_NON_SYMBOL_TOKENS.has(symbol)) return false;
+  if (COMPARE_NON_SYMBOL_TOKENS.has(symbol)) return false;
+  return true;
+}
+
+function isLikelyContextSymbolToken(symbol: string): boolean {
+  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) return false;
   if (BANNED_SYMBOLS.has(symbol)) return false;
   if (COMMON_NON_SYMBOL_TOKENS.has(symbol)) return false;
   if (COMPARE_NON_SYMBOL_TOKENS.has(symbol)) return false;
