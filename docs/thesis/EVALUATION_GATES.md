@@ -231,14 +231,21 @@ This gate is required only if the system uses learned models for predictions or 
 **How to measure.**
 - Sample multiple completions for the same prompt; measure disagreement rate on key claims.
 
-**Suggested acceptance thresholds (starter).**
+**Suggested acceptance thresholds (starter, for early iteration).**
 - `unsupportedClaimRate <= 0.15`
 - `supportedClaimPrecision >= 0.85`
 - `overallClaimAccuracy >= 0.70`
 - `abstentionAccuracy >= 0.85`
 - `groundingPassRate >= 0.70`
 
-These are thesis starter thresholds; they must be revised only via explicit experiment versioning (Bailey et al., 2016).
+**Suggested acceptance thresholds (full-profile default, aligned with `docs/ASSISTANT_EVAL_CRITERIA.md`).**
+- `unsupportedClaimRate <= 0.10`
+- `supportedClaimPrecision >= 0.85`
+- `overallClaimAccuracy >= 0.75`
+- `abstentionAccuracy >= 0.90`
+- `groundingPassRate >= 0.85`
+
+Thresholds are implemented as environment-configurable gates in `scripts/eval-assistant-comprehensive.mjs` (for example `ASSISTANT_EVAL_MAX_UNSUPPORTED_CLAIM_RATE` and related variables). Any threshold revision used for thesis reporting must be versioned explicitly to avoid post-hoc cherry-picking (Bailey et al., 2016).
 
 ## 9. Gate F: Non-Functional Requirements and Reproducibility
 

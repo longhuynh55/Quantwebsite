@@ -6,6 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
 const outputDir = process.env.PW_OUTPUT_DIR || "test-results";
+const skipWebServer = String(process.env.PW_SKIP_WEBSERVER ?? "").trim().toLowerCase() === "true";
 
 export default defineConfig({
   // Test directory
@@ -105,12 +106,16 @@ export default defineConfig({
   ],
 
   // Run local dev server before starting tests
-  webServer: {
-    command: "pnpm run dev",
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-    stdout: "ignore",
-    stderr: "pipe",
-  },
+  ...(skipWebServer
+    ? {}
+    : {
+      webServer: {
+        command: "pnpm run dev",
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+        stdout: "ignore",
+        stderr: "pipe",
+      },
+    }),
 });

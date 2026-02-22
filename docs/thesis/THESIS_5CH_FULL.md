@@ -24,6 +24,16 @@ Keywords: AI assistant, trading strategy generation, quantitative equity researc
 - RAG: Retrieval-Augmented Generation
 - VaR: Value at Risk
 
+## List of Figures
+- Figure 3.1: System context for QuantVN Strategy Forge (`docs/thesis/figures/fig_3_1_system_context.md`)
+- Figure 3.2: Module architecture (code map) (`docs/thesis/figures/fig_3_2_module_architecture.md`)
+- Figure 3.3: Data pipeline and runtime contract (`docs/thesis/figures/fig_3_3_data_pipeline.md`)
+- Figure 3.4: Backtesting request workflow (`docs/thesis/figures/fig_3_4_backtesting_sequence.md`)
+- Figure 3.5: Grounded assistant pipeline (`docs/thesis/figures/fig_3_5_assistant_pipeline.md`)
+- Figure 3.6: QuantVN Strategy Forge workflow (Canvas + AI -> Run -> Diagnose) (`docs/thesis/figures/fig_3_6_strategy_forge_workflow.md`)
+- Figure 4.1: Docker topology (dev + smoke + QA) (`docs/thesis/figures/fig_4_1_docker_topology.md`)
+- Figure 4.2: Evaluation pipeline (gates) (`docs/thesis/figures/fig_4_2_evaluation_pipeline.md`)
+
 ## Chapter 1: Introduction
 This chapter's editable source is `docs/thesis/ch1_introduction.md`.
 

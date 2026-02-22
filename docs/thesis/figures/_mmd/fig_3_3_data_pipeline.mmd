@@ -1,6 +1,3 @@
-# Figure 3.3: Data Pipeline and Runtime Contract
-
-```mermaid
 flowchart LR
   RAW[Raw datasets] --> PREP[Offline preparation pipeline]
   PREP --> RCSV[Runtime datasets (CSV)]
@@ -15,4 +12,3 @@ flowchart LR
   LOADER --> API[Analytics Services]
   API --> UI[UI workflows]
   UI --> USER[User]
-```

@@ -81,7 +81,7 @@
       "title": "Assistant orchestration mode metadata",
       "owner": "Backend + Frontend",
       "priority": "P1",
-      "status": "in_progress",
+      "status": "done",
       "definitionOfDone": [
         "Assistant request supports executionMode (chat vs agent)",
         "Assistant response meta includes orchestrationMode; visible in logs and stability reports",
@@ -96,6 +96,15 @@
       },
       "evidenceCommands": [
         "pnpm run eval:assistant:routing:stable"
+      ],
+      "statusHistory": [
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-21T11:55:26.782Z",
+          "note": "Execution mode metadata is explicit in assistant requests/responses; routing stability gate passed in Docker (3/3 rounds, PASS).",
+          "actor": "codex"
+        }
       ]
     },
     {
@@ -104,7 +113,7 @@
       "title": "Composer workflow integration (plan -> approve -> execute)",
       "owner": "Frontend + Backend",
       "priority": "P1",
-      "status": "in_progress",
+      "status": "done",
       "definitionOfDone": [
         "Prompt -> plan preview -> approval token -> execute -> result works end-to-end",
         "UI surfaces tool trace (usedTools/citations) and handles execution errors cleanly"
@@ -121,6 +130,15 @@
       },
       "evidenceCommands": [
         "pnpm run docker:qa:prod"
+      ],
+      "statusHistory": [
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-21T11:55:33.147Z",
+          "note": "Composer flow validated end-to-end: Docker Playwright composer-agent E2E passed (plan, approval token, execute, validation error) and docker:qa:prod gate passed.",
+          "actor": "codex"
+        }
       ]
     },
     {
@@ -159,11 +177,9 @@
       "definitionOfDone": [
         "CI/PR gate runs merge + integration + assistant stability suites with artifacts",
         "Stability gate all suites passes (routing, realworld, pr-gate, policy-matrix, perf, postcheck-anomaly)",
-        "Expand numeric fidelity beyond backtest (risk/valuation/fundamentals) with tolerances"
+        "Composer E2E smoke exists (plan -> approve -> execute -> result) and is runnable in Docker with a reused dev server"
       ],
-      "dependsOn": [
-        "AGT-04"
-      ],
+      "dependsOn": [],
       "risks": [
         "Docker/env instability",
         "Provider throttling causes noisy flakes"
@@ -176,6 +192,51 @@
       "evidenceCommands": [
         "pnpm run docker:eval:assistant:stable:all",
         "pnpm run docker:qa:prod"
+      ],
+      "statusHistory": [
+        {
+          "from": "in_progress",
+          "to": "in_progress",
+          "changedAt": "2026-02-21T10:17:10.116Z",
+          "note": "Added Docker-validated Playwright E2E suite for Composer flow (draft plan, approval token, execute, result, invalid args).",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "in_progress",
+          "changedAt": "2026-02-21T11:55:38.847Z",
+          "note": "CI/prod QA and Composer Docker E2E evidence are passing; remaining gate to close is full stable-all assistant suite.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "AGT-06",
+      "phase": "Sprint 2",
+      "title": "Numeric fidelity expansion (beyond backtest)",
+      "owner": "QA + Product",
+      "priority": "P0",
+      "status": "todo",
+      "definitionOfDone": [
+        "Add tolerance-based numeric fidelity checks for risk, valuation, and fundamentals tool chains",
+        "Add citation payload sanity checks (tool/endpoint pairing and required fragments)",
+        "Add baseline metrics to stability report (track drift before hard failures)"
+      ],
+      "dependsOn": [
+        "AGT-04"
+      ],
+      "risks": [
+        "Overfitting eval thresholds to a narrow question bank",
+        "Provider variance causes noisy flakes without deterministic fallbacks"
+      ],
+      "signals": {
+        "numericRiskPassRate": null,
+        "numericValuationPassRate": null,
+        "numericFundamentalsPassRate": null
+      },
+      "evidenceCommands": [
+        "pnpm run docker:eval:assistant:full:prod",
+        "pnpm run docker:eval:assistant:policy-matrix:stable"
       ]
     }
   ],

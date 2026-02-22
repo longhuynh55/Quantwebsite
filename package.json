@@ -107,6 +107,7 @@
     "docker:down": "docker compose down",
     "strategy-lab:worker": "node scripts/strategy-lab-worker.mjs",
     "strategy-lab:worker:once": "node scripts/strategy-lab-worker.mjs --once",
+    "thesis:figures:export": "node scripts/export-thesis-figures.mjs",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

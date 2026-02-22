@@ -14,12 +14,13 @@
 ## Milestones
 | ID | Phase | Owner | Objective | Definition of Done | Risks | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| AGT-00 | Sprint 1 | Backend | Tool registry: contracts + strict schemas | Single tool registry metadata is source of truth; strict validation per tool; response envelope consistent | Contract drift across routes | in_progress |
-| AGT-01 | Sprint 1 | Backend | Execute dispatcher: secure + resilient | Harden `/api/assistant/execute` fetch/JSON failures; enforce approvalToken; include requestId/tool trace | Invalid args or unsafe endpoint access | in_progress |
+| AGT-00 | Sprint 1 | Backend | Tool registry: contracts + strict schemas | Single tool registry metadata is source of truth; strict validation per tool; response envelope consistent | Contract drift across routes | done |
+| AGT-01 | Sprint 1 | Backend | Execute dispatcher: secure + resilient | Harden `/api/assistant/execute` fetch/JSON failures; enforce approvalToken; include requestId/tool trace | Invalid args or unsafe endpoint access | done |
 | AGT-02 | Sprint 1 | Backend + Frontend | Orchestration mode metadata | Assistant request supports executionMode; response meta includes orchestrationMode; visible in logs/reports | Mixed mode metrics ambiguity | in_progress |
 | AGT-03 | Sprint 1 | Frontend + Backend | Composer workflow integration | Prompt -> plan preview -> approve -> execute -> result; tool trace + error UX | UX complexity and failure handling | in_progress |
 | AGT-04 | Sprint 2 | Backend + QA | Reliability hardening | Budgets/timeouts/retries enforced; distributed rate-limit strategy + alerts; circuit behavior for transient failures | Multi-instance inconsistency | todo |
-| AGT-05 | Sprint 2 | QA + Product | Eval + release gates (stable and automated) | CI/PR gate runs stability suites + artifacts; expand numeric fidelity beyond backtest (risk/valuation/fundamentals) | Docker/env instability | in_progress |
+| AGT-05 | Sprint 2 | QA + Product | Eval + release gates (stable and automated) | CI/PR gate runs stability suites + artifacts; composer E2E smoke runnable in Docker | Docker/env instability | in_progress |
+| AGT-06 | Sprint 2 | QA + Product | Numeric fidelity expansion (beyond backtest) | Tolerance-based numeric checks for risk/valuation/fundamentals + citation sanity + baseline metrics | Provider variance | todo |
 
 ## Workstreams
 ### WS-A Backend Orchestration

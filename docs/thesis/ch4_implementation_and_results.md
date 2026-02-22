@@ -9,6 +9,27 @@ This chapter maps the implemented QuantVN system to concrete engineering artifac
 
 The primary robustness goal is to ensure numeric outputs are either (a) backed by validated internal data/tools, or (b) blocked with an explicit fallback when evidence is missing. This applies both to quant endpoints (data quality and timeline policies) and to the assistant (grounding, citations, policy gating).
 
+Figure 4.1 summarizes the docker-compose topology used for reproducible dev/smoke/QA workflows.
+
+```mermaid
+flowchart LR
+  subgraph Compose[docker-compose.yml]
+    APP[app (Next.js dev)]
+    SMOKE[smoke (scripts/smoke.mjs)]
+    QA[qa (scripts/qa.mjs)]
+    APPP[app-prod (prod profile)]
+    SMOKEP[smoke-prod]
+    QAP[qa-prod]
+  end
+
+  SMOKE -->|depends_on healthy| APP
+  QA -->|depends_on healthy| APP
+  SMOKEP -->|depends_on healthy| APPP
+  QAP -->|depends_on healthy| APPP
+```
+
+Figure 4.1: Docker topology (dev + smoke + QA).
+
 ## 4.2 Key Engineering Artifacts
 Key files and responsibilities:
 - App layout and global composition: `src/app/layout.tsx` (theme provider, layout chrome, toasts, command palette, assistant panel).
@@ -27,6 +48,24 @@ Key files and responsibilities:
 Experiments are designed to be reproducible under both local and Docker workflows.
 
 Evaluation criteria and acceptance gates (with rationale and citations) are defined in `docs/thesis/EVALUATION_GATES.md`.
+
+Figure 4.2 shows the high-level evaluation pipeline used during development and thesis reporting.
+
+```mermaid
+flowchart TB
+  PREP[Prepare runtime data] --> HEALTH[Health probe (/api/health/data?probe=true)]
+  HEALTH --> STATIC[Lint + Typecheck]
+  STATIC --> SMOKE[Docker smoke]
+  SMOKE --> QA[Docker QA]
+  QA --> AEVAL[Assistant eval suites]
+  AEVAL --> REPORT[Artifacts + report]
+  REPORT --> DECIDE{Meets acceptance gates?}
+  DECIDE -->|yes| PASS[Thesis demo ready]
+  DECIDE -->|no| FIX[Fix + rerun]
+  FIX --> PREP
+```
+
+Figure 4.2: Evaluation pipeline (gates).
 
 Data preparation prerequisites:
 - Prepare runtime datasets: `pnpm run data:prepare:2018_2025`
