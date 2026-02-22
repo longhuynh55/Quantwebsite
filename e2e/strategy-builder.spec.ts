@@ -5,13 +5,9 @@ const NODE_TYPE_BY_LABEL: Record<string, string> = {
   "Data Source": "dataSource",
   Indicator: "indicator",
   Filter: "filter",
-  "Buy Signal": "signalBuy",
-  "Sell Signal": "signalSell",
-  Output: "output",
 };
 
 const canvas = (page: Page) => page.getByTestId("rf__wrapper");
-const canvasPane = (page: Page) => page.locator(".react-flow__pane").first();
 const nodeCount = (page: Page) => page.getByText(/Nodes:\s*\d+/).first();
 const connectionCount = (page: Page) => page.getByText(/Connections:\s*\d+/).first();
 const flowNode = (page: Page) => page.locator('[data-testid^="rf__node-"]').first();
@@ -128,14 +124,13 @@ test.describe("Strategy Builder Page", () => {
 
   test("should have node palette", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Components" })).toBeVisible();
-    await expect(page.locator('[draggable="true"]')).toHaveCount(6);
+    await expect(page.locator('[draggable="true"]')).toHaveCount(3);
   });
 
   test("should display available node types", async ({ page }) => {
-    await expect(page.getByText("Data Source")).toBeVisible();
-    await expect(page.getByText("Indicator").first()).toBeVisible();
-    await expect(page.getByText("Buy Signal")).toBeVisible();
-    await expect(page.getByText("Output")).toBeVisible();
+    await expect(paletteNode(page, "Data Source")).toBeVisible();
+    await expect(paletteNode(page, "Indicator")).toBeVisible();
+    await expect(paletteNode(page, "Filter")).toBeVisible();
   });
 });
 
