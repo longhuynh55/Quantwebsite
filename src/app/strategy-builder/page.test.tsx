@@ -25,6 +25,7 @@ type MockStoreState = {
   createNewStrategy: jest.Mock;
   saveStrategy: jest.Mock;
   updateNodeData: jest.Mock;
+  addNode: jest.Mock;
   deleteNode: jest.Mock;
   setSelectedNode: jest.Mock;
   isSaving: boolean;
@@ -83,6 +84,7 @@ function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
     createNewStrategy: jest.fn(),
     saveStrategy: jest.fn().mockResolvedValue(undefined),
     updateNodeData: jest.fn(),
+    addNode: jest.fn(),
     deleteNode: jest.fn(),
     setSelectedNode: jest.fn(),
     isSaving: false,

@@ -21,6 +21,7 @@ const mockAddNode = jest.fn();
 const mockStoreAddEdge = jest.fn();
 const mockSetSelectedNode = jest.fn();
 const mockSetNodes = jest.fn();
+const mockFitView = jest.fn();
 
 let mockStrategyStoreState: MockStrategyStoreState;
 
@@ -97,6 +98,9 @@ jest.mock("@xyflow/react", () => ({
     };
     return [mockEdgesState, setEdges, mockOnEdgesChange];
   },
+  useReactFlow: () => ({
+    fitView: mockFitView,
+  }),
 }));
 
 function createStoreState(
@@ -121,6 +125,7 @@ describe("StrategyCanvas", () => {
     mockStoreAddEdge.mockReset();
     mockSetSelectedNode.mockReset();
     mockSetNodes.mockReset();
+    mockFitView.mockReset();
     mockOnNodesChange.mockReset();
     mockOnEdgesChange.mockReset();
     mockNodesState = [];
@@ -152,6 +157,29 @@ describe("StrategyCanvas", () => {
         data: expect.objectContaining({
           type: "indicator",
           label: "RSI",
+        }),
+      })
+    );
+  });
+
+  it("reads node type from text/plain drop data as fallback", () => {
+    render(<StrategyCanvas />);
+
+    fireEvent.drop(screen.getByTestId("strategy-react-flow"), {
+      clientX: 40,
+      clientY: 70,
+      dataTransfer: {
+        getData: (key: string) => (key === "text/plain" ? "filter" : ""),
+      },
+    });
+
+    expect(mockAddNode).toHaveBeenCalledTimes(1);
+    expect(mockAddNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "filter",
+        data: expect.objectContaining({
+          type: "filter",
+          label: "Filter",
         }),
       })
     );

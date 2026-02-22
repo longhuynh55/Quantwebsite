@@ -8,6 +8,7 @@ import {
   useStrategyBuilderStore,
   useSelectedNode,
 } from "@/lib/stores/strategyBuilderStore";
+import { createStrategyNodeFromPaletteType } from "@/components/strategy-builder/nodeFactory";
 import { cn } from "@/lib/utils";
 import {
   Save,
@@ -55,6 +56,7 @@ export default function StrategyBuilderPage() {
     createNewStrategy,
     saveStrategy,
     updateNodeData,
+    addNode,
     deleteNode,
     setSelectedNode,
     isSaving,
@@ -133,8 +135,28 @@ export default function StrategyBuilderPage() {
   // Handle drag start from palette
   const handleDragStart = useCallback((event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow", nodeType);
+    event.dataTransfer.setData("text/plain", nodeType);
     event.dataTransfer.effectAllowed = "move";
   }, []);
+
+  const handleAddNodeFromPalette = useCallback(
+    (nodeType: string) => {
+      const existingNodes = currentStrategy?.nodes.length ?? 0;
+      const position = {
+        x: 120 + (existingNodes % 4) * 220,
+        y: 120 + Math.floor(existingNodes / 4) * 120,
+      };
+      const node = createStrategyNodeFromPaletteType(nodeType, position);
+      if (!node) {
+        toast.error("Unsupported node type.");
+        return;
+      }
+      addNode(node);
+      setSelectedNode(node.id);
+      setIsPropertyPanelOpen(true);
+    },
+    [addNode, currentStrategy?.nodes.length, setSelectedNode]
+  );
 
   // Handle node update
   const handleUpdateNode = useCallback(
@@ -288,7 +310,7 @@ export default function StrategyBuilderPage() {
           isPaletteOpen ? "block" : "hidden lg:block"
         )}
       >
-        <NodePalette onDragStart={handleDragStart} />
+        <NodePalette onDragStart={handleDragStart} onAddNode={handleAddNodeFromPalette} />
       </div>
 
       {/* Main Content */}

@@ -48,18 +48,20 @@ const nodeTypes: NodeTypeItem[] = [
 interface NodePaletteItemProps {
   item: NodeTypeItem;
   onDragStart: (event: React.DragEvent, nodeType: string) => void;
+  onAddNode?: (nodeType: string) => void;
 }
 
-const NodePaletteItem = memo(({ item, onDragStart }: NodePaletteItemProps) => {
+const NodePaletteItem = memo(({ item, onDragStart, onAddNode }: NodePaletteItemProps) => {
   const Icon = item.icon;
 
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, item.type)}
+      onClick={() => onAddNode?.(item.type)}
       className={cn(
         "flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700",
-        "bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing",
+        "bg-white dark:bg-gray-800 cursor-pointer",
         "hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm",
         "transition-all duration-200",
         "group"
@@ -91,10 +93,11 @@ NodePaletteItem.displayName = "NodePaletteItem";
 
 interface NodePaletteProps {
   onDragStart: (event: React.DragEvent, nodeType: string) => void;
+  onAddNode?: (nodeType: string) => void;
   className?: string;
 }
 
-export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) => {
+export const NodePalette = memo(({ onDragStart, onAddNode, className }: NodePaletteProps) => {
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Header */}
@@ -103,7 +106,7 @@ export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) =
           Components
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Drag to canvas to add
+          Drag or click to add
         </p>
       </div>
 
@@ -114,7 +117,7 @@ export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) =
           <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-1">
             Data
           </div>
-          <NodePaletteItem item={nodeTypes[0]} onDragStart={onDragStart} />
+          <NodePaletteItem item={nodeTypes[0]} onDragStart={onDragStart} onAddNode={onAddNode} />
         </div>
 
         {/* Analysis Section */}
@@ -123,8 +126,8 @@ export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) =
             Analysis
           </div>
           <div className="space-y-2">
-            <NodePaletteItem item={nodeTypes[1]} onDragStart={onDragStart} />
-            <NodePaletteItem item={nodeTypes[2]} onDragStart={onDragStart} />
+            <NodePaletteItem item={nodeTypes[1]} onDragStart={onDragStart} onAddNode={onAddNode} />
+            <NodePaletteItem item={nodeTypes[2]} onDragStart={onDragStart} onAddNode={onAddNode} />
           </div>
         </div>
 
@@ -133,7 +136,7 @@ export const NodePalette = memo(({ onDragStart, className }: NodePaletteProps) =
       {/* Footer */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          Tip: Configure nodes in the right panel before running
+          Tip: Use drag or click, then configure nodes in the right panel
         </p>
       </div>
     </div>

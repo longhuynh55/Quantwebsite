@@ -369,6 +369,7 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
           contextSnapshot,
           preferences: buildPreferences(),
           uiMode,
+          executionMode: "chat",
           requestId,
           clientTs: new Date().toISOString(),
         }),

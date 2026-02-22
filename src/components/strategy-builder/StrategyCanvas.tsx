@@ -8,6 +8,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type NodeTypes,
   type NodeChange,
   type EdgeChange,
@@ -17,13 +18,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
 import { nodeTypes } from "./nodes";
+import { createStrategyNodeFromPaletteType } from "./nodeFactory";
 import { useStrategyBuilderStore } from "@/lib/stores/strategyBuilderStore";
-import type { StrategyNode, StrategyEdge, StrategyNodeData } from "@/lib/stores/strategyBuilderStore";
-
-const generateId = () =>
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `node-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+import type { StrategyNode, StrategyEdge } from "@/lib/stores/strategyBuilderStore";
 
 interface StrategyCanvasProps {
   className?: string;
@@ -31,6 +28,7 @@ interface StrategyCanvasProps {
 
 const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { fitView } = useReactFlow<StrategyNode, StrategyEdge>();
 
   const {
     currentStrategy,
@@ -52,6 +50,7 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
   const [nodes, setLocalNodes, onNodesChange] = useNodesState<StrategyNode>(initialNodes);
   const [edges, setLocalEdges, onEdgesChange] = useEdgesState<StrategyEdge>(initialEdges);
+  const previousNodeCountRef = useRef(nodes.length);
 
   // Keep React Flow local state aligned with persisted store changes.
   useEffect(() => {
@@ -61,6 +60,16 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
   useEffect(() => {
     setLocalEdges(initialEdges);
   }, [initialEdges, setLocalEdges]);
+
+  useEffect(() => {
+    const previousCount = previousNodeCountRef.current;
+    if (nodes.length > previousCount) {
+      requestAnimationFrame(() => {
+        fitView({ duration: 250, padding: 0.2 });
+      });
+    }
+    previousNodeCountRef.current = nodes.length;
+  }, [fitView, nodes.length]);
 
   // Sync local state with store
   const handleNodesChange = useCallback(
@@ -107,7 +116,9 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
     (event: React.DragEvent) => {
       event.preventDefault();
 
-      const type = event.dataTransfer.getData("application/reactflow");
+      const type =
+        event.dataTransfer.getData("application/reactflow") ||
+        event.dataTransfer.getData("text/plain");
       if (!type || !reactFlowWrapper.current) return;
 
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
@@ -115,66 +126,8 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       };
-
-      // Create node data based on type
-      let nodeData: StrategyNodeData;
-      const nodeType: string = type;
-      let label: string;
-
-      switch (type) {
-        case "dataSource":
-          label = "Data Source";
-          nodeData = {
-            type: "dataSource",
-            label,
-            config: {
-              label,
-              stocks: [],
-              timeframe: "1d",
-              startDate: "",
-              endDate: "",
-            },
-          };
-          break;
-        case "indicator":
-          label = "RSI";
-          nodeData = {
-            type: "indicator",
-            label,
-            config: {
-              label,
-              indicatorType: "rsi",
-              period: 14,
-            },
-          };
-          break;
-        case "filter":
-          label = "Filter";
-          nodeData = {
-            type: "filter",
-            label,
-            config: {
-              label,
-              filterType: "price_above",
-              value: 0,
-              comparisonOperator: ">",
-            },
-          };
-          break;
-        default:
-          return;
-      }
-
-      const newNode: StrategyNode = {
-        id: generateId(),
-        type: nodeType,
-        position,
-        data: {
-          ...nodeData,
-          label,
-        },
-      };
-
+      const newNode = createStrategyNodeFromPaletteType(type, position);
+      if (!newNode) return;
       addNode(newNode);
     },
     [addNode]
