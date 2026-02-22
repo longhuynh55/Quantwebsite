@@ -175,6 +175,18 @@ function extractPassRate(report) {
     if (isFiniteNumber(value)) return value;
   }
 
+  if (Array.isArray(report?.checks) && report.checks.length > 0) {
+    const passedChecks = report.checks.filter((item) => String(item?.status ?? "") === "pass").length;
+    return passedChecks / report.checks.length;
+  }
+  if (isFiniteNumber(report?.summary?.failures)) {
+    const failures = Number(report.summary.failures);
+    if (Array.isArray(report?.checks) && report.checks.length > 0) {
+      return Math.max(0, (report.checks.length - failures) / report.checks.length);
+    }
+    return failures === 0 ? 1 : 0;
+  }
+
   const totals = [
     [report?.passedTurns, report?.totalTurns],
     [report?.passedCases, report?.totalCases],
@@ -206,7 +218,83 @@ function extractRoundStatus(report) {
   if (isFiniteNumber(report?.totals?.failedTurns)) {
     return report.totals.failedTurns === 0;
   }
+  if (isFiniteNumber(report?.summary?.failures)) {
+    return Number(report.summary.failures) === 0;
+  }
   return null;
+}
+
+function extractDriftSignals(report) {
+  if (!report || typeof report !== "object") return {};
+  const candidates = {
+    turnPassRate: extractPassRate(report),
+    toolPassRate: report?.routingChecks?.tool?.passRate,
+    endpointPassRate: report?.routingChecks?.endpoint?.passRate,
+    intentPassRate: report?.routingChecks?.intent?.passRate,
+    policyPassRate: report?.routingChecks?.policy?.passRate ?? report?.rates?.policyPassRate,
+    citationPassRate:
+      report?.routingChecks?.citation?.passRate
+      ?? report?.rates?.citationPassRate
+      ?? report?.citationCoverage?.coveragePercent,
+    citationSanityPassRate: report?.routingChecks?.citationSanity?.passRate,
+    toolBudgetPassRate: report?.routingChecks?.toolBudget?.passRate,
+    budgetExceededTurnRate: report?.routingChecks?.runtimeGuards?.budgetExceededTurnRate,
+    circuitOpenTurnRate: report?.routingChecks?.runtimeGuards?.circuitOpenTurnRate,
+    numericSymbolPassRate: report?.metrics?.numericSymbolPassRate,
+    numericRiskPassRate: report?.metrics?.numericRiskPassRate,
+    numericValuationPassRate: report?.metrics?.numericValuationPassRate,
+    numericFundamentalsPassRate: report?.metrics?.numericFundamentalsPassRate,
+    unsupportedClaimRate: report?.metrics?.unsupportedClaimRate,
+    supportedClaimPrecision: report?.metrics?.supportedClaimPrecision,
+    overallClaimAccuracy: report?.metrics?.overallClaimAccuracy,
+  };
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(candidates)) {
+    if (isFiniteNumber(value)) {
+      normalized[key] = Number(value);
+    }
+  }
+  return normalized;
+}
+
+function percentile(samples, p) {
+  if (!Array.isArray(samples) || samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const rank = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * p)));
+  return sorted[rank];
+}
+
+function summarizeDriftSignals(rounds) {
+  const pools = {};
+  for (const round of rounds) {
+    if (!round || typeof round !== "object") continue;
+    const signals = round.driftSignals ?? {};
+    for (const [key, value] of Object.entries(signals)) {
+      if (!isFiniteNumber(value)) continue;
+      if (!pools[key]) pools[key] = [];
+      pools[key].push(Number(value));
+    }
+  }
+
+  const summary = {};
+  for (const [metricId, samples] of Object.entries(pools)) {
+    const count = samples.length;
+    const sum = samples.reduce((acc, value) => acc + value, 0);
+    summary[metricId] = {
+      samples: count,
+      first: samples[0],
+      last: samples[count - 1],
+      min: Math.min(...samples),
+      max: Math.max(...samples),
+      mean: count > 0 ? sum / count : null,
+      p50: percentile(samples, 0.5),
+      p90: percentile(samples, 0.9),
+      driftFromFirst: count > 1 ? samples[count - 1] - samples[0] : 0,
+    };
+  }
+
+  return summary;
 }
 
 function prefixLogs(prefix, raw) {
@@ -400,6 +488,7 @@ async function runSuiteStability(config) {
     ];
     const passRate = extractPassRate(parsedReport);
     const reportStatus = extractRoundStatus(parsedReport);
+    const driftSignals = extractDriftSignals(parsedReport);
     const success = execution.exitCode === 0 && reportStatus === true && reportValidationErrors.length === 0;
     const failureReason =
       success
@@ -431,6 +520,7 @@ async function runSuiteStability(config) {
       failureCategory: failureClassification?.category ?? null,
       failureCode: failureClassification?.code ?? null,
       failureDetail: failureClassification?.detail ?? null,
+      driftSignals,
     });
 
     const earlyStopDecision = evaluateEarlyStop(config, rounds);
@@ -453,6 +543,7 @@ async function runSuiteStability(config) {
   const minObservedPassRate = passRates.length > 0 ? Math.min(...passRates) : null;
   const avgObservedPassRate =
     passRates.length > 0 ? passRates.reduce((acc, value) => acc + value, 0) / passRates.length : null;
+  const driftBaselines = summarizeDriftSignals(rounds);
 
   const gates = {
     flakeRate: {
@@ -516,9 +607,11 @@ async function runSuiteStability(config) {
       durationMs: Date.now() - suiteStartedAt,
       earlyStop,
       failureCategorySummary: summarizeFailureCategories(rounds),
+      driftBaselines,
     },
     gates,
     rounds,
+    driftBaselines,
     canonicalRoundReportPath: path.resolve(config.defaultRoundReportPath),
   };
 

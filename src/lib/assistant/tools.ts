@@ -20,6 +20,8 @@ import { createLogger, hashText } from '@/lib/logger';
 const TOOL_TIMEOUT_MS = resolveToolTimeoutMs();
 const TOOL_FETCH_MAX_ATTEMPTS = resolveToolFetchMaxAttempts();
 const TOOL_FETCH_RETRY_BACKOFF_MS = resolveToolFetchRetryBackoffMs();
+const TOOL_MAX_CALLS_PER_TURN = resolveToolMaxCallsPerTurn();
+const TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD = resolveToolTransientFailureCircuitThreshold();
 const MAX_TOOL_CONCURRENCY = 4;
 const MAX_SYMBOL_TOOL_FANOUT = 2;
 const MAX_FACTS = 12;
@@ -75,6 +77,13 @@ interface RequestedDateRange {
   to: string;
 }
 
+interface ToolExecutionBudget {
+  tasks: ToolTask[];
+  skippedTasks: ToolTask[];
+  plannedCalls: number;
+  maxCalls: number;
+}
+
 export async function runGroundingTools(input: GroundingInput): Promise<GroundingResult> {
   const startedAt = Date.now();
   const logger = groundingToolsLogger.child({ requestId: input.requestId ?? '' });
@@ -92,6 +101,8 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     hasToolBaseUrl: Boolean(input.baseUrl),
     plannedTaskCount: plannedTasks.length,
     plannedTools: plannedTasks.map((task) => task.name),
+    maxToolCallsPerTurn: TOOL_MAX_CALLS_PER_TURN,
+    transientFailureCircuitThreshold: TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD,
     symbolCount: symbols.length,
     requestedSymbolCount: symbolScope.requestedSymbols.length,
     symbolTargetCount: symbolScope.symbolTargets.length,
@@ -136,13 +147,16 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
   }
 
   const tasks = buildToolTasks(input.baseUrl, input.message, symbols, input.contextSnapshot, input.queryPlan);
+  const budget = applyToolExecutionBudget(tasks, TOOL_MAX_CALLS_PER_TURN);
 
   const facts: string[] = [];
   const citations: AssistantCitation[] = [];
   const usedTools: AssistantToolUsage[] = [];
   const messageBlocks: AssistantMessageBlock[] = [];
   const errorSummaries: string[] = [];
-  const executed = await runTasksWithConcurrency(tasks, MAX_TOOL_CONCURRENCY);
+  const executed = await runTasksWithConcurrency(budget.tasks, MAX_TOOL_CONCURRENCY, {
+    transientFailureCircuitThreshold: TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD,
+  });
   for (const item of executed) {
     if (item.status === 'success') {
       const output = item.output;
@@ -168,6 +182,22 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         citationsCount: output.citations.length,
         messageBlocksCount: Array.isArray(output.messageBlocks) ? output.messageBlocks.length : 0,
         firstFactDigest: output.facts.length > 0 ? hashText(output.facts[0]) : null,
+      });
+      continue;
+    }
+
+    if (item.status === 'skipped') {
+      const errorCode = item.skipReason === 'circuit_open' ? 'tool_circuit_open' : 'tool_skipped';
+      usedTools.push({
+        name: item.task.name,
+        status: 'skipped',
+        latencyMs: 0,
+        evidenceCount: 0,
+        warningCount: 0,
+        errorCode,
+        error: item.skipReason === 'circuit_open'
+          ? 'Tool execution skipped because transient-failure circuit opened for this turn.'
+          : 'Tool execution skipped by runtime policy.',
       });
       continue;
     }
@@ -204,6 +234,42 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     });
   }
 
+  if (budget.skippedTasks.length > 0) {
+    for (const task of budget.skippedTasks) {
+      usedTools.push({
+        name: task.name,
+        status: 'skipped',
+        latencyMs: 0,
+        evidenceCount: 0,
+        warningCount: 0,
+        errorCode: 'tool_budget_exceeded',
+        error: `Tool execution skipped because per-turn tool budget is ${budget.maxCalls}.`,
+      });
+    }
+    errorSummaries.push(
+      `Tool budget enforced: planned_calls=${budget.plannedCalls}, executed_calls=${budget.tasks.length}, skipped_calls=${budget.skippedTasks.length}, max_calls_per_turn=${budget.maxCalls}.`
+    );
+    logger.warn('grounding.tool_budget_enforced', {
+      plannedCalls: budget.plannedCalls,
+      executedCalls: budget.tasks.length,
+      skippedCalls: budget.skippedTasks.length,
+      maxCallsPerTurn: budget.maxCalls,
+    });
+  }
+
+  const skippedByCircuit = executed.filter((item) => item.status === 'skipped' && item.skipReason === 'circuit_open').length;
+  const transientErrorCount = executed.filter((item) => item.status === 'error' && isTransientToolExecutionError(item.error)).length;
+  if (skippedByCircuit > 0) {
+    errorSummaries.push(
+      `Transient-failure circuit opened: transient_failures=${transientErrorCount}, skipped_calls=${skippedByCircuit}, threshold=${TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD}.`
+    );
+    logger.warn('grounding.transient_circuit_open', {
+      transientErrorCount,
+      skippedByCircuit,
+      threshold: TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD,
+    });
+  }
+
   if (tasks.length === 0) {
     usedTools.push({ name: 'marketSnapshot', status: 'skipped', latencyMs: 0, evidenceCount: 0, warningCount: 0 });
   }
@@ -231,10 +297,15 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
   }
   const successTools = usedTools.filter((tool) => tool.status === 'success').length;
   const errorTools = usedTools.filter((tool) => tool.status === 'error').length;
+  const skippedTools = usedTools.filter((tool) => tool.status === 'skipped').length;
   logger.info('grounding.completed', {
     taskCount: tasks.length,
+    executedTaskCount: budget.tasks.length,
+    budgetSkippedTaskCount: budget.skippedTasks.length,
+    circuitSkippedTaskCount: skippedByCircuit,
     successTools,
     errorTools,
+    skippedTools,
     factsCount: facts.length,
     citationCount: citations.length,
     durationMs: Date.now() - startedAt,
@@ -250,12 +321,45 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
 
 type TaskExecutionResult =
   | { task: ToolTask; status: 'success'; output: ToolRunOutput; latencyMs: number }
-  | { task: ToolTask; status: 'error'; error: unknown; latencyMs: number };
+  | { task: ToolTask; status: 'error'; error: unknown; latencyMs: number }
+  | { task: ToolTask; status: 'skipped'; skipReason: 'circuit_open'; latencyMs: number };
 
-async function runTasksWithConcurrency(tasks: ToolTask[], concurrency: number): Promise<TaskExecutionResult[]> {
+interface TaskExecutionOptions {
+  transientFailureCircuitThreshold?: number;
+}
+
+function applyToolExecutionBudget(tasks: ToolTask[], maxCallsPerTurn: number): ToolExecutionBudget {
+  const normalizedMaxCalls = Math.max(1, Math.min(Math.trunc(maxCallsPerTurn), 20));
+  if (tasks.length <= normalizedMaxCalls) {
+    return {
+      tasks,
+      skippedTasks: [],
+      plannedCalls: tasks.length,
+      maxCalls: normalizedMaxCalls,
+    };
+  }
+  return {
+    tasks: tasks.slice(0, normalizedMaxCalls),
+    skippedTasks: tasks.slice(normalizedMaxCalls),
+    plannedCalls: tasks.length,
+    maxCalls: normalizedMaxCalls,
+  };
+}
+
+async function runTasksWithConcurrency(
+  tasks: ToolTask[],
+  concurrency: number,
+  options?: TaskExecutionOptions
+): Promise<TaskExecutionResult[]> {
   const limit = Math.max(1, Math.min(concurrency, tasks.length || 1));
   const results: TaskExecutionResult[] = new Array(tasks.length);
+  const transientFailureCircuitThreshold = Math.max(
+    0,
+    Math.min(10, Math.trunc(options?.transientFailureCircuitThreshold ?? 0))
+  );
   let cursor = 0;
+  let transientFailureCount = 0;
+  let circuitOpen = false;
 
   const workers = Array.from({ length: limit }, async () => {
     while (true) {
@@ -264,6 +368,15 @@ async function runTasksWithConcurrency(tasks: ToolTask[], concurrency: number): 
       if (index >= tasks.length) return;
 
       const task = tasks[index];
+      if (circuitOpen) {
+        results[index] = {
+          task,
+          status: 'skipped',
+          skipReason: 'circuit_open',
+          latencyMs: 0,
+        };
+        continue;
+      }
       const startedAt = Date.now();
       try {
         const output = await task.run();
@@ -280,11 +393,26 @@ async function runTasksWithConcurrency(tasks: ToolTask[], concurrency: number): 
           error,
           latencyMs: Date.now() - startedAt,
         };
+        if (transientFailureCircuitThreshold > 0 && isTransientToolExecutionError(error)) {
+          transientFailureCount += 1;
+          if (transientFailureCount >= transientFailureCircuitThreshold) {
+            circuitOpen = true;
+          }
+        }
       }
     }
   });
 
   await Promise.all(workers);
+  for (let index = 0; index < tasks.length; index += 1) {
+    if (results[index]) continue;
+    results[index] = {
+      task: tasks[index],
+      status: 'skipped',
+      skipReason: 'circuit_open',
+      latencyMs: 0,
+    };
+  }
   return results;
 }
 
@@ -2602,6 +2730,15 @@ function resolveToolTimeoutMs(): number {
   return Math.max(3_000, Math.min(parsed, 60_000));
 }
 
+function resolveToolMaxCallsPerTurn(): number {
+  const fallback = 8;
+  const raw = String(process.env.ASSISTANT_TOOL_MAX_CALLS_PER_TURN ?? "").trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.max(1, Math.min(parsed, 20));
+}
+
 function resolveToolFetchMaxAttempts(): number {
   const fallback = 2;
   const raw = String(process.env.ASSISTANT_TOOL_FETCH_MAX_ATTEMPTS ?? "").trim();
@@ -2618,6 +2755,16 @@ function resolveToolFetchRetryBackoffMs(): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.max(100, Math.min(parsed, 5_000));
+}
+
+function resolveToolTransientFailureCircuitThreshold(): number {
+  const fallback = 3;
+  const raw = String(process.env.ASSISTANT_TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD ?? "").trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed <= 0) return 0;
+  return Math.max(1, Math.min(parsed, 10));
 }
 
 function shouldRetryToolHttpStatus(status: number): boolean {
@@ -2647,6 +2794,23 @@ function isRetryableToolFetchError(error: unknown): boolean {
     || text.includes('timed out')
     || text.includes('timeout')
     || text.includes('aborted')
+  );
+}
+
+function isTransientToolExecutionError(error: unknown): boolean {
+  const normalized = normalizeHttpError(error);
+  if (typeof normalized.status === 'number' && shouldRetryToolHttpStatus(normalized.status)) {
+    return true;
+  }
+  const text = normalized.message.toLowerCase();
+  return (
+    text.includes('fetch failed')
+    || text.includes('failed to fetch')
+    || text.includes('network')
+    || text.includes('timed out')
+    || text.includes('timeout')
+    || text.includes('aborted')
+    || text.includes('temporarily unavailable')
   );
 }
 

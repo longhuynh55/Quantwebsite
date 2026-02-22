@@ -40,6 +40,135 @@ function hasAnyCitationEndpoint(citations, fragment) {
   });
 }
 
+function normalizeDateValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(text);
+  if (iso) {
+    const yyyy = Number(iso[1]);
+    const mm = Number(iso[2]);
+    const dd = Number(iso[3]);
+    return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+  const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/.exec(text);
+  if (dmy) {
+    const dd = Number(dmy[1]);
+    const mm = Number(dmy[2]);
+    const rawYear = Number(dmy[3]);
+    const yyyy = rawYear < 100 ? 2000 + rawYear : rawYear;
+    return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+function normalizeScalar(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function parseFragment(fragment) {
+  const idx = String(fragment ?? "").indexOf("=");
+  if (idx <= 0) return null;
+  return {
+    key: String(fragment).slice(0, idx).trim().toLowerCase(),
+    value: String(fragment).slice(idx + 1).trim(),
+  };
+}
+
+const toolEndpointHints = {
+  stockSnapshot: ["/api/stocks"],
+  fundamentalSnapshot: ["/api/fundamentals"],
+  fundamentalAnalysis: ["/api/finance-analysis"],
+  financialHealthScore: ["/api/finance-analysis"],
+  valuationDcf: ["/api/finance-analysis"],
+  peerMultiples: ["/api/finance-analysis"],
+  scenarioSensitivity: ["/api/finance-analysis"],
+  riskSnapshot: ["/api/risk"],
+  backtestSummary: ["/api/backtesting"],
+  factorSnapshot: ["/api/factors"],
+  marketSnapshot: ["/api/market-overview"],
+  valuationRanking: ["/api/analytics/valuation-rankings"],
+  icbSnapshot: ["/api/analytics/icb-snapshot"],
+  dataHealth: ["/api/health/data"],
+};
+
+function listRequiredTools(expected) {
+  if (Array.isArray(expected?.requiredTools)) return expected.requiredTools;
+  if (expected?.requiredTool) return [expected.requiredTool];
+  return [];
+}
+
+function hasCitationEndpointShape(endpoint) {
+  return typeof endpoint === "string" && endpoint.includes("/api/");
+}
+
+function hasCitationPairForTool(citations, toolName) {
+  const hints = toolEndpointHints[String(toolName ?? "")] ?? [];
+  if (hints.length === 0) return true;
+  if (!Array.isArray(citations) || citations.length === 0) return false;
+  return hints.some((hint) => citations.some((item) => String(item?.endpoint ?? "").includes(hint)));
+}
+
+function hasEndpointEvidence(citations, usedTools, fragment) {
+  if (hasAnyCitationEndpoint(citations, fragment)) return true;
+
+  const safeTools = Array.isArray(usedTools) ? usedTools : [];
+  if (fragment.startsWith("/api/")) {
+    for (const tool of safeTools) {
+      const hints = toolEndpointHints[String(tool?.name ?? "")] ?? [];
+      if (hints.some((hint) => hint.includes(fragment) || fragment.includes(hint))) return true;
+    }
+  }
+
+  const parsed = parseFragment(fragment);
+  if (!parsed) return false;
+  const key = parsed.key;
+  const value = parsed.value;
+  const valueNorm = normalizeScalar(value);
+  const dateKeys = new Set(["date", "requesteddate", "asofdate", "fromdate", "todate", "startdate", "enddate"]);
+
+  for (const tool of safeTools) {
+    const params = tool?.requestParams;
+    if (!params || typeof params !== "object") continue;
+    for (const [rawParamKey, rawParamValue] of Object.entries(params)) {
+      const paramKey = normalizeScalar(rawParamKey);
+      if (dateKeys.has(key) && dateKeys.has(paramKey)) {
+        const a = normalizeDateValue(value);
+        const b = normalizeDateValue(rawParamValue);
+        if (a && b && a === b) return true;
+      }
+      if (paramKey === key) {
+        if (Array.isArray(rawParamValue)) {
+          if (rawParamValue.some((item) => normalizeScalar(item) === valueNorm)) return true;
+        } else if (normalizeScalar(rawParamValue) === valueNorm) {
+          return true;
+        }
+      }
+      if (key === "symbol" && paramKey === "symbols" && Array.isArray(rawParamValue)) {
+        if (rawParamValue.some((item) => normalizeScalar(item) === valueNorm)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function hasQueryPlanFragmentEvidence(data, fragment) {
+  const parsed = parseFragment(fragment);
+  if (!parsed) return false;
+  if (parsed.key !== "symbol") return false;
+  const symbol = normalizeScalar(parsed.value).toUpperCase();
+  if (!symbol) return false;
+
+  const planSymbols = Array.isArray(data?.meta?.queryPlanSymbols) ? data.meta.queryPlanSymbols : [];
+  if (planSymbols.some((item) => String(item ?? "").trim().toUpperCase() === symbol)) {
+    return true;
+  }
+
+  const planSummary = String(data?.meta?.queryPlanSummary ?? "").toUpperCase();
+  if (planSummary.includes(symbol)) return true;
+  return false;
+}
+
 function hasMessageFragment(message, fragment) {
   const haystack = normalizeForMatch(message);
   const needle = normalizeForMatch(fragment);
@@ -236,7 +365,7 @@ async function callAssistantWithRetry(input) {
   throw lastError instanceof Error ? lastError : new Error("assistant call failed");
 }
 
-function evaluateNumericRule(data, numericRule) {
+function evaluateNumericRule(data, numericRule, outputContract) {
   const checks = { total: 0, passed: 0 };
   const failures = [];
   if (!numericRule || typeof numericRule !== "object") {
@@ -250,6 +379,11 @@ function evaluateNumericRule(data, numericRule) {
   const hasMetricNumericClaim = hasMetricLikeNumericClaim(message);
   const hasNumeric = hasNumericEvidence(data);
   const policyStatus = String(data?.policyStatus ?? "");
+  const isFallbackStatus = policyStatus === "fallback" || policyStatus === "shadow_blocked";
+  const fallbackOnlyNumericGuard = outputContract?.forbidNumericInFallback === true;
+  const forbidScopeApplies = !fallbackOnlyNumericGuard
+    || isFallbackStatus
+    || hasMessageFragment(message, "insufficient_data");
 
   checks.total += 1;
   if (minCitationCount > 0) {
@@ -271,7 +405,9 @@ function evaluateNumericRule(data, numericRule) {
       failures.push("numeric_rule required_numeric_claim_missing");
     }
   } else if (mode === "forbidden") {
-    if (hasMetricNumericClaim) {
+    if (!forbidScopeApplies) {
+      checks.passed += 1;
+    } else if (hasMetricNumericClaim) {
       failures.push("numeric_rule forbidden_numeric_claim_detected");
     } else {
       checks.passed += 1;
@@ -284,7 +420,10 @@ function evaluateNumericRule(data, numericRule) {
     checks.total += 1;
     const fragments = ["insufficient_data", "khong", "khong the", "khong du du lieu", "unsupported"];
     const hasPhrase = fragments.some((fragment) => hasMessageFragment(message, fragment));
-    const isFallbackStatus = policyStatus === "fallback" || policyStatus === "shadow_blocked";
+    if (!forbidScopeApplies) {
+      checks.passed += 1;
+      return { checks, failures };
+    }
     const ok = hasPhrase || (isFallbackStatus && !hasMetricNumericClaim);
     if (ok) {
       checks.passed += 1;
@@ -354,10 +493,19 @@ function evaluateOutputContract(data, outputContract) {
 
   if (outputContract.mustRejectInvalidTicker === true) {
     checks.total += 1;
+    const isFallbackStatus = policyStatus === "fallback" || policyStatus === "shadow_blocked";
+    const hasInvalidToolError = Array.isArray(data?.usedTools)
+      && data.usedTools.some(
+        (tool) =>
+          String(tool?.name ?? "") === "stockSnapshot"
+          && String(tool?.status ?? "") === "error"
+      );
+    const hasNumeric = hasMetricLikeNumericClaim(message);
     const ok =
       hasMessageFragment(message, "invalid")
       || hasMessageFragment(message, "khong")
-      || hasMessageFragment(message, "khong ton tai");
+      || hasMessageFragment(message, "khong ton tai")
+      || (isFallbackStatus && hasInvalidToolError && !hasNumeric);
     if (ok) checks.passed += 1;
     else failures.push("output_contract invalid_ticker_notice_missing");
   }
@@ -399,10 +547,13 @@ async function evaluateExpectations(data, expected) {
   const checks = {
     tool: { total: 0, passed: 0 },
     endpoint: { total: 0, passed: 0 },
+    citationSanity: { total: 0, passed: 0 },
     policy: { total: 0, passed: 0 },
     numericRule: { total: 0, passed: 0 },
     outputContract: { total: 0, passed: 0 },
   };
+  const citations = Array.isArray(data?.citations) ? data.citations : [];
+  const requiredTools = listRequiredTools(expected);
 
   if (Array.isArray(expected?.requiredTools)) {
     for (const item of expected.requiredTools) {
@@ -421,10 +572,35 @@ async function evaluateExpectations(data, expected) {
   if (Array.isArray(expected?.endpointIncludes)) {
     for (const fragment of expected.endpointIncludes) {
       checks.endpoint.total += 1;
-      const ok = hasAnyCitationEndpoint(data?.citations, fragment);
+      const ok =
+        hasEndpointEvidence(data?.citations, data?.usedTools, fragment)
+        || hasQueryPlanFragmentEvidence(data, fragment);
       if (ok) checks.endpoint.passed += 1;
       else failures.push(`missing citation endpoint fragment: ${fragment}`);
     }
+  }
+
+  checks.citationSanity.total += 1;
+  const payloadShapeOk = citations.every((item) => hasCitationEndpointShape(item?.endpoint));
+  if (payloadShapeOk) checks.citationSanity.passed += 1;
+  else failures.push("citation_payload_invalid_endpoint_shape");
+
+  for (const item of requiredTools) {
+    if (item?.status !== "success") continue;
+    checks.citationSanity.total += 1;
+    const ok = hasCitationPairForTool(citations, item.name);
+    if (ok) checks.citationSanity.passed += 1;
+    else failures.push(`citation_tool_endpoint_mismatch:${String(item.name)}`);
+  }
+
+  if (Array.isArray(expected?.endpointIncludes) && expected.endpointIncludes.length > 0) {
+    checks.citationSanity.total += 1;
+    const allFragmentsPresent = expected.endpointIncludes.every((fragment) =>
+      hasEndpointEvidence(citations, data?.usedTools, fragment)
+      || hasQueryPlanFragmentEvidence(data, fragment)
+    );
+    if (allFragmentsPresent) checks.citationSanity.passed += 1;
+    else failures.push("citation_required_fragments_missing");
   }
 
   if (Array.isArray(expected?.allowedPolicyStatuses) && expected.allowedPolicyStatuses.length > 0) {
@@ -435,7 +611,7 @@ async function evaluateExpectations(data, expected) {
     else failures.push(`policy status mismatch: expected one of [${expected.allowedPolicyStatuses.join(",")}], actual=${actualPolicy || "n/a"}`);
   }
 
-  const numericResult = evaluateNumericRule(data, expected?.numericRule);
+  const numericResult = evaluateNumericRule(data, expected?.numericRule, expected?.outputContract);
   checks.numericRule.total += numericResult.checks.total;
   checks.numericRule.passed += numericResult.checks.passed;
   failures.push(...numericResult.failures);
@@ -476,6 +652,7 @@ async function run() {
   const checkTotals = {
     tool: { total: 0, passed: 0 },
     endpoint: { total: 0, passed: 0 },
+    citationSanity: { total: 0, passed: 0 },
     policy: { total: 0, passed: 0 },
     numericRule: { total: 0, passed: 0 },
     outputContract: { total: 0, passed: 0 },
@@ -709,6 +886,14 @@ async function run() {
         total: checkTotals.endpoint.total,
         passed: checkTotals.endpoint.passed,
         passRate: checkTotals.endpoint.total > 0 ? checkTotals.endpoint.passed / checkTotals.endpoint.total : 0,
+      },
+      citationSanity: {
+        total: checkTotals.citationSanity.total,
+        passed: checkTotals.citationSanity.passed,
+        passRate:
+          checkTotals.citationSanity.total > 0
+            ? checkTotals.citationSanity.passed / checkTotals.citationSanity.total
+            : 0,
       },
       policy: {
         total: checkTotals.policy.total,

@@ -85,7 +85,10 @@
     "contextCarryAccuracy": 0.9,
     "policySafetyRate": 0.99,
     "unsupportedClaimRateMax": 0.02,
-    "s1FailuresMax": 0
+    "s1FailuresMax": 0,
+    "toolBudgetCheckPassRate": 1.0,
+    "toolBudgetExceededTurnRateMax": 0.05,
+    "toolCircuitOpenTurnRateMax": 0.05
   },
   "driftThresholds": {
     "intentPassRate": {
@@ -113,10 +116,40 @@
       "warnBelow": 0.9,
       "criticalBelow": 0.85
     },
+    "citationSanityPassRate": {
+      "baseline": 0.98,
+      "warnBelow": 0.94,
+      "criticalBelow": 0.9
+    },
+    "toolBudgetPassRate": {
+      "baseline": 1.0,
+      "warnBelow": 0.98,
+      "criticalBelow": 0.95
+    },
     "realworldCitationCoveragePercent": {
       "baseline": 0.95,
       "warnBelow": 0.9,
       "criticalBelow": 0.85
+    },
+    "numericSymbolPassRate": {
+      "baseline": 0.8,
+      "warnBelow": 0.72,
+      "criticalBelow": 0.65
+    },
+    "numericRiskPassRate": {
+      "baseline": 0.72,
+      "warnBelow": 0.65,
+      "criticalBelow": 0.58
+    },
+    "numericValuationPassRate": {
+      "baseline": 0.68,
+      "warnBelow": 0.6,
+      "criticalBelow": 0.52
+    },
+    "numericFundamentalsPassRate": {
+      "baseline": 0.66,
+      "warnBelow": 0.58,
+      "criticalBelow": 0.5
     },
     "latencyP95Ms": {
       "baseline": 15000,
@@ -132,6 +165,21 @@
       "baseline": 0.25,
       "warnAbove": 0.35,
       "criticalAbove": 0.45
+    },
+    "budgetExceededTurnRate": {
+      "baseline": 0.0,
+      "warnAbove": 0.05,
+      "criticalAbove": 0.1
+    },
+    "circuitOpenTurnRate": {
+      "baseline": 0.0,
+      "warnAbove": 0.05,
+      "criticalAbove": 0.1
+    },
+    "unsupportedClaimRate": {
+      "baseline": 0.02,
+      "warnAbove": 0.04,
+      "criticalAbove": 0.06
     }
   },
   "stabilityThresholds": {

@@ -2,13 +2,14 @@
 
 <!-- AGENT_PROGRESS_AUTO_START -->
 ## Composer Agent Auto Sync
-- Generated: 2026-02-21T11:55:38.850Z
+- Generated: 2026-02-21T16:32:26.736Z
 - Tracker Updated At: 2026-02-21
-- Status: todo=2, in_progress=1, done=4, blocked=0
+- Status: todo=0, in_progress=0, done=7, blocked=0
 - Next Actions:
-  - Close AGT-05: CI/PR gate runs merge + integration + assistant stability suites with artifacts
-  - Start AGT-04: Reliability hardening (rate limit, retries, budgets)
+  - None
 <!-- AGENT_PROGRESS_AUTO_END -->
+
+
 
 ## Strategy Lab Track (2026-02-21)
 ### Completed
@@ -53,7 +54,7 @@
 
 ### Plan (Sprint-based)
 - Sprint 1 focus: AGT-00/01/02/03 (registry single source of truth, resilient execute dispatcher, executionMode metadata, composer UX polish).
-- Sprint 2 focus: AGT-04/05/06 (reliability budgets + stable/automated eval & release gates; expand numeric fidelity beyond backtest).
+- Sprint 2 focus: AGT-04/05 (reliability budgets + stable/automated eval & release gates; expand numeric fidelity beyond backtest).
 
 ## Composer Agent Track (2026-02-20)
 ### Planning and Tracking

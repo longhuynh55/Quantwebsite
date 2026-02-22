@@ -351,9 +351,63 @@ function hasAnyCitationEndpoint(citations, fragment) {
   );
 }
 
+const toolEndpointHints = {
+  stockSnapshot: ["/api/stocks"],
+  fundamentalSnapshot: ["/api/fundamentals"],
+  fundamentalAnalysis: ["/api/finance-analysis"],
+  financialHealthScore: ["/api/finance-analysis"],
+  valuationDcf: ["/api/finance-analysis"],
+  peerMultiples: ["/api/finance-analysis"],
+  scenarioSensitivity: ["/api/finance-analysis"],
+  riskSnapshot: ["/api/risk"],
+  backtestSummary: ["/api/backtesting"],
+  factorSnapshot: ["/api/factors"],
+  marketSnapshot: ["/api/market-overview"],
+  valuationRanking: ["/api/analytics/valuation-rankings"],
+  icbSnapshot: ["/api/analytics/icb-snapshot"],
+  dataHealth: ["/api/health/data"],
+};
+
+function hasCitationEndpointShape(endpoint) {
+  return typeof endpoint === "string" && endpoint.includes("/api/");
+}
+
+function hasCitationPairForTool(citations, toolName) {
+  const hints = toolEndpointHints[String(toolName ?? "")] ?? [];
+  if (hints.length === 0) return true;
+  if (!Array.isArray(citations) || citations.length === 0) return false;
+  return hints.some((hint) => citations.some((item) => String(item?.endpoint ?? "").includes(hint)));
+}
+
 function countExecutedToolCalls(usedTools) {
   if (!Array.isArray(usedTools)) return 0;
   return usedTools.filter((item) => item && item.status !== "skipped").length;
+}
+
+function extractRuntimeGuardSignals(usedTools) {
+  if (!Array.isArray(usedTools) || usedTools.length === 0) {
+    return {
+      skippedCount: 0,
+      budgetExceededCount: 0,
+      circuitOpenCount: 0,
+    };
+  }
+  let skippedCount = 0;
+  let budgetExceededCount = 0;
+  let circuitOpenCount = 0;
+  for (const tool of usedTools) {
+    if (!tool || typeof tool !== "object") continue;
+    const status = String(tool.status ?? "");
+    if (status === "skipped") skippedCount += 1;
+    const errorCode = String(tool.errorCode ?? "");
+    if (errorCode === "tool_budget_exceeded") budgetExceededCount += 1;
+    if (errorCode === "tool_circuit_open") circuitOpenCount += 1;
+  }
+  return {
+    skippedCount,
+    budgetExceededCount,
+    circuitOpenCount,
+  };
 }
 
 function normalizeForMatch(value) {
@@ -531,6 +585,9 @@ async function evaluateExpectations(data, expected) {
   let evidenceChecksPassed = 0;
   let oracleChecks = 0;
   let oracleChecksPassed = 0;
+  let citationSanityChecks = 0;
+  let citationSanityChecksPassed = 0;
+  const citations = Array.isArray(data?.citations) ? data.citations : [];
 
   if (expected?.requiredTool) {
     toolChecks += 1;
@@ -551,6 +608,36 @@ async function evaluateExpectations(data, expected) {
       } else {
         failures.push(`missing citation endpoint fragment: ${fragment}`);
       }
+    }
+  }
+
+  citationSanityChecks += 1;
+  const payloadShapeOk = citations.every((item) => hasCitationEndpointShape(item?.endpoint));
+  if (payloadShapeOk) {
+    citationSanityChecksPassed += 1;
+  } else {
+    failures.push("citation_payload_invalid_endpoint_shape");
+  }
+
+  if (expected?.requiredTool?.status === "success") {
+    citationSanityChecks += 1;
+    const pairingOk = hasCitationPairForTool(citations, expected.requiredTool.name);
+    if (pairingOk) {
+      citationSanityChecksPassed += 1;
+    } else {
+      failures.push(`citation_tool_endpoint_mismatch:${expected.requiredTool.name}`);
+    }
+  }
+
+  if (Array.isArray(expected?.endpointIncludes) && expected.endpointIncludes.length > 0) {
+    citationSanityChecks += 1;
+    const fragmentsOk = expected.endpointIncludes.every((fragment) =>
+      hasAnyCitationEndpoint(citations, fragment)
+    );
+    if (fragmentsOk) {
+      citationSanityChecksPassed += 1;
+    } else {
+      failures.push("citation_required_fragments_missing");
     }
   }
 
@@ -668,6 +755,8 @@ async function evaluateExpectations(data, expected) {
     evidenceChecksPassed,
     oracleChecks,
     oracleChecksPassed,
+    citationSanityChecks,
+    citationSanityChecksPassed,
   };
 }
 
@@ -710,8 +799,16 @@ async function run() {
   let evidenceChecksPassed = 0;
   let oracleChecks = 0;
   let oracleChecksPassed = 0;
+  let citationSanityChecks = 0;
+  let citationSanityChecksPassed = 0;
   let toolBudgetChecks = 0;
   let toolBudgetChecksPassed = 0;
+  let totalSkippedToolCalls = 0;
+  let totalBudgetExceededToolCalls = 0;
+  let totalCircuitOpenToolCalls = 0;
+  let turnsWithSkippedTools = 0;
+  let turnsWithBudgetExceeded = 0;
+  let turnsWithCircuitOpen = 0;
   const latencySamples = [];
   const toolCallSamples = [];
 
@@ -748,9 +845,18 @@ async function run() {
         evidenceChecksPassed += expectation.evidenceChecksPassed;
         oracleChecks += expectation.oracleChecks;
         oracleChecksPassed += expectation.oracleChecksPassed;
+        citationSanityChecks += expectation.citationSanityChecks;
+        citationSanityChecksPassed += expectation.citationSanityChecksPassed;
 
         const toolCallCount = countExecutedToolCalls(call.data?.usedTools);
         toolCallSamples.push(toolCallCount);
+        const runtimeGuards = extractRuntimeGuardSignals(call.data?.usedTools);
+        totalSkippedToolCalls += runtimeGuards.skippedCount;
+        totalBudgetExceededToolCalls += runtimeGuards.budgetExceededCount;
+        totalCircuitOpenToolCalls += runtimeGuards.circuitOpenCount;
+        if (runtimeGuards.skippedCount > 0) turnsWithSkippedTools += 1;
+        if (runtimeGuards.budgetExceededCount > 0) turnsWithBudgetExceeded += 1;
+        if (runtimeGuards.circuitOpenCount > 0) turnsWithCircuitOpen += 1;
         toolBudgetChecks += 1;
         if (toolCallCount <= maxToolCallsPerTurn) {
           toolBudgetChecksPassed += 1;
@@ -779,6 +885,7 @@ async function run() {
           queryIntent: call.data?.meta?.queryIntent ?? null,
           queryPlanSummary: call.data?.meta?.queryPlanSummary ?? null,
           tools: summarizeTools(call.data?.usedTools),
+          runtimeGuards,
           failures: responseOk ? expectation.failures : [`assistant HTTP/status failure: ${call.response.status}`],
         };
 
@@ -800,6 +907,11 @@ async function run() {
           queryIntent: null,
           queryPlanSummary: null,
           tools: "none",
+          runtimeGuards: {
+            skippedCount: 0,
+            budgetExceededCount: 0,
+            circuitOpenCount: 0,
+          },
           failures: [`request failed: ${message}`],
         };
       }
@@ -866,11 +978,28 @@ async function run() {
         passed: oracleChecksPassed,
         passRate: oracleChecks > 0 ? oracleChecksPassed / oracleChecks : 0,
       },
+      citationSanity: {
+        total: citationSanityChecks,
+        passed: citationSanityChecksPassed,
+        passRate:
+          citationSanityChecks > 0 ? citationSanityChecksPassed / citationSanityChecks : 0,
+      },
       toolBudget: {
         total: toolBudgetChecks,
         passed: toolBudgetChecksPassed,
         passRate: toolBudgetChecks > 0 ? toolBudgetChecksPassed / toolBudgetChecks : 0,
         maxPerTurn: maxToolCallsPerTurn,
+      },
+      runtimeGuards: {
+        skippedToolCalls: totalSkippedToolCalls,
+        budgetExceededToolCalls: totalBudgetExceededToolCalls,
+        circuitOpenToolCalls: totalCircuitOpenToolCalls,
+        turnsWithSkippedTools,
+        turnsWithBudgetExceeded,
+        turnsWithCircuitOpen,
+        skippedTurnRate: totalTurns > 0 ? turnsWithSkippedTools / totalTurns : 0,
+        budgetExceededTurnRate: totalTurns > 0 ? turnsWithBudgetExceeded / totalTurns : 0,
+        circuitOpenTurnRate: totalTurns > 0 ? turnsWithCircuitOpen / totalTurns : 0,
       },
     },
     performance: {

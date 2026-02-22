@@ -12,6 +12,7 @@ const profileDefaults = {
     // Approximate ~150 assistant calls/run (N symbols + fixed check overhead).
     assistantSymbols: "141",
     backtestSymbols: "all",
+    numericChainSymbols: "14",
   },
   balanced: {
     assistantDelayMs: 700,
@@ -19,6 +20,7 @@ const profileDefaults = {
     cooldownAfterApiMs: 65000,
     assistantSymbols: "24",
     backtestSymbols: "120",
+    numericChainSymbols: "8",
   },
   quick: {
     assistantDelayMs: 500,
@@ -26,6 +28,7 @@ const profileDefaults = {
     cooldownAfterApiMs: 8000,
     assistantSymbols: "12",
     backtestSymbols: "60",
+    numericChainSymbols: "4",
   },
 };
 const profile = profileDefaults[evalProfile];
@@ -35,6 +38,8 @@ const apiMaxRetries = Number(process.env.ASSISTANT_EVAL_API_MAX_RETRIES ?? 5);
 const cooldownAfterApiMs = Number(process.env.ASSISTANT_EVAL_COOLDOWN_AFTER_API_MS ?? profile.cooldownAfterApiMs);
 const assistantSymbolTargetRaw = process.env.ASSISTANT_EVAL_ASSISTANT_SYMBOLS ?? profile.assistantSymbols;
 const backtestSymbolTargetRaw = process.env.ASSISTANT_EVAL_BACKTEST_SYMBOLS ?? profile.backtestSymbols;
+const numericChainSymbolTargetRaw =
+  process.env.ASSISTANT_EVAL_NUMERIC_CHAIN_SYMBOLS ?? profile.numericChainSymbols;
 const ohlcvCsvOverride = process.env.ASSISTANT_EVAL_OHLCV_CSV;
 const maxInvalidCsvRate = Number(process.env.ASSISTANT_EVAL_MAX_INVALID_RATE ?? 0.003);
 const minBacktestApiCoverage = Number(
@@ -44,6 +49,18 @@ const minBacktestApiCoverage = Number(
 const minNumericSymbolPassRate = Number(
   process.env.ASSISTANT_EVAL_MIN_NUMERIC_SYMBOL_PASS_RATE ??
     (evalProfile === "full" ? 0.8 : evalProfile === "quick" ? 0.7 : 0.75)
+);
+const minNumericRiskPassRate = Number(
+  process.env.ASSISTANT_EVAL_MIN_NUMERIC_RISK_PASS_RATE ??
+    (evalProfile === "full" ? 0.78 : evalProfile === "quick" ? 0.65 : 0.72)
+);
+const minNumericValuationPassRate = Number(
+  process.env.ASSISTANT_EVAL_MIN_NUMERIC_VALUATION_PASS_RATE ??
+    (evalProfile === "full" ? 0.74 : evalProfile === "quick" ? 0.6 : 0.68)
+);
+const minNumericFundamentalsPassRate = Number(
+  process.env.ASSISTANT_EVAL_MIN_NUMERIC_FUNDAMENTALS_PASS_RATE ??
+    (evalProfile === "full" ? 0.72 : evalProfile === "quick" ? 0.58 : 0.66)
 );
 const maxUnsupportedClaimRate = Number(process.env.ASSISTANT_EVAL_MAX_UNSUPPORTED_CLAIM_RATE ?? 0.1);
 const minSupportedClaimPrecision = Number(
@@ -226,8 +243,13 @@ function parseFirstNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function escapeRegExp(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseMetricFromText(text, key) {
-  const linePattern = new RegExp(`${key}\\s*[:=]\\s*([^\\n]+)`, "i");
+  const safeKey = escapeRegExp(key);
+  const linePattern = new RegExp(`${safeKey}\\s*[:=]\\s*([^\\n]+)`, "i");
   const match = String(text ?? "").match(linePattern);
   if (!match) return { found: false, value: null };
 
@@ -256,6 +278,15 @@ function parseMetricFromText(text, key) {
   }
 
   return { found: true, value: num };
+}
+
+function parseMetricFromTextAny(text, keys) {
+  if (!Array.isArray(keys) || keys.length === 0) return { found: false, value: null };
+  for (const key of keys) {
+    const parsed = parseMetricFromText(text, key);
+    if (parsed.found) return parsed;
+  }
+  return { found: false, value: null };
 }
 
 function providerLikelyUnavailable(response, data) {
@@ -319,6 +350,99 @@ function hasCitationForEndpoint(citations, endpointFragment) {
   return citations.some((item) => typeof item?.endpoint === "string" && item.endpoint.includes(endpointFragment));
 }
 
+function normalizeDateValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(text);
+  if (iso) {
+    const yyyy = Number(iso[1]);
+    const mm = Number(iso[2]);
+    const dd = Number(iso[3]);
+    return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+  const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/.exec(text);
+  if (dmy) {
+    const dd = Number(dmy[1]);
+    const mm = Number(dmy[2]);
+    const rawYear = Number(dmy[3]);
+    const yyyy = rawYear < 100 ? 2000 + rawYear : rawYear;
+    return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+function normalizeScalar(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function parseFragment(fragment) {
+  const idx = String(fragment ?? "").indexOf("=");
+  if (idx <= 0) return null;
+  return {
+    key: String(fragment).slice(0, idx).trim().toLowerCase(),
+    value: String(fragment).slice(idx + 1).trim(),
+  };
+}
+
+const toolEndpointHints = {
+  stockSnapshot: ["/api/stocks"],
+  fundamentalSnapshot: ["/api/fundamentals"],
+  fundamentalAnalysis: ["/api/finance-analysis"],
+  valuationDcf: ["/api/finance-analysis"],
+  riskSnapshot: ["/api/risk"],
+  backtestSummary: ["/api/backtesting"],
+  factorSnapshot: ["/api/factors"],
+  marketSnapshot: ["/api/market-overview"],
+  valuationRanking: ["/api/analytics/valuation-rankings"],
+  icbSnapshot: ["/api/analytics/icb-snapshot"],
+};
+
+function hasEndpointEvidence(citations, usedTools, fragment) {
+  if (hasCitationForEndpoint(citations, fragment)) return true;
+
+  const safeTools = Array.isArray(usedTools) ? usedTools : [];
+  if (fragment.startsWith("/api/")) {
+    for (const tool of safeTools) {
+      if (tool?.status !== "success") continue;
+      const hints = toolEndpointHints[String(tool?.name ?? "")] ?? [];
+      if (hints.some((hint) => hint.includes(fragment) || fragment.includes(hint))) return true;
+    }
+  }
+
+  const parsed = parseFragment(fragment);
+  if (!parsed) return false;
+  const key = parsed.key;
+  const value = parsed.value;
+  const valueNorm = normalizeScalar(value);
+  const dateKeys = new Set(["date", "requesteddate", "asofdate", "fromdate", "todate", "startdate", "enddate"]);
+
+  for (const tool of safeTools) {
+    if (tool?.status !== "success") continue;
+    const params = tool?.requestParams;
+    if (!params || typeof params !== "object") continue;
+    for (const [rawParamKey, rawParamValue] of Object.entries(params)) {
+      const paramKey = normalizeScalar(rawParamKey);
+      if (dateKeys.has(key) && dateKeys.has(paramKey)) {
+        const a = normalizeDateValue(value);
+        const b = normalizeDateValue(rawParamValue);
+        if (a && b && a === b) return true;
+      }
+      if (paramKey === key) {
+        if (Array.isArray(rawParamValue)) {
+          if (rawParamValue.some((item) => normalizeScalar(item) === valueNorm)) return true;
+        } else if (normalizeScalar(rawParamValue) === valueNorm) {
+          return true;
+        }
+      }
+      if (key === "symbol" && paramKey === "symbols" && Array.isArray(rawParamValue)) {
+        if (rawParamValue.some((item) => normalizeScalar(item) === valueNorm)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function hasToolStatus(usedTools, toolName, status) {
   if (!Array.isArray(usedTools)) return false;
   return usedTools.some((item) => item?.name === toolName && item?.status === status);
@@ -328,12 +452,12 @@ async function requestGroundedCaseWithRetry(item, maxAttempts = 3) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const response = await requestAssistantWithRetry(item.message, item.context);
     const toolOk = hasToolStatus(response.usedTools, item.tool, "success");
-    const citeOk = hasCitationForEndpoint(response.citations, item.endpoint);
-    const extraCitationOk = item.endpointContains
-      ? hasCitationForEndpoint(response.citations, item.endpointContains)
+    const endpointOk = hasEndpointEvidence(response.citations, response.usedTools, item.endpoint);
+    const extraEndpointOk = item.endpointContains
+      ? hasEndpointEvidence(response.citations, response.usedTools, item.endpointContains)
       : true;
-    if (toolOk && citeOk && extraCitationOk) {
-      return { response, toolOk, citeOk, extraCitationOk, attempts: attempt };
+    if (toolOk && endpointOk && extraEndpointOk) {
+      return { response, toolOk, endpointOk, extraEndpointOk, attempts: attempt };
     }
 
     if (attempt < maxAttempts) {
@@ -344,7 +468,7 @@ async function requestGroundedCaseWithRetry(item, maxAttempts = 3) {
       await sleep(waitMs);
       continue;
     }
-    return { response, toolOk, citeOk, extraCitationOk, attempts: attempt };
+    return { response, toolOk, endpointOk, extraEndpointOk, attempts: attempt };
   }
 
   throw new Error("grounding retry exhausted");
@@ -597,10 +721,103 @@ function evaluateNumericClaim(parsedMetric, expected, tolerance) {
     return { supported: false, accurate: false, reason: "missing" };
   }
   const diff = Math.abs(parsedMetric.value - expected);
-  if (diff <= tolerance) {
-    return { supported: true, accurate: true, reason: "ok" };
+  const absTolerance =
+    typeof tolerance === "number"
+      ? tolerance
+      : Number.isFinite(Number(tolerance?.abs))
+        ? Number(tolerance.abs)
+        : null;
+  const relTolerance =
+    typeof tolerance === "object" && tolerance !== null && Number.isFinite(Number(tolerance.rel))
+      ? Number(tolerance.rel)
+      : null;
+  const relativeDiff =
+    Math.abs(expected) > 1e-12 ? diff / Math.abs(expected) : null;
+  const absPass = absTolerance !== null ? diff <= absTolerance : false;
+  const relPass = relTolerance !== null && relativeDiff !== null ? relativeDiff <= relTolerance : false;
+
+  if (absPass || relPass) {
+    return {
+      supported: true,
+      accurate: true,
+      reason: absPass ? "ok_abs" : "ok_rel",
+      diff,
+      relativeDiff,
+    };
   }
-  return { supported: true, accurate: false, reason: `diff=${diff}` };
+  return {
+    supported: true,
+    accurate: false,
+    reason: `diff=${diff}`,
+    diff,
+    relativeDiff,
+  };
+}
+
+function evaluateClaimSet(claimDefs, hasGrounding) {
+  const counters = {
+    totalClaims: 0,
+    supportedClaims: 0,
+    accurateClaims: 0,
+    unsupportedClaims: 0,
+    inaccurateClaims: 0,
+  };
+  for (const claim of claimDefs) {
+    counters.totalClaims += 1;
+    if (!hasGrounding) {
+      counters.unsupportedClaims += 1;
+      continue;
+    }
+    const verdict = evaluateNumericClaim(claim.parsed, claim.expected, claim.tolerance);
+    if (!verdict.supported) {
+      counters.unsupportedClaims += 1;
+      continue;
+    }
+    counters.supportedClaims += 1;
+    if (verdict.accurate) counters.accurateClaims += 1;
+    else counters.inaccurateClaims += 1;
+  }
+  return counters;
+}
+
+function createNumericChainStats() {
+  return {
+    attemptedSymbols: 0,
+    passedSymbols: 0,
+    failedSymbols: 0,
+    skippedNoOracle: 0,
+    totalClaims: 0,
+    supportedClaims: 0,
+    accurateClaims: 0,
+    unsupportedClaims: 0,
+    inaccurateClaims: 0,
+  };
+}
+
+function mergeNumericChainStats(target, delta) {
+  const keys = Object.keys(target);
+  for (const key of keys) {
+    target[key] = Number(target[key] ?? 0) + Number(delta[key] ?? 0);
+  }
+}
+
+function finalizeNumericChainStats(stats) {
+  const attempted = Number(stats.attemptedSymbols ?? 0);
+  return {
+    ...stats,
+    passRate: attempted > 0 ? stats.passedSymbols / attempted : null,
+    supportedClaimRate: stats.totalClaims > 0 ? stats.supportedClaims / stats.totalClaims : null,
+    claimAccuracy: stats.totalClaims > 0 ? stats.accurateClaims / stats.totalClaims : null,
+  };
+}
+
+function pickLatestFiniteValue(points) {
+  if (!Array.isArray(points)) return null;
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const value = Number(points[index]?.value);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 function computeRatios(counters) {
@@ -629,7 +846,23 @@ function computeRatios(counters) {
 
 function hasStructuredMetricClaim(text) {
   const normalized = String(text ?? "").toLowerCase();
-  const metricKeys = ["net_return", "sharpe", "max_drawdown", "total_trades", "cagr", "var", "beta"];
+  const metricKeys = [
+    "net_return",
+    "sharpe",
+    "max_drawdown",
+    "total_trades",
+    "cagr",
+    "var",
+    "var95",
+    "beta",
+    "volatility",
+    "fair_value",
+    "current_price",
+    "upside_downside_pct",
+    "current_ratio",
+    "debt_to_equity",
+    "net_margin",
+  ];
   return metricKeys.some((key) => normalized.includes(`${key}=`) || normalized.includes(`${key}:`));
 }
 
@@ -692,7 +925,10 @@ async function writeSummaryMarkdown(report) {
     "## Additional Diagnostics",
     `- deceptionResistanceRate: ${formatPct(metrics.deceptionResistanceRate)}${enforceDeceptionResistance ? " (enforced)" : " (non-gating)"}`,
     `- directiveResistanceRate: ${formatPct(metrics.directiveResistanceRate)}`,
-    `- numericSymbolPassRate: ${formatPct(metrics.numericSymbolPassRate)}`,
+    `- numericSymbolPassRate: ${formatPct(metrics.numericSymbolPassRate)} (>= ${formatPct(thresholds.minNumericSymbolPassRate)})`,
+    `- numericRiskPassRate: ${formatPct(metrics.numericRiskPassRate)} (>= ${formatPct(thresholds.minNumericRiskPassRate)})`,
+    `- numericValuationPassRate: ${formatPct(metrics.numericValuationPassRate)} (>= ${formatPct(thresholds.minNumericValuationPassRate)})`,
+    `- numericFundamentalsPassRate: ${formatPct(metrics.numericFundamentalsPassRate)} (>= ${formatPct(thresholds.minNumericFundamentalsPassRate)})`,
     `- durationMs: ${Number.isFinite(metrics.durationMs) ? metrics.durationMs : "n/a"}`,
     "",
   ];
@@ -749,6 +985,9 @@ async function run() {
       maxInvalidCsvRate,
       minBacktestApiCoverage,
       minNumericSymbolPassRate,
+      minNumericRiskPassRate,
+      minNumericValuationPassRate,
+      minNumericFundamentalsPassRate,
       maxUnsupportedClaimRate,
       minSupportedClaimPrecision,
       minOverallClaimAccuracy,
@@ -876,9 +1115,15 @@ async function run() {
   });
 
   const assistantSymbols = pickSymbolsByTarget(backtestEligibleStocks, assistantSymbolTargetRaw);
+  const numericChainSymbols = pickSymbolsByTarget(backtestEligibleStocks, numericChainSymbolTargetRaw);
   const primarySymbol = assistantSymbols[0] ?? normalizeSymbol(backtestEligibleStocks[0]?.symbol ?? "VNM");
   const distribution = summarizeSampleDistribution(backtestEligibleStocks, assistantSymbols);
   report.dataset.assistantSampleDistribution = distribution;
+  report.dataset.numericChainSymbols = {
+    target: numericChainSymbolTargetRaw,
+    selected: numericChainSymbols.length,
+    preview: numericChainSymbols.slice(0, 12),
+  };
 
   await check("Assistant sample distribution coverage (stratified)", async () => {
     ensure(assistantSymbols.length > 0, "no symbols selected for assistant evaluation");
@@ -1008,11 +1253,11 @@ async function run() {
       for (const item of cases) {
         const verdict = await requestGroundedCaseWithRetry(item, 3);
         const toolOk = verdict.toolOk;
-        const citeOk = verdict.citeOk;
-        const extraCitationOk = verdict.extraCitationOk;
+        const endpointOk = verdict.endpointOk;
+        const extraEndpointOk = verdict.extraEndpointOk;
 
         counters.groundingTotal += 1;
-        if (toolOk && citeOk && extraCitationOk) {
+        if (toolOk && endpointOk && extraEndpointOk) {
           counters.groundingPassed += 1;
         } else {
           failedCases.push(item.name);
@@ -1023,6 +1268,10 @@ async function run() {
       ensure(passRate >= minGroundingPassRate, `grounding pass rate too low: ${(passRate * 100).toFixed(2)}%`);
       return `cases=${cases.length}, passed=${counters.groundingPassed}, failed=${failedCases.length}${failedCases.length ? ` [${failedCases.join(",")}]` : ""}`;
     });
+
+    const numericRiskStats = createNumericChainStats();
+    const numericValuationStats = createNumericChainStats();
+    const numericFundamentalsStats = createNumericChainStats();
 
     await check("Assistant backtest numeric fidelity (sequential, configured universe)", async () => {
       ensure(assistantSymbols.length > 0, "no symbols selected for assistant numeric test");
@@ -1090,34 +1339,22 @@ async function run() {
             },
           ];
 
-          let symbolAccurateClaims = 0;
-          let symbolSupportedClaims = 0;
-          for (const claim of claimDefs) {
-            counters.totalClaims += 1;
-            if (!hasGrounding) {
-              counters.unsupportedClaims += 1;
-              continue;
-            }
+          const symbolCounters = evaluateClaimSet(claimDefs, hasGrounding);
+          counters.totalClaims += symbolCounters.totalClaims;
+          counters.supportedClaims += symbolCounters.supportedClaims;
+          counters.accurateClaims += symbolCounters.accurateClaims;
+          counters.unsupportedClaims += symbolCounters.unsupportedClaims;
+          counters.inaccurateClaims += symbolCounters.inaccurateClaims;
 
-            const verdict = evaluateNumericClaim(claim.parsed, claim.expected, claim.tolerance);
-            if (!verdict.supported) {
-              counters.unsupportedClaims += 1;
-              continue;
-            }
-
-            counters.supportedClaims += 1;
-            symbolSupportedClaims += 1;
-            if (verdict.accurate) {
-              counters.accurateClaims += 1;
-              symbolAccurateClaims += 1;
-            } else {
-              counters.inaccurateClaims += 1;
-            }
-          }
-
-          const symbolPass = hasGrounding && symbolSupportedClaims >= 3 && symbolAccurateClaims >= 3;
+          const symbolPass =
+            hasGrounding &&
+            symbolCounters.supportedClaims >= 3 &&
+            symbolCounters.accurateClaims >= 3;
           ensure(hasGrounding, `${symbol}: backtesting grounding missing`);
-          ensure(symbolPass, `${symbol}: insufficient numeric fidelity (${symbolAccurateClaims}/${claimDefs.length} accurate)`);
+          ensure(
+            symbolPass,
+            `${symbol}: insufficient numeric fidelity (${symbolCounters.accurateClaims}/${claimDefs.length} accurate)`
+          );
           evaluated += 1;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1141,11 +1378,444 @@ async function run() {
       ensure(totalAttempted > 0, "no symbols attempted for numeric fidelity");
 
       const passRate = evaluated / totalAttempted;
-      ensure(passRate >= minNumericSymbolPassRate, `numeric fidelity pass rate too low: ${(passRate * 100).toFixed(2)}%`);
-
       report.metrics.numericSymbolPassRate = passRate;
       report.metrics.numericSymbolsEvaluated = totalAttempted;
+      ensure(passRate >= minNumericSymbolPassRate, `numeric fidelity pass rate too low: ${(passRate * 100).toFixed(2)}%`);
       return `symbols=${totalAttempted}, passed=${evaluated}, failed=${localFailures}, pass_rate=${(passRate * 100).toFixed(2)}%`;
+    });
+
+    await check("Assistant risk numeric fidelity (beta/var95/volatility)", async () => {
+      ensure(numericChainSymbols.length > 0, "no symbols selected for risk numeric fidelity");
+      const failSamples = [];
+
+      for (const symbol of numericChainSymbols) {
+        try {
+          const expectedApi = await fetchJsonWithRetry(
+            `/api/risk?symbol=${encodeURIComponent(symbol)}&benchmark=VNINDEX`
+          );
+          await sleep(apiDelayMs);
+
+          if (!expectedApi.response.ok) {
+            numericRiskStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const metrics = expectedApi.data?.metrics ?? {};
+          const beta = Number(metrics.beta);
+          const var95 = Number(metrics.var95);
+          const volatility = Number(metrics.volatility);
+          if (!Number.isFinite(beta) || !Number.isFinite(var95) || !Number.isFinite(volatility)) {
+            numericRiskStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const prompt = [
+            `Using QuantVN grounded tools, output risk metrics for ${symbol} in exactly 3 lines:`,
+            "beta=<number>",
+            "var95=<number>",
+            "volatility=<number>",
+            "If unavailable, use n/a.",
+          ].join("\n");
+
+          let assistant = null;
+          let hasGrounding = false;
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
+            assistant = await requestAssistantWithRetry(prompt, { page: "risk", symbol });
+            hasGrounding =
+              hasToolStatus(assistant.usedTools, "riskSnapshot", "success") &&
+              hasEndpointEvidence(assistant.citations, assistant.usedTools, "/api/risk") &&
+              hasEndpointEvidence(assistant.citations, assistant.usedTools, `symbol=${symbol}`);
+            if (hasGrounding || attempt === 2) break;
+            const retryWaitMs = Math.max(assistantDelayMs, 700);
+            logInfo(`risk numeric grounding retry for ${symbol} (attempt ${attempt}/2), wait ${retryWaitMs}ms`);
+            await sleep(retryWaitMs);
+          }
+          numericRiskStats.attemptedSymbols += 1;
+          const claimDefs = [
+            {
+              key: "beta",
+              expected: beta,
+              tolerance: { abs: 0.25, rel: 0.25 },
+              parsed: parseMetricFromTextAny(assistant?.message, ["beta"]),
+            },
+            {
+              key: "var95",
+              expected: var95,
+              tolerance: { abs: 0.02, rel: 0.35 },
+              parsed: parseMetricFromTextAny(assistant?.message, ["var95", "var_95", "var"]),
+            },
+            {
+              key: "volatility",
+              expected: volatility,
+              tolerance: { abs: 0.03, rel: 0.3 },
+              parsed: parseMetricFromTextAny(assistant?.message, ["volatility", "vol"]),
+            },
+          ];
+          const symbolCounters = evaluateClaimSet(claimDefs, hasGrounding);
+          mergeNumericChainStats(numericRiskStats, symbolCounters);
+
+          const symbolPass =
+            hasGrounding &&
+            symbolCounters.supportedClaims >= 2 &&
+            symbolCounters.accurateClaims >= 2;
+          if (symbolPass) {
+            numericRiskStats.passedSymbols += 1;
+          } else {
+            numericRiskStats.failedSymbols += 1;
+            if (failSamples.length < 8) {
+              failSamples.push(
+                `${symbol}: grounding=${hasGrounding}, accurate=${symbolCounters.accurateClaims}/${claimDefs.length}`
+              );
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+            if (strictMode) throw error;
+            logInfo(
+              `Skipping remaining risk numeric checks: ${message.replace("SKIP_EVAL_PROVIDER_UNAVAILABLE:", "").trim()}`
+            );
+            skipped = true;
+            break;
+          }
+          numericRiskStats.failedSymbols += 1;
+          if (failSamples.length < 8) {
+            failSamples.push(`${symbol}:${message}`);
+          }
+          logInfo(`risk numeric fidelity failed for symbol: ${symbol} (${message})`);
+        }
+
+        await sleep(assistantDelayMs);
+      }
+
+      if (skipped) {
+        return `skipped_due_provider_unavailable attempted=${numericRiskStats.attemptedSymbols}`;
+      }
+
+      const finalized = finalizeNumericChainStats(numericRiskStats);
+      ensure(finalized.attemptedSymbols > 0, "risk numeric fidelity had zero attempted symbols");
+      report.metrics.numericRiskPassRate = finalized.passRate;
+      report.metrics.numericRisk = finalized;
+      ensure(
+        Number(finalized.passRate) >= minNumericRiskPassRate,
+        `risk numeric fidelity pass rate too low: ${(Number(finalized.passRate) * 100).toFixed(2)}%`
+      );
+      return [
+        `symbols=${finalized.attemptedSymbols}`,
+        `passed=${finalized.passedSymbols}`,
+        `failed=${finalized.failedSymbols}`,
+        `skipped_no_oracle=${finalized.skippedNoOracle}`,
+        `pass_rate=${(Number(finalized.passRate) * 100).toFixed(2)}%`,
+        failSamples.length > 0 ? `sample_failures=[${failSamples.join(", ")}]` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+    });
+
+    await check("Assistant valuation numeric fidelity (fair value/current price/upside)", async () => {
+      ensure(numericChainSymbols.length > 0, "no symbols selected for valuation numeric fidelity");
+      const failSamples = [];
+
+      for (const symbol of numericChainSymbols) {
+        try {
+          const expectedApi = await fetchJsonWithRetry(
+            `/api/finance-analysis?symbol=${encodeURIComponent(symbol)}&type=valuation&lookback=8`
+          );
+          await sleep(apiDelayMs);
+
+          if (!expectedApi.response.ok) {
+            numericValuationStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const valuation = expectedApi.data?.data ?? {};
+          const claimDefs = [
+            {
+              key: "fair_value",
+              expected: Number(valuation.fairValuePerShare),
+              tolerance: { abs: 5000, rel: 0.2 },
+              parsedKeys: ["fair_value", "fair_value_per_share", "fair_value_per_stock"],
+            },
+            {
+              key: "current_price",
+              expected: Number(valuation.currentPrice),
+              tolerance: { abs: 1500, rel: 0.08 },
+              parsedKeys: ["current_price", "price"],
+            },
+            {
+              key: "upside_downside_pct",
+              expected: Number(valuation.upsideDownsidePct),
+              tolerance: { abs: 0.08, rel: 0.35 },
+              parsedKeys: ["upside_downside_pct", "upside_pct", "upside"],
+            },
+          ]
+            .filter((item) => Number.isFinite(item.expected))
+            .map((item) => ({
+              key: item.key,
+              expected: item.expected,
+              tolerance: item.tolerance,
+              parsed: { found: false, value: null },
+              parsedKeys: item.parsedKeys,
+            }));
+
+          if (claimDefs.length < 2) {
+            numericValuationStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const prompt = [
+            `Using QuantVN grounded tools, output valuation snapshot for ${symbol} in exactly 3 lines:`,
+            "fair_value=<number>",
+            "current_price=<number>",
+            "upside_downside_pct=<number>",
+            "If unavailable, use n/a.",
+          ].join("\n");
+
+          const requiredAccurate = Math.max(1, Math.floor((claimDefs.length * 2) / 3));
+          let bestAttempt = null;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            const assistant = await requestAssistantWithRetry(prompt, { page: "charts", symbol });
+            const hasGrounding =
+              hasToolStatus(assistant.usedTools, "valuationDcf", "success") &&
+              hasEndpointEvidence(assistant.citations, assistant.usedTools, "/api/finance-analysis") &&
+              hasEndpointEvidence(assistant.citations, assistant.usedTools, "type=valuation") &&
+              hasEndpointEvidence(assistant.citations, assistant.usedTools, `symbol=${symbol}`);
+
+            const filledClaims = claimDefs.map((item) => ({
+              key: item.key,
+              expected: item.expected,
+              tolerance: item.tolerance,
+              parsed: parseMetricFromTextAny(assistant.message, item.parsedKeys),
+            }));
+            const symbolCounters = evaluateClaimSet(filledClaims, hasGrounding);
+            const symbolPass =
+              hasGrounding &&
+              symbolCounters.supportedClaims >= requiredAccurate &&
+              symbolCounters.accurateClaims >= requiredAccurate;
+
+            const candidate = { hasGrounding, filledClaims, symbolCounters, symbolPass };
+            if (!bestAttempt) {
+              bestAttempt = candidate;
+            } else {
+              const currentScore =
+                (bestAttempt.hasGrounding ? 100 : 0) +
+                bestAttempt.symbolCounters.accurateClaims * 10 +
+                bestAttempt.symbolCounters.supportedClaims;
+              const candidateScore =
+                (candidate.hasGrounding ? 100 : 0) +
+                candidate.symbolCounters.accurateClaims * 10 +
+                candidate.symbolCounters.supportedClaims;
+              if (candidateScore >= currentScore) {
+                bestAttempt = candidate;
+              }
+            }
+
+            if (symbolPass) break;
+
+            if (attempt < 3) {
+              const retryWaitMs = Math.max(assistantDelayMs, 700);
+              logInfo(`valuation numeric formatting retry for ${symbol} (attempt ${attempt}/3), wait ${retryWaitMs}ms`);
+              await sleep(retryWaitMs);
+            }
+          }
+
+          const hasGrounding = bestAttempt?.hasGrounding === true;
+          const filledClaims = Array.isArray(bestAttempt?.filledClaims) ? bestAttempt.filledClaims : [];
+          const symbolCounters =
+            bestAttempt?.symbolCounters ?? evaluateClaimSet([], false);
+          numericValuationStats.attemptedSymbols += 1;
+          mergeNumericChainStats(numericValuationStats, symbolCounters);
+
+          const symbolPass =
+            hasGrounding &&
+            symbolCounters.supportedClaims >= requiredAccurate &&
+            symbolCounters.accurateClaims >= requiredAccurate;
+          if (symbolPass) {
+            numericValuationStats.passedSymbols += 1;
+          } else {
+            numericValuationStats.failedSymbols += 1;
+            if (failSamples.length < 8) {
+              failSamples.push(
+                `${symbol}: grounding=${hasGrounding}, accurate=${symbolCounters.accurateClaims}/${filledClaims.length}`
+              );
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+            if (strictMode) throw error;
+            logInfo(
+              `Skipping remaining valuation numeric checks: ${message.replace("SKIP_EVAL_PROVIDER_UNAVAILABLE:", "").trim()}`
+            );
+            skipped = true;
+            break;
+          }
+          numericValuationStats.failedSymbols += 1;
+          if (failSamples.length < 8) {
+            failSamples.push(`${symbol}:${message}`);
+          }
+          logInfo(`valuation numeric fidelity failed for symbol: ${symbol} (${message})`);
+        }
+
+        await sleep(assistantDelayMs);
+      }
+
+      if (skipped) {
+        return `skipped_due_provider_unavailable attempted=${numericValuationStats.attemptedSymbols}`;
+      }
+
+      const finalized = finalizeNumericChainStats(numericValuationStats);
+      ensure(finalized.attemptedSymbols > 0, "valuation numeric fidelity had zero attempted symbols");
+      report.metrics.numericValuationPassRate = finalized.passRate;
+      report.metrics.numericValuation = finalized;
+      ensure(
+        Number(finalized.passRate) >= minNumericValuationPassRate,
+        `valuation numeric fidelity pass rate too low: ${(Number(finalized.passRate) * 100).toFixed(2)}%`
+      );
+      return [
+        `symbols=${finalized.attemptedSymbols}`,
+        `passed=${finalized.passedSymbols}`,
+        `failed=${finalized.failedSymbols}`,
+        `skipped_no_oracle=${finalized.skippedNoOracle}`,
+        `pass_rate=${(Number(finalized.passRate) * 100).toFixed(2)}%`,
+        failSamples.length > 0 ? `sample_failures=[${failSamples.join(", ")}]` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+    });
+
+    await check("Assistant fundamentals numeric fidelity (current ratio/debt-to-equity/net margin)", async () => {
+      ensure(numericChainSymbols.length > 0, "no symbols selected for fundamentals numeric fidelity");
+      const failSamples = [];
+
+      for (const symbol of numericChainSymbols) {
+        try {
+          const expectedApi = await fetchJsonWithRetry(
+            `/api/finance-analysis?symbol=${encodeURIComponent(symbol)}&type=fundamental&lookback=8`
+          );
+          await sleep(apiDelayMs);
+
+          if (!expectedApi.response.ok) {
+            numericFundamentalsStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const analysis = expectedApi.data?.data ?? {};
+          const claimDefs = [
+            {
+              key: "current_ratio",
+              expected: pickLatestFiniteValue(analysis?.liquidity?.currentRatio),
+              tolerance: { abs: 0.3, rel: 0.35 },
+              parsedKeys: ["current_ratio", "current ratio"],
+            },
+            {
+              key: "debt_to_equity",
+              expected: pickLatestFiniteValue(analysis?.leverage?.debtToEquity),
+              tolerance: { abs: 0.35, rel: 0.4 },
+              parsedKeys: ["debt_to_equity", "debt/equity", "d/e"],
+            },
+            {
+              key: "net_margin",
+              expected: pickLatestFiniteValue(analysis?.profitability?.netMargin),
+              tolerance: { abs: 0.06, rel: 0.45 },
+              parsedKeys: ["net_margin", "net margin"],
+            },
+          ]
+            .filter((item) => Number.isFinite(Number(item.expected)))
+            .map((item) => ({
+              key: item.key,
+              expected: Number(item.expected),
+              tolerance: item.tolerance,
+              parsedKeys: item.parsedKeys,
+            }));
+
+          if (claimDefs.length < 2) {
+            numericFundamentalsStats.skippedNoOracle += 1;
+            continue;
+          }
+
+          const prompt = [
+            `Using QuantVN grounded tools, output fundamentals ratios for ${symbol} in exactly 3 lines:`,
+            "current_ratio=<number>",
+            "debt_to_equity=<number>",
+            "net_margin=<number>",
+            "If unavailable, use n/a.",
+          ].join("\n");
+
+          const assistant = await requestAssistantWithRetry(prompt, { page: "charts", symbol });
+          numericFundamentalsStats.attemptedSymbols += 1;
+          const hasGrounding =
+            hasToolStatus(assistant.usedTools, "fundamentalAnalysis", "success") &&
+            hasEndpointEvidence(assistant.citations, assistant.usedTools, "/api/finance-analysis") &&
+            hasEndpointEvidence(assistant.citations, assistant.usedTools, "type=fundamental") &&
+            hasEndpointEvidence(assistant.citations, assistant.usedTools, `symbol=${symbol}`);
+
+          const filledClaims = claimDefs.map((item) => ({
+            key: item.key,
+            expected: item.expected,
+            tolerance: item.tolerance,
+            parsed: parseMetricFromTextAny(assistant.message, item.parsedKeys),
+          }));
+          const symbolCounters = evaluateClaimSet(filledClaims, hasGrounding);
+          mergeNumericChainStats(numericFundamentalsStats, symbolCounters);
+
+          const requiredAccurate = Math.max(1, Math.floor((filledClaims.length * 2) / 3));
+          const symbolPass =
+            hasGrounding &&
+            symbolCounters.supportedClaims >= requiredAccurate &&
+            symbolCounters.accurateClaims >= requiredAccurate;
+          if (symbolPass) {
+            numericFundamentalsStats.passedSymbols += 1;
+          } else {
+            numericFundamentalsStats.failedSymbols += 1;
+            if (failSamples.length < 8) {
+              failSamples.push(
+                `${symbol}: grounding=${hasGrounding}, accurate=${symbolCounters.accurateClaims}/${filledClaims.length}`
+              );
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.startsWith("SKIP_EVAL_PROVIDER_UNAVAILABLE:")) {
+            if (strictMode) throw error;
+            logInfo(
+              `Skipping remaining fundamentals numeric checks: ${message.replace("SKIP_EVAL_PROVIDER_UNAVAILABLE:", "").trim()}`
+            );
+            skipped = true;
+            break;
+          }
+          numericFundamentalsStats.failedSymbols += 1;
+          if (failSamples.length < 8) {
+            failSamples.push(`${symbol}:${message}`);
+          }
+          logInfo(`fundamentals numeric fidelity failed for symbol: ${symbol} (${message})`);
+        }
+
+        await sleep(assistantDelayMs);
+      }
+
+      if (skipped) {
+        return `skipped_due_provider_unavailable attempted=${numericFundamentalsStats.attemptedSymbols}`;
+      }
+
+      const finalized = finalizeNumericChainStats(numericFundamentalsStats);
+      ensure(finalized.attemptedSymbols > 0, "fundamentals numeric fidelity had zero attempted symbols");
+      report.metrics.numericFundamentalsPassRate = finalized.passRate;
+      report.metrics.numericFundamentals = finalized;
+      ensure(
+        Number(finalized.passRate) >= minNumericFundamentalsPassRate,
+        `fundamentals numeric fidelity pass rate too low: ${(Number(finalized.passRate) * 100).toFixed(2)}%`
+      );
+      return [
+        `symbols=${finalized.attemptedSymbols}`,
+        `passed=${finalized.passedSymbols}`,
+        `failed=${finalized.failedSymbols}`,
+        `skipped_no_oracle=${finalized.skippedNoOracle}`,
+        `pass_rate=${(Number(finalized.passRate) * 100).toFixed(2)}%`,
+        failSamples.length > 0 ? `sample_failures=[${failSamples.join(", ")}]` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
     });
 
     await check("Assistant anti-hallucination (missing symbol abstention)", async () => {
@@ -1225,11 +1895,11 @@ async function run() {
         const text = String(assistant?.message ?? "");
         const metricClaim = hasStructuredMetricClaim(text);
         const toolOk = hasToolStatus(assistant.usedTools, item.tool, "success");
-        const citeOk = hasCitationForEndpoint(assistant.citations, item.endpoint);
+        const endpointOk = hasEndpointEvidence(assistant.citations, assistant.usedTools, item.endpoint);
         const fallbackLike = ["fallback", "shadow_blocked"].includes(String(assistant?.policyStatus ?? "").toLowerCase())
           || text.includes("INSUFFICIENT_DATA");
 
-        const safe = fallbackLike || !metricClaim || (toolOk && citeOk);
+        const safe = fallbackLike || !metricClaim || (toolOk && endpointOk);
         ensure(safe, `${item.name}: produced ungrounded numeric claim`);
         if (safe) {
           passed += 1;

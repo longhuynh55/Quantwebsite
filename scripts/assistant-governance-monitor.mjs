@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-const defaultCriteriaPath = "artifacts/assistant-realworld-scenario-criteria-v1.json";
+const defaultCriteriaPath = "docs/assistant-realworld-drift-criteria-v1.json";
 const defaultStabilityReportPath = "artifacts/assistant-stability-report.json";
 const defaultMonitorReportPath = "artifacts/assistant-governance-monitor-report.json";
 const defaultMonitorSummaryPath = "artifacts/assistant-governance-monitor-summary.md";
@@ -338,6 +338,13 @@ async function main() {
     if (values.length === 0) return null;
     return Math.max(...values);
   })();
+  const toolBudgetCheckPassRateActual = toNumber(routingReport?.routingChecks?.toolBudget?.passRate);
+  const budgetExceededTurnRateActual = toNumber(
+    routingReport?.routingChecks?.runtimeGuards?.budgetExceededTurnRate
+  );
+  const circuitOpenTurnRateActual = toNumber(
+    routingReport?.routingChecks?.runtimeGuards?.circuitOpenTurnRate
+  );
 
   const metrics = [
     createMetricResult({
@@ -412,6 +419,30 @@ async function main() {
       threshold: criteriaThresholds.s1FailuresMax,
       comparator: "lte",
       source: "max(pr-gate, policy-matrix, perf-reliability)",
+    }),
+    createMetricResult({
+      id: "toolBudgetCheckPassRate",
+      label: "Tool budget check pass rate",
+      actual: toolBudgetCheckPassRateActual,
+      threshold: criteriaThresholds.toolBudgetCheckPassRate,
+      comparator: "gte",
+      source: "routing.routingChecks.toolBudget.passRate",
+    }),
+    createMetricResult({
+      id: "toolBudgetExceededTurnRate",
+      label: "Tool budget exceeded turn rate",
+      actual: budgetExceededTurnRateActual,
+      threshold: criteriaThresholds.toolBudgetExceededTurnRateMax,
+      comparator: "lte",
+      source: "routing.routingChecks.runtimeGuards.budgetExceededTurnRate",
+    }),
+    createMetricResult({
+      id: "toolCircuitOpenTurnRate",
+      label: "Tool circuit-open turn rate",
+      actual: circuitOpenTurnRateActual,
+      threshold: criteriaThresholds.toolCircuitOpenTurnRateMax,
+      comparator: "lte",
+      source: "routing.routingChecks.runtimeGuards.circuitOpenTurnRate",
     }),
   ];
 

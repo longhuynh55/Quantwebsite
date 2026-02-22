@@ -11,9 +11,9 @@
 | AGT-01 | done | Backend | P0 | Execute dispatcher: secure + resilient |
 | AGT-02 | done | Backend + Frontend | P1 | Assistant orchestration mode metadata |
 | AGT-03 | done | Frontend + Backend | P1 | Composer workflow integration (plan -> approve -> execute) |
-| AGT-04 | todo | Backend + QA | P0 | Reliability hardening (rate limit, retries, budgets) |
-| AGT-05 | in_progress | QA + Product | P0 | Eval + release gates (stable and automated) |
-| AGT-06 | todo | QA + Product | P0 | Numeric fidelity expansion (beyond backtest) |
+| AGT-04 | done | Backend + QA | P0 | Reliability hardening (rate limit, retries, budgets) |
+| AGT-05 | done | QA + Product | P0 | Eval + release gates (stable and automated) |
+| AGT-06 | done | QA + Product | P0 | Numeric fidelity expansion (beyond backtest) |
 
 ## KPI Signals
 - Tool call success rate: n/a
@@ -22,6 +22,5 @@
 - Composer completion rate: n/a
 
 ## Next Week Commitments (Auto)
-1. Close AGT-05: CI/PR gate runs merge + integration + assistant stability suites with artifacts
-2. Start AGT-04: Reliability hardening (rate limit, retries, budgets)
+1. No commitment inferred.
 

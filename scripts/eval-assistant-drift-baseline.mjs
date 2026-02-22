@@ -158,11 +158,20 @@ function metricSpec() {
     endpointPassRate: { direction: "high" },
     policyPassRate: { direction: "high" },
     citationPassRate: { direction: "high" },
+    citationSanityPassRate: { direction: "high" },
+    toolBudgetPassRate: { direction: "high" },
     realworldCitationCoveragePercent: { direction: "high" },
     contextCarryAccuracy: { direction: "high" },
+    numericSymbolPassRate: { direction: "high" },
+    numericRiskPassRate: { direction: "high" },
+    numericValuationPassRate: { direction: "high" },
+    numericFundamentalsPassRate: { direction: "high" },
     latencyP95Ms: { direction: "low" },
     flakeRate: { direction: "low" },
     shadowBlockedShare: { direction: "low" },
+    budgetExceededTurnRate: { direction: "low" },
+    circuitOpenTurnRate: { direction: "low" },
+    unsupportedClaimRate: { direction: "low" },
   };
 }
 
@@ -297,10 +306,19 @@ function main() {
     addSample(samplePool, "intentPassRate", report?.routingChecks?.intent?.passRate);
     addSample(samplePool, "policyPassRate", report?.routingChecks?.policy?.passRate);
     addSample(samplePool, "citationPassRate", report?.routingChecks?.citation?.passRate ?? report?.rates?.citationPassRate);
+    addSample(samplePool, "citationSanityPassRate", report?.routingChecks?.citationSanity?.passRate);
+    addSample(samplePool, "toolBudgetPassRate", report?.routingChecks?.toolBudget?.passRate);
+    addSample(samplePool, "budgetExceededTurnRate", report?.routingChecks?.runtimeGuards?.budgetExceededTurnRate);
+    addSample(samplePool, "circuitOpenTurnRate", report?.routingChecks?.runtimeGuards?.circuitOpenTurnRate);
     addSample(samplePool, "realworldCitationCoveragePercent", report?.citationCoverage?.coveragePercent);
     addSample(samplePool, "latencyP95Ms", report?.performance?.latencyMs?.p95 ?? report?.latency?.p95Ms ?? report?.latencyPercentiles?.p90Ms);
     addSample(samplePool, "contextCarryAccuracy", extractContextCarryRate(report?.categoryMetrics));
     addSample(samplePool, "policyPassRate", report?.rates?.policyPassRate);
+    addSample(samplePool, "numericSymbolPassRate", report?.metrics?.numericSymbolPassRate);
+    addSample(samplePool, "numericRiskPassRate", report?.metrics?.numericRiskPassRate);
+    addSample(samplePool, "numericValuationPassRate", report?.metrics?.numericValuationPassRate);
+    addSample(samplePool, "numericFundamentalsPassRate", report?.metrics?.numericFundamentalsPassRate);
+    addSample(samplePool, "unsupportedClaimRate", report?.metrics?.unsupportedClaimRate);
 
     const shadowShare = parsePolicyCounts(report?.policyStatuses);
     addSample(samplePool, "shadowBlockedShare", shadowShare);
