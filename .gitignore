@@ -35,6 +35,11 @@ dev_smoke*.log*
 *.log
 .dev.log
 .tmp-*
+tmp-*
+_tmp_*
+delete_test
+tsconfig.tmp.json
+tmp_audit.py
 temp_write_test.txt
 nul
 
@@ -62,3 +67,12 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /playwright/.cache/
+.pw-out*
+.pw-test-results*
+
+# local CI/build/cache artifacts
+/.next-ci-build-*/
+/.next-webpack-build-*/
+/.pnpm-store/
+/.pw-browsers/
+lint-report*.json
