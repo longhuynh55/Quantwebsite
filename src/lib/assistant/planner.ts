@@ -27,7 +27,7 @@ export interface AssistantQueryPlanFilters {
   icb?: string;
   icbLevel?: "2" | "3" | "4";
   statement?: "all" | "bs" | "is" | "cf";
-  metric?: "pe" | "pb" | "ev_ebitda";
+  metric?: "pe" | "pb" | "ev_ebitda" | "close" | "open" | "high" | "low" | "volume";
   order?: "asc" | "desc";
   limit?: number;
 }
@@ -91,7 +91,7 @@ const STEP_PRIORITY: AssistantToolName[] = [
 
 const ICB_KEYWORDS = ["icb", "industry", "sector", "nhom nganh", "phan nhom"];
 const RANKING_KEYWORDS = ["top", "ranking", "xep hang", "cao nhat", "thap nhat", "lon nhat", "nho nhat"];
-const VALUATION_KEYWORDS = ["valuation", "dcf", "p/e", "p/b", "pe", "pb", "ev/ebitda", "dinh gia"];
+const VALUATION_KEYWORDS = ["valuation", "dcf", "p/e", "p/b", "ev/ebitda", "dinh gia"];
 const MARKET_KEYWORDS = ["market", "thi truong", "vnindex", "gainer", "loser", "overview"];
 const FUNDAMENTAL_KEYWORDS = [
   "fundamental",
@@ -125,6 +125,18 @@ const FUNDAMENTAL_RATIO_KEYWORDS = [
 const STOCK_UNIVERSE_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu", "hose", "hnx", "upcom", "thi truong"];
 const STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu"];
 const MARKET_OVERVIEW_KEYWORDS = ["market", "vnindex", "overview", "gainer", "loser"];
+const ICB_AGGREGATION_KEYWORDS = [
+  "icb cap",
+  "icb level",
+  "group by",
+  "tong volume",
+  "tong gia tri",
+  "avg",
+  "average",
+  "trung binh",
+  "snapshot",
+  "cac nganh",
+];
 const NUMERIC_STOCK_METRIC_KEYWORDS = [
   "price",
   "close",
@@ -360,6 +372,8 @@ function isLikelyUniverseStockSnapshotQuery(
   const hasStockMetric = hasAnyKeyword(rankingHint, NUMERIC_STOCK_METRIC_KEYWORDS);
   const hasRankingAction = hasAnyKeyword(normalizedMessage, STOCK_RANKING_ACTION_KEYWORDS);
   const asksIcb = hasAnyKeyword(normalizedMessage, ICB_KEYWORDS);
+  const hasIcbAggregationKeyword = hasAnyKeyword(normalizedMessage, ICB_AGGREGATION_KEYWORDS);
+  const isSectorScopedStockRanking = asksIcb && hasRanking && (hasStockMetric || hasRankingAction) && !hasIcbAggregationKeyword;
   const asksBroadMarketOverview = hasAnyKeyword(normalizedMessage, MARKET_OVERVIEW_KEYWORDS);
   const hasSpecificUniverseHint = hasAnyKeyword(normalizedMessage, STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS);
   const hasUniverseHint =
@@ -379,7 +393,7 @@ function isLikelyUniverseStockSnapshotQuery(
     || normalizeDateLike(filters?.asOfDate) !== null
     || normalizeDateLike(filters?.as_of_date) !== null
     || extractDateInMessage(normalizedMessage) !== null;
-  if (asksIcb) return false;
+  if (asksIcb && !isSectorScopedStockRanking) return false;
   if (asksFabricationRanking) return true;
   if (asksBroadMarketOverview && !hasSpecificUniverseHint && !hasStructuredUniverseScope) return false;
   return hasRanking
@@ -592,16 +606,16 @@ function extractFilters(
 }
 
 function extractDateInMessage(message: string): string | null {
-  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/);
+  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/);
   if (!match) return null;
-  return match[1];
+  return normalizeDateLike(match[1]);
 }
 
 function extractDateRangeInMessage(message: string): { from: string; to: string } | null {
-  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/g) ?? [];
+  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/g) ?? [];
   if (matches.length < 2) return null;
-  const from = matches[0];
-  const to = matches[1];
+  const from = normalizeDateLike(matches[0]);
+  const to = normalizeDateLike(matches[1]);
   if (!from || !to) return null;
   return { from, to };
 }
@@ -610,16 +624,39 @@ function normalizeDateLike(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
-  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
+  const isoMatch = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(trimmed);
+  if (isoMatch) {
+    const year = Number.parseInt(isoMatch[1], 10);
+    const month = Number.parseInt(isoMatch[2], 10);
+    const day = Number.parseInt(isoMatch[3], 10);
+    if (!isValidDateParts(year, month, day)) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const dmyMatch = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/.exec(trimmed);
+  if (dmyMatch) {
+    const day = Number.parseInt(dmyMatch[1], 10);
+    const month = Number.parseInt(dmyMatch[2], 10);
+    const yearRaw = Number.parseInt(dmyMatch[3], 10);
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    if (!isValidDateParts(year, month, day)) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   return null;
+}
+
+function isValidDateParts(year: number, month: number, day: number): boolean {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return false;
+  if (year < 1900 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  return true;
 }
 
 function inferIcbHint(normalizedMessage: string): string | null {
   const hints: Array<{ keywords: string[]; value: string }> = [
     { keywords: ["ngan hang", "bank"], value: "ngan hang" },
-    { keywords: ["bat dong san", "real estate", "property"], value: "bat dong san" },
-    { keywords: ["chung khoan", "securities"], value: "chung khoan" },
+    { keywords: ["bat dong san", "bds", "real estate", "property"], value: "bat dong san" },
+    { keywords: ["chung khoan", "securities"], value: "dich vu tai chinh" },
     { keywords: ["dau khi", "oil", "gas"], value: "dau khi" },
     { keywords: ["ban le", "retail"], value: "ban le" },
   ];
@@ -688,12 +725,22 @@ function extractStatement(
 function extractMetric(
   filters: Record<string, unknown> | undefined,
   normalizedMessage: string
-): "pe" | "pb" | "ev_ebitda" | undefined {
+): "pe" | "pb" | "ev_ebitda" | "close" | "open" | "high" | "low" | "volume" | undefined {
   const metric = normalizeForKeywordMatch(String(filters?.metric ?? filters?.ratio ?? filters?.valuationMetric ?? ""));
+  if (metric === "close" || metric === "dong cua" || metric === "gia dong cua") return "close";
+  if (metric === "open" || metric === "mo cua" || metric === "gia mo cua") return "open";
+  if (metric === "high") return "high";
+  if (metric === "low") return "low";
+  if (metric === "volume" || metric === "khoi luong" || metric === "thanh khoan") return "volume";
   if (metric.includes("ev/ebitda") || metric.includes("ev_ebitda") || metric.includes("ev ebitda")) return "ev_ebitda";
   if (metric === "pb" || metric === "p/b") return "pb";
   if (metric === "pe" || metric === "p/e") return "pe";
 
+  if (normalizedMessage.includes("gia dong cua") || /\bclose\b/.test(normalizedMessage)) return "close";
+  if (normalizedMessage.includes("gia mo cua") || /\bopen\b/.test(normalizedMessage)) return "open";
+  if (/\bhigh\b/.test(normalizedMessage)) return "high";
+  if (/\blow\b/.test(normalizedMessage)) return "low";
+  if (normalizedMessage.includes("khoi luong") || normalizedMessage.includes("thanh khoan") || /\bvolume\b/.test(normalizedMessage)) return "volume";
   if (normalizedMessage.includes("ev/ebitda") || normalizedMessage.includes("ev ebitda")) return "ev_ebitda";
   if (normalizedMessage.includes("p/b") || /\bpb\b/.test(normalizedMessage)) return "pb";
   if (normalizedMessage.includes("p/e") || /\bpe\b/.test(normalizedMessage)) return "pe";
@@ -705,11 +752,13 @@ function extractOrder(
   normalizedMessage: string
 ): "asc" | "desc" | undefined {
   const fromFilter = normalizeForKeywordMatch(String(filters?.order ?? filters?.sort ?? filters?.direction ?? ""));
-  if (["asc", "ascending", "bottom", "lowest", "thap nhat"].some((key) => fromFilter.includes(key))) return "asc";
-  if (["desc", "descending", "top", "highest", "cao nhat"].some((key) => fromFilter.includes(key))) return "desc";
+  if (["asc", "ascending", "tang dan", "bottom", "lowest", "thap nhat"].some((key) => fromFilter.includes(key))) return "asc";
+  if (["desc", "descending", "giam dan", "top", "highest", "cao nhat"].some((key) => fromFilter.includes(key))) return "desc";
 
   if (
-    normalizedMessage.includes("thap nhat")
+    normalizedMessage.includes("tang dan")
+    || normalizedMessage.includes("ascending")
+    || normalizedMessage.includes("thap nhat")
     || normalizedMessage.includes("lowest")
     || normalizedMessage.includes("smallest")
     || normalizedMessage.includes("bottom")
@@ -717,7 +766,9 @@ function extractOrder(
     return "asc";
   }
   if (
-    normalizedMessage.includes("cao nhat")
+    normalizedMessage.includes("giam dan")
+    || normalizedMessage.includes("descending")
+    || normalizedMessage.includes("cao nhat")
     || normalizedMessage.includes("highest")
     || normalizedMessage.includes("top")
   ) {

@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
         dataConfidence: "high",
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: grounding.messageBlocks,
+        messageBlocks: [],
       meta: {
         providerUsed: "policy",
         fallbackUsed: false,
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
         dataConfidence: policy.dataConfidence,
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: grounding.messageBlocks,
+        messageBlocks: [],
         meta: {
           providerUsed: 'policy',
           fallbackUsed: false,
@@ -731,10 +731,17 @@ function detectRequestedExchangeHint(
   const exchangeFilter = normalizeKeywordToken(
     String(filters?.exchange ?? filters?.market ?? filters?.san ?? "")
   );
-  const combined = `${exchangeFilter} ${normalizeKeywordToken(message)}`.trim();
-  if (combined.includes("hnx") || combined.includes("ha noi")) return "HNX";
-  if (combined.includes("upcom") || combined.includes("up com")) return "UPCOM";
-  if (combined.includes("hose") || combined.includes("hsx") || combined.includes("ho chi minh")) return "HOSE";
+  const normalizedMessage = normalizeKeywordToken(message);
+  const combined = `${exchangeFilter} ${normalizedMessage}`.trim();
+  const mentionsHose = combined.includes("hose") || combined.includes("hsx") || combined.includes("ho chi minh");
+  const mentionsHnx = combined.includes("hnx") || combined.includes("ha noi");
+  const mentionsUpcom = combined.includes("upcom") || combined.includes("up com");
+  const negatesHnx = /\b(khong|ko|not)\s+(?:phai\s+)?hnx\b/.test(normalizedMessage);
+  const negatesUpcom = /\b(khong|ko|not)\s+(?:phai\s+)?up\s*com\b/.test(normalizedMessage);
+
+  if (mentionsHnx && !negatesHnx) return "HNX";
+  if (mentionsUpcom && !negatesUpcom) return "UPCOM";
+  if (mentionsHose) return "HOSE";
   return null;
 }
 

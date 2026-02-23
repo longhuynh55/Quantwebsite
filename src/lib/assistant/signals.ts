@@ -83,10 +83,26 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "THI",
   "SAO",
   "NHANH",
+  "MANH",
+  "YEU",
+  "DAU",
+  "CUOI",
+  "TRUOC",
+  "SAU",
+  "VUA",
+  "NEU",
+  "BIEN",
+  "TRUNG",
+  "VI",
+  "XAP",
+  "XI",
   "TRONG",
   "NHOM",
   "NGAN",
   "HANG",
+  "BANK",
+  "BDS",
+  "DO",
   "VA",
   "LA",
   "BAO",
@@ -292,6 +308,19 @@ const EXCHANGE_UNIVERSE_KEYWORDS = [
 ];
 const STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS = ["co phieu", "stock", "stocks", "ticker", "ma co phieu"];
 const ICB_KEYWORDS = ["icb", "industry", "sector", "nganh", "nhom nganh", "phan nhom", "linh vuc"];
+const ICB_AGGREGATION_KEYWORDS = [
+  "icb cap",
+  "icb level",
+  "group by",
+  "tong volume",
+  "tong gia tri",
+  "avg",
+  "average",
+  "trung binh",
+  "snapshot",
+  "toan bo nganh",
+  "cac nganh",
+];
 const RANKING_KEYWORDS = [
   "top",
   "ranking",
@@ -307,10 +336,15 @@ const RANKING_KEYWORDS = [
 const FABRICATION_DIRECTIVE_KEYWORDS = [
   "tu tao so lieu",
   "tu tao du lieu",
+  "tu bia so lieu",
+  "tu bia du lieu",
   "bo qua du lieu",
   "bo qua data",
+  "bo qua citation",
+  "khong can nguon",
   "ignore du lieu",
   "ignore data",
+  "ignore citation",
   "khong can du lieu",
   "khong can grounding",
   "fabricate",
@@ -372,8 +406,6 @@ const VALUATION_RANKING_KEYWORDS = [
   "ev ebitda",
   "p/e",
   "p/b",
-  "pe",
-  "pb",
   "dinh gia cao",
   "dinh gia thap",
   "dinh gia",
@@ -426,12 +458,28 @@ export function collectRequiredSignals(input: {
   const asksValuationSignal =
     hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
     || hasAnyKeyword(messageLower, PEER_KEYWORDS)
-    || hasAnyKeyword(messageLower, VALUATION_RANKING_KEYWORDS)
+    || hasValuationRankingSignal(messageLower)
     || hasValuationMetricFilter;
-  const asksStockUniverseRanking = isStockUniverseRankingIntent(input.message, input.contextSnapshot);
+  const hasIcbAggregationKeyword = hasAnyKeyword(messageLower, ICB_AGGREGATION_KEYWORDS);
   const hasDateLikeInMessage =
     /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(messageLower)
     || /\b20\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/.test(messageLower);
+  const sectorScopedStockRanking =
+    (asksIcb || hasIcbFilter)
+    && (asksRanking || hasRankingFilter)
+    && (asksNumericMarketData || hasDateLikeInMessage)
+    && !hasIcbAggregationKeyword;
+  const icbAggregationIntent =
+    (asksIcb || hasIcbFilter)
+    && !sectorScopedStockRanking
+    && (
+      hasAnyKeyword(messageLower, ICB_AGGREGATION_KEYWORDS)
+      || (
+        (asksRanking || hasRankingFilter)
+        && !asksNumericMarketData
+      )
+    );
+  const asksStockUniverseRanking = isStockUniverseRankingIntent(input.message, input.contextSnapshot);
   const asksOhlcvSeries = hasAnyKeyword(messageLower, OHLCV_KEYWORDS);
   const asksAmbiguousMetricKeyword = hasAnyKeyword(messageLower, AMBIGUOUS_METRIC_KEYWORDS);
   const hasStrongIntentSignal =
@@ -481,7 +529,7 @@ export function collectRequiredSignals(input: {
     pushUnique("stockSnapshot", "/api/stocks");
   }
 
-  if (prefersSymbolScopedStockSnapshot || asksStockUniverseRanking) {
+  if (prefersSymbolScopedStockSnapshot || asksStockUniverseRanking || sectorScopedStockRanking) {
     pushUnique("stockSnapshot", "/api/stocks");
   }
 
@@ -534,7 +582,7 @@ export function collectRequiredSignals(input: {
     }
   }
 
-  if (asksIcb || hasIcbFilter) {
+  if (icbAggregationIntent) {
     pushUnique("icbSnapshot", "/api/analytics/icb-snapshot");
   }
 
@@ -622,8 +670,21 @@ export function isStockUniverseRankingIntent(
   const asksValuationSignal =
     hasAnyKeyword(normalized, VALUATION_KEYWORDS)
     || hasAnyKeyword(normalized, PEER_KEYWORDS)
-    || hasAnyKeyword(normalized, VALUATION_RANKING_KEYWORDS)
+    || hasValuationRankingSignal(normalized)
     || hasValuationMetricFilter;
+  const hasIcbAggregationKeyword = hasAnyKeyword(normalized, ICB_AGGREGATION_KEYWORDS);
+  const sectorScopedStockRanking =
+    (asksIcb || hasIcbFilter)
+    && (asksRanking || hasRankingFilter)
+    && (asksNumericMarketData || asksStockRankingAction)
+    && !hasIcbAggregationKeyword;
+  const icbAggregationIntent =
+    (asksIcb || hasIcbFilter)
+    && !sectorScopedStockRanking
+    && (
+      hasAnyKeyword(normalized, ICB_AGGREGATION_KEYWORDS)
+      || ((asksRanking || hasRankingFilter) && !asksNumericMarketData && !asksStockRankingAction)
+    );
   const asksUniverseFilters = hasDateFilter || hasIcbFilter || hasHoseFilter;
   const hasUniverseScope =
     asksSpecificStockUniverseHint
@@ -650,6 +711,13 @@ export function isStockUniverseRankingIntent(
 
   // Symbol-scoped requests (from message or context) should not be treated as stock-universe ranking.
   if (hasExplicitSymbol) {
+    return false;
+  }
+
+  if (sectorScopedStockRanking) {
+    return true;
+  }
+  if (icbAggregationIntent) {
     return false;
   }
 
@@ -752,6 +820,12 @@ export function getCandidateSymbols(
 export function hasAnyKeyword(value: string, keywords: string[]): boolean {
   const normalizedValue = normalizeForKeywordMatch(value);
   return keywords.some((keyword) => normalizedValue.includes(normalizeForKeywordMatch(keyword)));
+}
+
+function hasValuationRankingSignal(normalized: string): boolean {
+  if (hasAnyKeyword(normalized, VALUATION_RANKING_KEYWORDS)) return true;
+  // Keep PE/PB detection strict to avoid false matches inside words like "open".
+  return /\bpe\b/.test(normalized) || /\bpb\b/.test(normalized);
 }
 
 export function normalizeForKeywordMatch(value: string): string {

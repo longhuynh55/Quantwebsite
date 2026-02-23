@@ -111,6 +111,7 @@
       - ./.env.glm
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: ${APP_PROD_NODE_OPTIONS:---max-old-space-size=4096}
       NEXT_TELEMETRY_DISABLED: "1"
       NPM_CONFIG_OPTIONAL: "true"
       ASSISTANT_EXECUTE_FETCH_TIMEOUT_MS: ${ASSISTANT_EXECUTE_FETCH_TIMEOUT_MS:-90000}

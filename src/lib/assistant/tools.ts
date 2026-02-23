@@ -536,7 +536,13 @@ function buildToolTasks(
       return;
     }
     if (name === "backtestSummary") {
-      if (!hasSymbolTargets) return;
+      if (!hasSymbolTargets) {
+        if (queryPlan?.intent !== "backtesting") return;
+        const fallbackSymbol = resolveBacktestFallbackSymbol(contextSnapshot);
+        if (!fallbackSymbol) return;
+        addTask(name, () => fetchBacktestSummary(baseUrl, fallbackSymbol));
+        return;
+      }
       addTaskForSymbols(name, (symbol) => fetchBacktestSummary(baseUrl, symbol));
       return;
     }
@@ -810,7 +816,15 @@ async function fetchStockUniverseSnapshot(
 ): Promise<ToolRunOutput> {
   const plannedDate = normalizeDateLike(queryPlanFilters?.date);
   const requestedDate = plannedDate ?? extractRequestedDate(message, contextSnapshot);
-  const metric = extractStockUniverseMetric(message, contextSnapshot);
+  const metricFromPlan =
+    queryPlanFilters?.metric === "close"
+    || queryPlanFilters?.metric === "open"
+    || queryPlanFilters?.metric === "high"
+    || queryPlanFilters?.metric === "low"
+    || queryPlanFilters?.metric === "volume"
+      ? queryPlanFilters.metric
+      : null;
+  const metric = metricFromPlan ?? extractStockUniverseMetric(message, contextSnapshot);
   const order = queryPlanFilters?.order === "asc" || queryPlanFilters?.order === "desc"
     ? queryPlanFilters.order
     : extractRankingOrder(message, contextSnapshot);
@@ -2184,7 +2198,7 @@ function extractRequestedDate(message: string, contextSnapshot?: AssistantContex
     || normalizeDateLike(filters?.day);
   if (filterDate) return filterDate;
 
-  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/);
+  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/);
   if (!match) return null;
   return normalizeDateLike(match[1]);
 }
@@ -2200,7 +2214,7 @@ function extractRequestedDateRange(
     return { from: filterFrom, to: filterTo };
   }
 
-  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\b/g) ?? [];
+  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/g) ?? [];
   if (matches.length < 2) return null;
   const from = normalizeDateLike(matches[0]);
   const to = normalizeDateLike(matches[1]);
@@ -2367,8 +2381,8 @@ function extractIcbFilter(message: string, contextSnapshot?: AssistantContextSna
   const normalized = normalizeForKeywordMatch(message);
   const sectorHints: Array<{ keywords: string[]; value: string }> = [
     { keywords: ["ngan hang", "bank"], value: "ngan hang" },
-    { keywords: ["bat dong san", "real estate", "property"], value: "bat dong san" },
-    { keywords: ["chung khoan", "securities"], value: "chung khoan" },
+    { keywords: ["bat dong san", "bds", "real estate", "property"], value: "bat dong san" },
+    { keywords: ["chung khoan", "securities"], value: "dich vu tai chinh" },
     { keywords: ["dau khi", "oil", "gas"], value: "dau khi" },
     { keywords: ["ban le", "retail"], value: "ban le" },
   ];
@@ -2498,9 +2512,15 @@ function extractStockUniverseExchange(message: string, contextSnapshot?: Assista
   const exchangeHint = normalizeForKeywordMatch(String(filters?.exchange ?? filters?.market ?? filters?.san ?? ""));
   const normalized = normalizeForKeywordMatch(message);
   const combined = `${exchangeHint} ${normalized}`.trim();
+  const mentionsHose = combined.includes("hose") || combined.includes("hsx") || combined.includes("ho chi minh");
+  const mentionsHnx = combined.includes("hnx") || combined.includes("ha noi");
+  const mentionsUpcom = combined.includes("upcom") || combined.includes("up com");
+  const negatesHnx = /\b(khong|ko|not)\s+(?:phai\s+)?hnx\b/.test(combined);
+  const negatesUpcom = /\b(khong|ko|not)\s+(?:phai\s+)?up\s*com\b/.test(combined);
 
-  if (combined.includes("hnx") || combined.includes("ha noi")) return "HNX";
-  if (combined.includes("upcom") || combined.includes("up com")) return "UPCOM";
+  if (mentionsHnx && !negatesHnx) return "HNX";
+  if (mentionsUpcom && !negatesUpcom) return "UPCOM";
+  if (mentionsHose) return "HOSE";
   return "HOSE";
 }
 
@@ -2580,21 +2600,29 @@ function extractValuationMetric(message: string, contextSnapshot?: AssistantCont
 function extractRankingOrder(message: string, contextSnapshot?: AssistantContextSnapshot): "asc" | "desc" {
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot?.filters : undefined;
   const filterOrder = normalizeForKeywordMatch(String(filters?.order ?? filters?.sort ?? filters?.direction ?? ""));
-  if (["asc", "ascending", "bottom", "lowest", "thap nhat"].some((key) => filterOrder.includes(key))) {
+  if (["asc", "ascending", "tang dan", "bottom", "lowest", "thap nhat"].some((key) => filterOrder.includes(key))) {
     return "asc";
   }
-  if (["desc", "descending", "top", "highest", "cao nhat"].some((key) => filterOrder.includes(key))) {
+  if (["desc", "descending", "giam dan", "top", "highest", "cao nhat"].some((key) => filterOrder.includes(key))) {
     return "desc";
   }
 
   const normalized = normalizeForKeywordMatch(message);
   if (
-    normalized.includes("thap nhat")
+    normalized.includes("tang dan")
+    || normalized.includes("ascending")
+    || normalized.includes("thap nhat")
     || normalized.includes("lowest")
     || normalized.includes("smallest")
     || normalized.includes("bottom")
   ) {
     return "asc";
+  }
+  if (
+    normalized.includes("giam dan")
+    || normalized.includes("descending")
+  ) {
+    return "desc";
   }
   return "desc";
 }
@@ -2603,15 +2631,50 @@ function normalizeDateLike(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
-  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmed)) return trimmed.replace(/\//g, "-");
+  const isoMatch = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(trimmed);
+  if (isoMatch) {
+    const year = Number.parseInt(isoMatch[1], 10);
+    const month = Number.parseInt(isoMatch[2], 10);
+    const day = Number.parseInt(isoMatch[3], 10);
+    if (!isValidDateParts(year, month, day)) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const dmyMatch = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/.exec(trimmed);
+  if (dmyMatch) {
+    const day = Number.parseInt(dmyMatch[1], 10);
+    const month = Number.parseInt(dmyMatch[2], 10);
+    const yearRaw = Number.parseInt(dmyMatch[3], 10);
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    if (!isValidDateParts(year, month, day)) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   return null;
+}
+
+function isValidDateParts(year: number, month: number, day: number): boolean {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return false;
+  if (year < 1900 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  return true;
 }
 
 function parsePositiveInt(value: unknown, min: number, max: number): number | null {
   const parsed = Number.parseInt(String(value ?? "").trim(), 10);
   if (!Number.isFinite(parsed) || parsed < min) return null;
   return Math.min(max, parsed);
+}
+
+function resolveBacktestFallbackSymbol(contextSnapshot?: AssistantContextSnapshot): string | null {
+  const direct = typeof contextSnapshot?.symbol === "string" ? contextSnapshot.symbol.trim().toUpperCase() : "";
+  if (/^[A-Z0-9]{2,8}$/.test(direct)) return direct;
+  if (Array.isArray(contextSnapshot?.symbols)) {
+    for (const item of contextSnapshot.symbols) {
+      const candidate = String(item ?? "").trim().toUpperCase();
+      if (/^[A-Z0-9]{2,8}$/.test(candidate)) return candidate;
+    }
+  }
+  return "VNM";
 }
 
 function resolveStockSnapshotLimit(
