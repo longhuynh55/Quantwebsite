@@ -98,6 +98,16 @@ jobs:
         id: assistant_routing
         run: pnpm run eval:assistant:routing:stable
 
+      - name: AI strategy real-output stability gate
+        id: ai_strategy_stability
+        env:
+          AI_STRATEGY_BASE_URL: http://localhost:3010
+          AI_STRATEGY_STABILITY_RUNS: "20"
+          AI_STRATEGY_MAX_FAILURE_RATE: "0.05"
+          AI_STRATEGY_MAX_PARSE_FAILURE_RATE: "0.02"
+          AI_STRATEGY_REPORT_PATH: artifacts/ai-strategy-stability-report.json
+        run: pnpm run eval:ai-strategy:stability
+
       - name: Assistant policy matrix stability gate
         id: assistant_policy
         run: pnpm run eval:assistant:policy-matrix:stable
@@ -130,6 +140,7 @@ jobs:
         run: |
           echo "## Nightly Assistant Gates" >> $GITHUB_STEP_SUMMARY
           echo "- routing matrix: ${{ steps.assistant_routing.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ai strategy stability: ${{ steps.ai_strategy_stability.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "- policy matrix: ${{ steps.assistant_policy.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "- perf reliability: ${{ steps.assistant_perf.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "- realworld: ${{ steps.assistant_realworld.outcome }}" >> $GITHUB_STEP_SUMMARY
@@ -172,6 +183,7 @@ jobs:
           name: nightly-assistant-artifacts
           path: |
             artifacts/assistant-routing-matrix-report.json
+            artifacts/ai-strategy-stability-report.json
             artifacts/assistant-policy-matrix-report.json
             artifacts/assistant-perf-reliability-report.json
             artifacts/assistant-realworld-report.json

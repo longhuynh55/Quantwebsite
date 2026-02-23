@@ -139,6 +139,16 @@ jobs:
       - name: Assistant PR gate stability gate
         run: pnpm run eval:assistant:pr-gate:stable
 
+      - name: Install Playwright Chromium (AI Suggest mock gate)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: AI Suggest mock E2E gate
+        env:
+          E2E_BASE_URL: http://localhost:3010
+          E2E_AI_SUGGEST_MODE: mock
+          PW_OUTPUT_DIR: .pw-out-ci-ai-suggest-mock
+        run: pnpm run test:e2e:ai-suggest:mock
+
       - name: Dev smoke
         run: docker compose run --rm smoke
 
