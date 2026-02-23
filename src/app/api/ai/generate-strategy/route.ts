@@ -13,6 +13,7 @@ const RATE_LIMIT = 10;
 const RATE_LIMIT_WINDOW = 60 * 1000;
 
 const MAX_PROMPT_LENGTH = 2000;
+const PARSE_REPAIR_RETRIES = Number.parseInt(process.env.STRATEGY_PARSE_REPAIR_RETRIES ?? '1', 10) || 1;
 
 interface StrategyGenerationRequest {
   prompt: string;
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
     // Generate strategy
     const result = await generateStrategyFromPrompt(prompt, {
       requestId: body.requestId || requestId,
+      parseRepairRetries: Math.max(0, PARSE_REPAIR_RETRIES),
     });
 
     if (!result.success) {

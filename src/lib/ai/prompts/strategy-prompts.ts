@@ -90,6 +90,36 @@ export const STRATEGY_GENERATION_USER_PROMPT = `Please create a trading strategy
 
 Return ONLY valid JSON with the strategy structure. Include a Vietnamese explanation of how the strategy works.`;
 
+export const STRATEGY_GENERATION_REPAIR_PROMPT = `Your previous answer could not be parsed. Regenerate in STRICT JSON mode.
+
+Hard constraints:
+1. Return ONLY a single JSON object. No markdown. No prose before/after JSON.
+2. Keep output compact and short to avoid truncation.
+3. Use at most 4 nodes.
+4. "nodes" and "edges" must be arrays.
+5. dataSource.config.stocks must be string[] (never a string).
+6. Include required keys: nodes, edges, explanation.
+
+Schema reminder:
+{
+  "nodes": [
+    {
+      "id": "string",
+      "type": "dataSource|indicator|filter|signal|output",
+      "position": { "x": number, "y": number },
+      "data": {
+        "type": "dataSource|indicator|filter|signal|output",
+        "label": "string",
+        "config": {}
+      }
+    }
+  ],
+  "edges": [
+    { "id": "string", "source": "string", "target": "string" }
+  ],
+  "explanation": "string"
+}`;
+
 export const STRATEGY_EXAMPLES = [
   {
     name: "RSI Mean Reversion",
@@ -116,6 +146,16 @@ export const STRATEGY_EXAMPLES = [
 export function buildStrategyPrompt(userDescription: string): string {
   return STRATEGY_GENERATION_SYSTEM_PROMPT + "\n\n" +
     STRATEGY_GENERATION_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
+}
+
+export function buildStrategyRepairPrompt(userDescription: string): string {
+  return (
+    STRATEGY_GENERATION_SYSTEM_PROMPT +
+    "\n\n" +
+    STRATEGY_GENERATION_REPAIR_PROMPT +
+    "\n\nUser request:\n" +
+    userDescription
+  );
 }
 
 export function getStrategyExamplesForUI(): Array<{ name: string; description: string; prompt: string }> {

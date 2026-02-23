@@ -4,7 +4,7 @@
  */
 
 import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/providers';
-import { buildStrategyPrompt } from './prompts/strategy-prompts';
+import { buildStrategyPrompt, buildStrategyRepairPrompt } from './prompts/strategy-prompts';
 import { createLogger, hashText } from '@/lib/logger';
 
 const strategyLogger = createLogger('ai.strategy-generator');
@@ -82,6 +82,7 @@ export async function generateStrategyFromPrompt(
   options: {
     requestId?: string;
     timeoutMs?: number;
+    parseRepairRetries?: number;
   } = {}
 ): Promise<StrategyGenerationResult> {
   const startedAt = Date.now();
@@ -94,53 +95,75 @@ export async function generateStrategyFromPrompt(
   });
 
   try {
-    // Build messages for the LLM
-    const messages: LlmMessage[] = [
-      { role: 'system', content: buildStrategyPrompt(userPrompt) },
-      { role: 'user', content: userPrompt }
-    ];
+    const totalAttempts = Math.max(1, (options.parseRepairRetries ?? 0) + 1);
+    let latestRawResponse = '';
+    let latestProviderUsed = '';
+    let latestParseFailure = false;
 
-    // Call GLM API
-    const result = await generateWithProviderFallback(messages, { requestId });
+    let validatedStrategy: GeneratedStrategy | null = null;
 
-    if (!result.success) {
-      logger.warn('strategy.generation.provider_failed', {
-        kind: (result as { kind: string }).kind,
-        latencyMs: result.latencyMs,
-      });
-      return {
-        success: false,
-        error: (result as { message: string }).message || 'Failed to generate strategy',
-        latencyMs: Date.now() - startedAt,
-      };
-    }
+    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      const isRepairAttempt = attempt > 1;
+      const systemPrompt = isRepairAttempt
+        ? buildStrategyRepairPrompt(userPrompt)
+        : buildStrategyPrompt(userPrompt);
 
-    // Parse the response
-    const rawResponse = result.text;
-    const parsedStrategy = parseStrategyResponse(rawResponse);
+      const messages: LlmMessage[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ];
 
-    if (!parsedStrategy) {
+      const result = await generateWithProviderFallback(messages, { requestId });
+      if (!result.success) {
+        logger.warn('strategy.generation.provider_failed', {
+          kind: (result as { kind: string }).kind,
+          latencyMs: result.latencyMs,
+          attempt,
+          totalAttempts,
+        });
+        return {
+          success: false,
+          error: (result as { message: string }).message || 'Failed to generate strategy',
+          latencyMs: Date.now() - startedAt,
+        };
+      }
+
+      latestRawResponse = result.text;
+      latestProviderUsed = result.providerUsed;
+      const parsedStrategy = parseStrategyResponse(latestRawResponse);
+      if (parsedStrategy) {
+        validatedStrategy = validateAndFixStrategy(parsedStrategy);
+        break;
+      }
+
+      latestParseFailure = true;
       logger.warn('strategy.generation.parse_failed', {
-        responseLength: rawResponse.length,
-        responseDigest: hashText(rawResponse),
+        responseLength: latestRawResponse.length,
+        responseDigest: hashText(latestRawResponse),
+        attempt,
+        totalAttempts,
       });
+    }
+
+    if (!validatedStrategy) {
       return {
         success: false,
-        rawResponse,
-        error: 'Failed to parse strategy from AI response. Please try again with a clearer description.',
+        rawResponse: latestRawResponse,
+        error: latestParseFailure
+          ? 'Failed to parse strategy from AI response. Please try again with a clearer description.'
+          : 'Failed to generate strategy.',
         latencyMs: Date.now() - startedAt,
       };
     }
 
-    // Validate and fix the strategy structure
-    const validatedStrategy = validateAndFixStrategy(parsedStrategy);
+    const rawResponse = latestRawResponse;
 
     logger.info('strategy.generation.completed', {
       nodeCount: validatedStrategy.nodes.length,
       edgeCount: validatedStrategy.edges.length,
       explanationLength: validatedStrategy.explanation.length,
       latencyMs: Date.now() - startedAt,
-      providerUsed: result.providerUsed,
+      providerUsed: latestProviderUsed,
     });
 
     return {
@@ -148,7 +171,7 @@ export async function generateStrategyFromPrompt(
       strategy: validatedStrategy,
       rawResponse,
       latencyMs: Date.now() - startedAt,
-      providerUsed: result.providerUsed,
+      providerUsed: latestProviderUsed,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -304,4 +327,3 @@ export function convertToStrategyBuilderFormat(
 }
 
 // Types are already exported above with `export interface`
-

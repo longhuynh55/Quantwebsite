@@ -17,6 +17,7 @@ jest.mock('@/lib/assistant/providers', () => ({
 // Mock the prompts module
 jest.mock('../prompts/strategy-prompts', () => ({
   buildStrategyPrompt: jest.fn(() => 'Mocked system prompt'),
+  buildStrategyRepairPrompt: jest.fn(() => 'Mocked repair system prompt'),
 }));
 
 // Import the mocked functions
@@ -97,6 +98,47 @@ describe('strategy-generator', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Failed to parse strategy');
       expect(result.rawResponse).toBe('This is not valid JSON');
+    });
+
+    it('should retry once with repair prompt when parse fails', async () => {
+      const repaired: GeneratedStrategy = {
+        nodes: [
+          {
+            id: 'node-1',
+            type: 'dataSource',
+            position: { x: 50, y: 50 },
+            data: {
+              type: 'dataSource',
+              label: 'Data Source',
+              config: { stocks: ['VNM'], timeframe: '1d' },
+            },
+          },
+        ],
+        edges: [],
+        explanation: 'Recovered strategy',
+      };
+
+      mockGenerateWithProviderFallback
+        .mockResolvedValueOnce({
+          success: true,
+          text: 'not valid json',
+          providerUsed: 'test-provider',
+          fallbackUsed: false,
+          latencyMs: 50,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          text: JSON.stringify(repaired),
+          providerUsed: 'test-provider',
+          fallbackUsed: false,
+          latencyMs: 55,
+        });
+
+      const result = await generateStrategyFromPrompt('Test prompt', { parseRepairRetries: 1 });
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.nodes).toHaveLength(1);
+      expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(2);
     });
 
     it('should return failure when response has invalid nodes/edges structure', async () => {
