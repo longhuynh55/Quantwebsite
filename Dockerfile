@@ -39,4 +39,4 @@ COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-CMD ["pnpm", "run", "start", "-p", "3000"]
+CMD ["pnpm", "run", "start"]
