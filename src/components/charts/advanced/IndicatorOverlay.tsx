@@ -80,7 +80,7 @@ export function IndicatorOverlay({
             className={cn(
               "cursor-pointer transition-colors",
               indicator.visible
-                ? "bg-gray-800 dark:bg-gray-200 hover:bg-gray-700 dark:hover:bg-gray-300"
+                ? "bg-neutral-800 dark:bg-stone-200 hover:bg-neutral-700 dark:hover:bg-stone-300"
                 : "opacity-50"
             )}
             style={{
@@ -132,11 +132,11 @@ export function IndicatorOverlay({
       <CardContent className="pt-0 px-4 pb-3">
         <div className="space-y-1">
           {indicators.map((indicator) => (
-            <div key={indicator.id} className="rounded-md border border-gray-100 dark:border-gray-700">
+            <div key={indicator.id} className="rounded-md border border-stone-100 dark:border-neutral-700">
               {/* Indicator Header */}
               <div
                 className={cn(
-                  "flex items-center justify-between p-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md",
+                  "flex items-center justify-between p-2 cursor-pointer hover:bg-stone-50 dark:hover:bg-neutral-800 rounded-md",
                   !indicator.visible && "opacity-60"
                 )}
                 onClick={() => toggleExpand(indicator.id)}
@@ -147,13 +147,13 @@ export function IndicatorOverlay({
                       e.stopPropagation();
                       onToggleIndicator?.(indicator.id);
                     }}
-                    className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                    className="p-0.5 hover:bg-stone-200 dark:hover:bg-neutral-700 rounded"
                     aria-label={indicator.visible ? "Hide indicator" : "Show indicator"}
                   >
                     {indicator.visible ? (
-                      <Eye className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+                      <Eye className="h-3.5 w-3.5 text-stone-600 dark:text-stone-400" />
                     ) : (
-                      <EyeOff className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+                      <EyeOff className="h-3.5 w-3.5 text-stone-400 dark:text-neutral-500" />
                     )}
                   </button>
 
@@ -162,11 +162,11 @@ export function IndicatorOverlay({
                     style={{ backgroundColor: indicator.color }}
                   />
 
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="text-sm font-medium text-stone-700 dark:text-neutral-300">
                     {indicator.name}
                   </span>
 
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                  <span className="text-xs text-stone-500 dark:text-stone-400">
                     ({INDICATOR_LABELS[indicator.type]})
                   </span>
                 </div>
@@ -178,7 +178,7 @@ export function IndicatorOverlay({
                         e.stopPropagation();
                         onRemoveIndicator(indicator.id);
                       }}
-                      className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400"
+                      className="p-1 text-stone-400 hover:text-red-500 dark:text-neutral-500 dark:hover:text-red-400"
                       aria-label="Remove indicator"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -186,20 +186,20 @@ export function IndicatorOverlay({
                   )}
 
                   {expandedIndicator === indicator.id ? (
-                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                    <ChevronUp className="h-4 w-4 text-stone-400" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                    <ChevronDown className="h-4 w-4 text-stone-400" />
                   )}
                 </div>
               </div>
 
               {/* Expanded Settings */}
               {expandedIndicator === indicator.id && showSettings && (
-                <div className="px-2 pb-2 pt-1 border-t border-gray-100 dark:border-gray-700">
+                <div className="px-2 pb-2 pt-1 border-t border-stone-100 dark:border-neutral-700">
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {/* Color Picker */}
                     <div className="space-y-1">
-                      <label className="text-gray-500 dark:text-gray-400">Color</label>
+                      <label className="text-stone-500 dark:text-stone-400">Color</label>
                       <input
                         type="color"
                         value={indicator.color}
@@ -212,7 +212,7 @@ export function IndicatorOverlay({
 
                     {/* Line Width */}
                     <div className="space-y-1">
-                      <label className="text-gray-500 dark:text-gray-400">Line Width</label>
+                      <label className="text-stone-500 dark:text-stone-400">Line Width</label>
                       <select
                         value={indicator.lineWidth || 2}
                         onChange={(e) =>
@@ -220,7 +220,7 @@ export function IndicatorOverlay({
                             lineWidth: Number(e.target.value),
                           })
                         }
-                        className="w-full h-6 px-1 text-xs rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                        className="w-full h-6 px-1 text-xs rounded border border-stone-200 dark:border-neutral-600 bg-white dark:bg-neutral-800"
                       >
                         <option value={1}>1px</option>
                         <option value={2}>2px</option>
@@ -232,7 +232,7 @@ export function IndicatorOverlay({
                     {/* Period Parameter */}
                     {indicator.parameters.period !== undefined && (
                       <div className="space-y-1 col-span-2">
-                        <label className="text-gray-500 dark:text-gray-400">Period</label>
+                        <label className="text-stone-500 dark:text-stone-400">Period</label>
                         <input
                           type="number"
                           value={typeof indicator.parameters.period === 'number' ? indicator.parameters.period : 0}
@@ -246,7 +246,7 @@ export function IndicatorOverlay({
                           }
                           min={1}
                           max={200}
-                          className="w-full h-6 px-2 text-xs rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                          className="w-full h-6 px-2 text-xs rounded border border-stone-200 dark:border-neutral-600 bg-white dark:bg-neutral-800"
                         />
                       </div>
                     )}
@@ -257,7 +257,7 @@ export function IndicatorOverlay({
           ))}
 
           {indicators.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+            <p className="text-sm text-stone-500 dark:text-stone-400 text-center py-4">
               No indicators added yet
             </p>
           )}
@@ -366,3 +366,4 @@ export const INDICATOR_PRESETS: Array<{
 ];
 
 export default IndicatorOverlay;
+

@@ -27,7 +27,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
     const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
 
     const variantClasses = {
-      default: "bg-blue-600",
+      default: "bg-emerald-700 dark:bg-emerald-600",
       success: "bg-green-600",
       warning: "bg-yellow-500",
       danger: "bg-red-600",
@@ -44,10 +44,10 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-1.5">
             {label && (
-              <span className="text-sm font-medium text-gray-700">{label}</span>
+              <span className="text-sm font-medium text-stone-700 dark:text-neutral-200">{label}</span>
             )}
             {showValue && (
-              <span className="text-sm font-medium text-gray-500">
+              <span className="text-sm font-medium text-stone-500 dark:text-neutral-400">
                 {Math.round(percentage)}%
               </span>
             )}
@@ -55,7 +55,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         )}
         <div
           className={cn(
-            "w-full bg-gray-200 rounded-full overflow-hidden",
+            "w-full overflow-hidden bg-stone-200 dark:bg-neutral-700",
             sizeClasses[size]
           )}
           role="progressbar"
@@ -65,7 +65,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         >
           <div
             className={cn(
-              "h-full rounded-full transition-all duration-300 ease-out",
+              "h-full transition-all duration-300 ease-out",
               variantClasses[variant]
             )}
             style={{ width: `${percentage}%` }}
@@ -107,7 +107,7 @@ const CircularProgress = React.forwardRef<HTMLDivElement, CircularProgressProps>
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
     const variantColors = {
-      default: "#2563eb",
+      default: "#047857",
       success: "#16a34a",
       warning: "#eab308",
       danger: "#dc2626",
@@ -127,7 +127,7 @@ const CircularProgress = React.forwardRef<HTMLDivElement, CircularProgressProps>
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="#e5e7eb"
+            stroke="#d6d3d1"
             strokeWidth={strokeWidth}
           />
           {/* Progress circle */}
@@ -146,7 +146,7 @@ const CircularProgress = React.forwardRef<HTMLDivElement, CircularProgressProps>
         </svg>
         {showValue && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-semibold text-gray-700">
+            <span className="text-xs font-semibold text-stone-700 dark:text-neutral-200">
               {Math.round(percentage)}%
             </span>
           </div>

@@ -79,7 +79,7 @@ function getTextColor(value: number): string {
   if (absValue >= 0.5) {
     return "text-white";
   }
-  return "text-gray-900 dark:text-gray-100";
+  return "text-stone-900 dark:text-neutral-100";
 }
 
 /**
@@ -98,7 +98,7 @@ function ColorLegend() {
 
   return (
     <div className="flex items-center justify-center gap-4 mt-6">
-      <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">-1.0</span>
+      <span className="text-xs text-stone-500 dark:text-neutral-400 font-medium">-1.0</span>
       <div className="flex h-3 rounded overflow-hidden shadow-sm">
         {values.map((value, index) => (
           <div
@@ -108,14 +108,14 @@ function ColorLegend() {
           />
         ))}
       </div>
-      <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">+1.0</span>
-      <div className="flex items-center gap-2 ml-4 text-xs text-gray-500 dark:text-gray-400">
+      <span className="text-xs text-stone-500 dark:text-neutral-400 font-medium">+1.0</span>
+      <div className="flex items-center gap-2 ml-4 text-xs text-stone-500 dark:text-neutral-400">
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded-sm bg-red-600"></span>
           Negative
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-sm bg-white border border-gray-300"></span>
+          <span className="w-3 h-3 rounded-sm bg-white border border-stone-300"></span>
           Neutral
         </span>
         <span className="flex items-center gap-1">
@@ -193,10 +193,10 @@ export function CorrelationMatrix({
 
   if (!isValidMatrix) {
     return (
-      <div className={cn("flex items-center justify-center h-64 bg-gray-50 dark:bg-gray-800 rounded-lg", className)}>
+      <div className={cn("flex items-center justify-center h-64 bg-stone-50 dark:bg-neutral-800 rounded-lg", className)}>
         <div className="text-center">
-          <p className="font-medium text-gray-700 dark:text-gray-300">Invalid Correlation Data</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="font-medium text-stone-700 dark:text-neutral-300">Invalid Correlation Data</p>
+          <p className="text-sm text-stone-500 dark:text-neutral-400 mt-1">
             Matrix dimensions must match symbol count
           </p>
         </div>
@@ -206,10 +206,10 @@ export function CorrelationMatrix({
 
   if (symbols.length === 0) {
     return (
-      <div className={cn("flex items-center justify-center h-64 bg-gray-50 dark:bg-gray-800 rounded-lg", className)}>
+      <div className={cn("flex items-center justify-center h-64 bg-stone-50 dark:bg-neutral-800 rounded-lg", className)}>
         <div className="text-center">
-          <p className="font-medium text-gray-700 dark:text-gray-300">No Data Available</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="font-medium text-stone-700 dark:text-neutral-300">No Data Available</p>
+          <p className="text-sm text-stone-500 dark:text-neutral-400 mt-1">
             Add assets to view correlation matrix
           </p>
         </div>
@@ -232,10 +232,10 @@ export function CorrelationMatrix({
                 key={`row-label-${rowIndex}`}
                 role="rowheader"
                 className={cn(
-                  "flex items-center justify-end pr-2 font-medium text-gray-700 dark:text-gray-300",
+                  "flex items-center justify-end pr-2 font-medium text-stone-700 dark:text-neutral-300",
                   cellSize,
                   "text-xs sm:text-sm",
-                  hoveredCell?.row === rowIndex && "bg-gray-100 dark:bg-gray-700 rounded-l"
+                  hoveredCell?.row === rowIndex && "bg-stone-100 dark:bg-neutral-700 rounded-l"
                 )}
               >
                 <span className="truncate max-w-[60px] sm:max-w-[80px]">{symbol}</span>
@@ -252,10 +252,10 @@ export function CorrelationMatrix({
                   key={`col-header-${colIndex}`}
                   role="columnheader"
                   className={cn(
-                    "flex items-end justify-center font-medium text-gray-700 dark:text-gray-300",
+                    "flex items-end justify-center font-medium text-stone-700 dark:text-neutral-300",
                     cellSize,
                     "text-xs sm:text-sm",
-                    hoveredCell?.col === colIndex && "bg-gray-100 dark:bg-gray-700 rounded-t"
+                    hoveredCell?.col === colIndex && "bg-stone-100 dark:bg-neutral-700 rounded-t"
                   )}
                 >
                   <span
@@ -287,9 +287,9 @@ export function CorrelationMatrix({
                       className={cn(
                         "relative flex items-center justify-center transition-all duration-150 cursor-pointer",
                         cellSize,
-                        "border border-gray-200 dark:border-gray-600",
+                        "border border-stone-200 dark:border-neutral-600",
                         "rounded-md m-0.5",
-                        highlighted && "ring-2 ring-blue-400 ring-offset-1 z-10",
+                        highlighted && "ring-2 ring-emerald-400 ring-offset-1 z-10",
                         isDiagonal && "font-bold"
                       )}
                       style={{ backgroundColor: bgColor }}
@@ -326,3 +326,4 @@ export function CorrelationMatrix({
 }
 
 export default CorrelationMatrix;
+

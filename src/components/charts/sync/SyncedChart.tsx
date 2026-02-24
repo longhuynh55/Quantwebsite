@@ -76,15 +76,15 @@ export function SyncedChart({
           className={cn(
             "absolute top-2 right-2 z-10 px-2 py-1 rounded-full text-xs font-medium transition-colors",
             isActiveChart
-              ? "bg-blue-500 text-white"
-              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+              ? "bg-emerald-700 text-white"
+              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
           )}
         >
           <span className="flex items-center gap-1">
             <span
               className={cn(
                 "w-2 h-2 rounded-full",
-                isActiveChart ? "bg-white animate-pulse" : "bg-blue-500"
+                isActiveChart ? "bg-white animate-pulse" : "bg-emerald-600"
               )}
             />
             Synced
@@ -115,3 +115,4 @@ export function withChartSync<P extends object>(
 }
 
 export default SyncedChart;
+

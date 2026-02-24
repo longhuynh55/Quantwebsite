@@ -101,7 +101,7 @@ export function StrategyImporter({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Copy className="w-5 h-5 text-blue-500" />
+                <Copy className="w-5 h-5 text-emerald-600" />
                 Sao chep chien luoc
               </DialogTitle>
               <DialogDescription>
@@ -111,16 +111,16 @@ export function StrategyImporter({
 
             <div className="py-4">
               {/* Strategy preview */}
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-4">
+              <div className="bg-stone-100 dark:bg-neutral-800/50 rounded-xl p-4 mb-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
-                    <FileJson className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                  <div className="p-2 bg-white dark:bg-neutral-700 rounded-lg">
+                    <FileJson className="w-5 h-5 text-stone-600 dark:text-neutral-300" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                    <p className="font-medium text-stone-900 dark:text-white">
                       {strategy.name}
                     </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-stone-500 dark:text-neutral-400">
                       Boi {strategy.author}
                     </p>
                   </div>
@@ -129,11 +129,11 @@ export function StrategyImporter({
                 {/* Quick stats */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Nodes:</span>
+                    <span className="text-stone-500 dark:text-neutral-400">Nodes:</span>
                     <span className="font-medium">{strategy.nodes.length || 0}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Connections:</span>
+                    <span className="text-stone-500 dark:text-neutral-400">Connections:</span>
                     <span className="font-medium">{strategy.edges.length || 0}</span>
                   </div>
                 </div>
@@ -141,7 +141,7 @@ export function StrategyImporter({
 
               {/* Custom name input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-stone-700 dark:text-neutral-300 mb-2">
                   Ten chien luoc moi
                 </label>
                 <Input
@@ -153,8 +153,8 @@ export function StrategyImporter({
               </div>
 
               {/* Import info */}
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm text-blue-700 dark:text-blue-400">
+              <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/25 rounded-lg">
+                <p className="text-sm text-emerald-700 dark:text-emerald-400">
                   Sau khi sao chep, ban co the chinh sua chien luoc nay trong trinh xay dung chien luoc.
                 </p>
               </div>
@@ -178,8 +178,8 @@ export function StrategyImporter({
               <DialogTitle>Dang sao chep...</DialogTitle>
             </DialogHeader>
             <div className="py-8 flex flex-col items-center justify-center">
-              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">
+              <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mb-4" />
+              <p className="text-stone-500 dark:text-neutral-400">
                 Dang sao chep chien luoc vao bo suu tap cua ban...
               </p>
             </div>
@@ -198,10 +198,10 @@ export function StrategyImporter({
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
-              <p className="text-gray-700 dark:text-gray-300 text-center mb-2">
+              <p className="text-stone-700 dark:text-neutral-300 text-center mb-2">
                 Chien luoc <strong>&quot;{customName}&quot;</strong> da duoc sao chep thanh cong!
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+              <p className="text-sm text-stone-500 dark:text-neutral-400 text-center">
                 Ban co the tim thay no trong trinh xay dung chien luoc.
               </p>
             </div>
@@ -233,10 +233,10 @@ export function StrategyImporter({
               <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
-              <p className="text-gray-700 dark:text-gray-300 text-center mb-2">
+              <p className="text-stone-700 dark:text-neutral-300 text-center mb-2">
                 Khong the sao chep chien luoc
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+              <p className="text-sm text-stone-500 dark:text-neutral-400 text-center">
                 {errorMessage || "Da xay ra loi. Vui long thu lai sau."}
               </p>
             </div>

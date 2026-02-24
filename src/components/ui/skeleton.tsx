@@ -11,7 +11,7 @@ const Skeleton = React.forwardRef<HTMLDivElement, SkeletonProps>(
         role="presentation"
         aria-hidden="true"
         className={cn(
-          "animate-pulse rounded-md bg-gray-200 dark:bg-gray-700",
+          "animate-pulse bg-stone-200 dark:bg-neutral-700",
           className
         )}
         {...props}
@@ -34,7 +34,7 @@ const SkeletonCard = React.forwardRef<HTMLDivElement, SkeletonCardProps>(
         role="presentation"
         aria-hidden="true"
         className={cn(
-          "rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow",
+          "border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-6",
           className
         )}
         {...props}
@@ -67,11 +67,11 @@ const SkeletonTable = React.forwardRef<HTMLDivElement, SkeletonTableProps>(
         ref={ref}
         role="presentation"
         aria-hidden="true"
-        className={cn("rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow overflow-hidden", className)}
+        className={cn("border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden", className)}
         {...props}
       >
         {/* Header */}
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3">
+        <div className="border-b border-stone-200 dark:border-neutral-700 bg-stone-50 dark:bg-neutral-900 px-4 py-3">
           <div className="flex gap-4">
             {Array.from({ length: columns }).map((_, i) => (
               <Skeleton key={i} className="h-4 flex-1" />
@@ -79,7 +79,7 @@ const SkeletonTable = React.forwardRef<HTMLDivElement, SkeletonTableProps>(
           </div>
         </div>
         {/* Rows */}
-        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        <div className="divide-y divide-stone-100 dark:divide-neutral-700">
           {Array.from({ length: rows }).map((_, rowIndex) => (
             <div key={rowIndex} className="px-4 py-3">
               <div className="flex gap-4">
@@ -117,7 +117,7 @@ const SkeletonChart = React.forwardRef<HTMLDivElement, SkeletonChartProps>(
         ref={ref}
         role="presentation"
         aria-hidden="true"
-        className={cn("rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow", className)}
+        className={cn("border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-6", className)}
         style={{ height }}
         {...props}
       >
@@ -125,8 +125,8 @@ const SkeletonChart = React.forwardRef<HTMLDivElement, SkeletonChartProps>(
         <div className="flex items-center justify-between mb-6">
           <Skeleton className="h-6 w-32" />
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-20 rounded-lg" />
-            <Skeleton className="h-8 w-20 rounded-lg" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-8 w-20" />
           </div>
         </div>
         {/* Chart area */}
@@ -134,7 +134,7 @@ const SkeletonChart = React.forwardRef<HTMLDivElement, SkeletonChartProps>(
           {CHART_BAR_HEIGHTS.map((barHeight, i) => (
             <Skeleton
               key={i}
-              className="flex-1 rounded-t"
+              className="flex-1"
               style={{ height: `${barHeight}%` }}
             />
           ))}
@@ -163,7 +163,7 @@ const SkeletonStats = React.forwardRef<HTMLDivElement, SkeletonStatsProps>(
         {Array.from({ length: count }).map((_, i) => (
           <div
             key={i}
-            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow"
+            className="border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-6"
           >
             <Skeleton className="h-4 w-24 mb-2" />
             <Skeleton className="h-8 w-16 mb-1" />
@@ -189,7 +189,7 @@ const ChartSkeleton = React.forwardRef<HTMLDivElement, ChartSkeletonProps>(
         role="presentation"
         aria-hidden="true"
         className={cn(
-          "animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800",
+          "animate-pulse bg-stone-100 dark:bg-neutral-800",
           "flex items-center justify-center",
           className
         )}
@@ -202,7 +202,7 @@ const ChartSkeleton = React.forwardRef<HTMLDivElement, ChartSkeletonProps>(
             {[40, 65, 45, 80, 55, 70, 50, 85, 60, 75, 45, 55].map((h, i) => (
               <div
                 key={i}
-                className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-t"
+                className="flex-1 bg-stone-200 dark:bg-neutral-700"
                 style={{ height: `${h}%` }}
               />
             ))}
@@ -214,7 +214,7 @@ const ChartSkeleton = React.forwardRef<HTMLDivElement, ChartSkeletonProps>(
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className="text-gray-300 dark:text-gray-600"
+              className="text-stone-300 dark:text-neutral-600"
             />
           </svg>
         </div>

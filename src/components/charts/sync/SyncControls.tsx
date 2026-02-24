@@ -42,7 +42,7 @@ export function SyncControls({
             onClick={toggleSync}
             className={cn(
               "h-8 w-8",
-              isSyncEnabled && "bg-blue-600 hover:bg-blue-700"
+              isSyncEnabled && "bg-emerald-700 hover:bg-emerald-800"
             )}
             aria-label={
               isSyncEnabled ? "Disable chart sync" : "Enable chart sync"
@@ -81,8 +81,8 @@ export function SyncControls({
           className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
             isSyncEnabled
-              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-              : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+              : "bg-stone-100 text-stone-600 dark:bg-neutral-800 dark:text-neutral-400"
           )}
           aria-pressed={isSyncEnabled}
         >
@@ -97,7 +97,7 @@ export function SyncControls({
         {showResetButton && onReset && (
           <button
             onClick={onReset}
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-stone-100 text-stone-600 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-stone-200 dark:hover:bg-neutral-700 transition-colors"
             aria-label="Reset all charts"
           >
             <RefreshCw className="h-3 w-3" />
@@ -114,7 +114,7 @@ export function SyncControls({
         variant={isSyncEnabled ? "default" : "outline"}
         size="sm"
         onClick={toggleSync}
-        className={cn("gap-2", isSyncEnabled && "bg-blue-600 hover:bg-blue-700")}
+        className={cn("gap-2", isSyncEnabled && "bg-emerald-700 hover:bg-emerald-800")}
         aria-pressed={isSyncEnabled}
       >
         {isSyncEnabled ? (
@@ -164,15 +164,15 @@ export function SyncIndicator({ className, isActive = false }: SyncIndicatorProp
       className={cn(
         "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
         isActive
-          ? "bg-blue-500 text-white"
-          : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+          ? "bg-emerald-700 text-white"
+          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
         className
       )}
     >
       <span
         className={cn(
           "w-1.5 h-1.5 rounded-full",
-          isActive ? "bg-white animate-pulse" : "bg-blue-500"
+          isActive ? "bg-white animate-pulse" : "bg-emerald-600"
         )}
       />
       Synced
@@ -181,3 +181,4 @@ export function SyncIndicator({ className, isActive = false }: SyncIndicatorProp
 }
 
 export default SyncControls;
+

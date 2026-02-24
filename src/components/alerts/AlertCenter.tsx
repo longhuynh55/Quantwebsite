@@ -108,19 +108,19 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="alert-center-title"
-        className="absolute right-0 top-0 h-full w-full max-w-md border-l border-gray-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 animate-in slide-in-from-right duration-300"
+        className="absolute right-0 top-0 h-full w-full max-w-md animate-in slide-in-from-right duration-300 border-l border-stone-200 bg-stone-50 shadow-2xl dark:border-neutral-800 dark:bg-neutral-950"
       >
         <div className="flex h-full flex-col">
-          <header className="flex items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-slate-800">
+          <header className="flex items-center justify-between border-b border-stone-200 px-4 py-4 dark:border-neutral-800">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">
+              <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                 <Bell className="h-4 w-4" />
               </div>
               <div>
-                <h2 id="alert-center-title" className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                <h2 id="alert-center-title" className="text-sm font-semibold text-stone-900 dark:text-neutral-100">
                   Alert Center
                 </h2>
-                <p className="text-xs text-gray-500 dark:text-slate-400">
+                <p className="text-xs text-stone-500 dark:text-neutral-400">
                   {unreadCount} unread alerts
                 </p>
               </div>
@@ -133,7 +133,7 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
                 aria-label="Refresh alerts"
                 onClick={() => void loadAlerts("refresh")}
                 disabled={isRefreshing || isInitialLoading}
-                className="h-8 w-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="h-8 w-8 rounded-lg text-stone-500 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
               </Button>
@@ -142,7 +142,7 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
                 size="icon"
                 aria-label="Close alert center"
                 onClick={() => onOpenChange(false)}
-                className="h-8 w-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="h-8 w-8 rounded-lg text-stone-500 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -151,7 +151,7 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
 
           <div className="flex-1 overflow-y-auto p-4">
             {lastUpdated && (
-              <p className="mb-3 text-xs text-gray-500 dark:text-slate-400">
+              <p className="mb-3 text-xs text-stone-500 dark:text-neutral-400">
                 Last update: {formatTimestamp(lastUpdated)}
               </p>
             )}
@@ -166,9 +166,9 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
             )}
 
             {isInitialLoading ? (
-              <p className="text-sm text-gray-500 dark:text-slate-400">Loading alerts...</p>
+              <p className="text-sm text-stone-500 dark:text-neutral-400">Loading alerts...</p>
             ) : alerts.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-slate-400">No alerts available.</p>
+              <p className="text-sm text-stone-500 dark:text-neutral-400">No alerts available.</p>
             ) : (
               <ul className="space-y-3">
                 {alerts.map((alert) => (
@@ -181,11 +181,11 @@ export function AlertCenter({ open, onOpenChange }: AlertCenterProps) {
                     )}
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{alert.title}</p>
+                      <p className="text-sm font-medium text-stone-900 dark:text-neutral-100">{alert.title}</p>
                       <Badge variant={getSeverityBadgeVariant(alert.severity)}>{alert.severity}</Badge>
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-slate-300">{alert.message}</p>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+                    <p className="text-xs text-stone-700 dark:text-neutral-300">{alert.message}</p>
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-stone-500 dark:text-neutral-400">
                       <span>{alert.symbol ?? "Portfolio"}</span>
                       <span>{formatTimestamp(alert.createdAt)}</span>
                     </div>
@@ -216,9 +216,9 @@ function getAlertBorderTone(severity: AlertSeverity): string {
     case "critical":
       return "border-red-200 bg-red-50/60 dark:border-red-900/50 dark:bg-red-950/20";
     case "warning":
-      return "border-blue-200 bg-blue-50/60 dark:border-blue-900/50 dark:bg-blue-950/20";
+      return "border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20";
     default:
-      return "border-gray-200 bg-gray-50/60 dark:border-slate-700 dark:bg-slate-800/60";
+      return "border-stone-200 bg-stone-100/70 dark:border-neutral-700 dark:bg-neutral-800/60";
   }
 }
 

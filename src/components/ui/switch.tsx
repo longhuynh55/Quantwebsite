@@ -35,15 +35,15 @@ const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
           <label
             htmlFor={switchId}
             className={cn(
-              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 cursor-pointer",
-              "bg-gray-200 dark:bg-gray-700 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2",
-              "peer-checked:bg-blue-600",
+              "relative inline-flex h-6 w-11 items-center transition-colors duration-200 cursor-pointer",
+              "bg-stone-200 dark:bg-neutral-700 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2",
+              "peer-checked:bg-emerald-700 dark:peer-checked:bg-emerald-600",
               "peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
             )}
           >
             <span
               className={cn(
-                "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200",
+                "inline-block h-4 w-4 transform bg-white transition-transform duration-200",
                 "translate-x-1 peer-checked:translate-x-6"
               )}
             />
@@ -55,7 +55,7 @@ const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
               <label
                 htmlFor={switchId}
                 className={cn(
-                  "text-sm font-medium text-gray-700 dark:text-gray-200 cursor-pointer",
+                  "text-sm font-medium text-stone-700 dark:text-neutral-200 cursor-pointer",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
@@ -63,7 +63,7 @@ const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
               </label>
             )}
             {description && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+              <p className="text-xs text-stone-500 dark:text-neutral-400">{description}</p>
             )}
           </div>
         )}

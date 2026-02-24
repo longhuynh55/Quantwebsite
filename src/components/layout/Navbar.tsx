@@ -29,6 +29,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { AiAssistantTrigger } from "@/components/assistant";
+import { dispatchCommandPaletteOpenEvent } from "@/lib/commandPaletteEvents";
 
 interface NavItem {
   href: string;
@@ -146,21 +147,21 @@ export function Navbar() {
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
-    <nav className="bg-white/95 dark:bg-slate-900/95 supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-slate-900/80 supports-[backdrop-filter]:backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 sticky top-0 z-50 shadow-sm transition-colors duration-300">
+    <nav className="bg-stone-50/95 dark:bg-neutral-950/95 supports-[backdrop-filter]:bg-stone-50/85 supports-[backdrop-filter]:dark:bg-neutral-950/85 supports-[backdrop-filter]:backdrop-blur-sm border-b border-stone-200 dark:border-neutral-800 sticky top-0 z-50 shadow-sm transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-3 group">
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-700 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/25 group-hover:shadow-emerald-900/40 transition-shadow">
                   <TrendingUp className="w-5 h-5 text-white" />
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-neutral-900"></div>
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-xl text-gray-900 dark:text-white tracking-tight">QuantVN</span>
-                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium -mt-1 hidden sm:block">Quantitative Finance</span>
+                <span className="font-bold text-xl text-stone-900 dark:text-white tracking-tight">QuantVN</span>
+                <span className="text-[10px] text-stone-500 dark:text-neutral-400 font-medium -mt-1 hidden sm:block">Quantitative Finance</span>
               </div>
             </Link>
           </div>
@@ -174,8 +175,8 @@ export function Navbar() {
                     className={cn(
                       "flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200",
                       isActiveInGroup(group.items)
-                        ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                        : "text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white"
                     )}
                   >
                     <span>{group.label}</span>
@@ -192,7 +193,7 @@ export function Navbar() {
                           className={cn(
                             "flex items-center space-x-2 w-full",
                             pathname === item.href
-                              ? "text-blue-600 dark:text-blue-400"
+                              ? "text-emerald-700 dark:text-emerald-300"
                               : ""
                           )}
                         >
@@ -212,8 +213,8 @@ export function Navbar() {
               className={cn(
                 "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200",
                 pathname === "/learn"
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                  : "text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white"
               )}
             >
               <BookOpen className="w-4 h-4" />
@@ -227,19 +228,11 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-              onClick={() => {
-                // Dispatch keyboard event to open command palette
-                const event = new KeyboardEvent("keydown", {
-                  key: "k",
-                  metaKey: true,
-                  bubbles: true,
-                });
-                document.dispatchEvent(event);
-              }}
+              className="text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800"
+              onClick={dispatchCommandPaletteOpenEvent}
             >
               <Search className="w-4 h-4" />
-              <span className="ml-2 text-xs text-gray-400 hidden xl:inline">
+              <span className="ml-2 text-xs text-stone-400 dark:text-neutral-500 hidden xl:inline">
                 Ctrl+K
               </span>
             </Button>
@@ -248,7 +241,7 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+              className="text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800"
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               aria-label="Toggle theme"
             >
@@ -263,7 +256,7 @@ export function Navbar() {
             <AiAssistantTrigger />
 
             <Link href="/screener">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/25">
+              <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 shadow-md shadow-emerald-900/25">
                 Get Started
               </Button>
             </Link>
@@ -274,7 +267,7 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="text-gray-600 dark:text-slate-300"
+              className="text-stone-600 dark:text-neutral-300"
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               aria-label="Toggle theme"
             >
@@ -289,7 +282,7 @@ export function Navbar() {
               variant="ghost"
               size="icon"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="text-gray-600 dark:text-gray-300"
+              className="text-stone-600 dark:text-neutral-300"
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-menu"
@@ -308,12 +301,12 @@ export function Navbar() {
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
-          className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:dark:bg-gray-900/85 supports-[backdrop-filter]:backdrop-blur-sm"
+          className="lg:hidden border-t border-stone-200 dark:border-neutral-800 bg-stone-50/95 dark:bg-neutral-950/95 supports-[backdrop-filter]:bg-stone-50/85 supports-[backdrop-filter]:dark:bg-neutral-950/85 supports-[backdrop-filter]:backdrop-blur-sm"
         >
           <div className="px-3 py-4">
             {navGroups.map((group, groupIndex) => (
               <div key={group.label} className="mb-4">
-                <h3 className="px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                <h3 className="px-4 text-xs font-semibold text-stone-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
                   {group.label}
                 </h3>
                 {group.items.map((item, itemIndex) => {
@@ -329,8 +322,8 @@ export function Navbar() {
                       className={cn(
                         "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors duration-200",
                         isActive
-                          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                          : "text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800"
                       )}
                       onClick={closeMobileMenu}
                     >
@@ -344,7 +337,7 @@ export function Navbar() {
 
             {/* Resources */}
             <div className="mb-4">
-              <h3 className="px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              <h3 className="px-4 text-xs font-semibold text-stone-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
                 Resources
               </h3>
               {resourceItems.map((item) => {
@@ -357,8 +350,8 @@ export function Navbar() {
                     className={cn(
                       "flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors duration-200",
                       isActive
-                        ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                        : "text-stone-600 dark:text-neutral-300 hover:bg-stone-100 dark:hover:bg-neutral-800"
                     )}
                     onClick={closeMobileMenu}
                   >
@@ -369,9 +362,9 @@ export function Navbar() {
               })}
             </div>
 
-            <div className="pt-4 px-2 space-y-2 border-t border-gray-100 dark:border-gray-800">
+            <div className="pt-4 px-2 space-y-2 border-t border-stone-200 dark:border-neutral-800">
               <Link href="/screener" onClick={closeMobileMenu}>
-                <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                <Button className="w-full bg-emerald-700 hover:bg-emerald-800">
                   Get Started
                 </Button>
               </Link>
@@ -382,3 +375,4 @@ export function Navbar() {
     </nav>
   );
 }
+

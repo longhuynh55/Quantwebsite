@@ -4,7 +4,6 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
-// Mock data - in production this would come from API
 const MOCK_GAINERS = [
   { symbol: "HQC", price: 12.8, change: 6.9, volume: 5200000 },
   { symbol: "ROS", price: 45.5, change: 6.5, volume: 3100000 },
@@ -21,7 +20,6 @@ const MOCK_LOSERS = [
   { symbol: "PGC", price: 22.5, change: -3.5, volume: 3400000 },
 ];
 
-// Memoized mover row component
 const MoverRow = React.memo(function MoverRow({
   item,
   index,
@@ -34,39 +32,31 @@ const MoverRow = React.memo(function MoverRow({
   const isPositive = item.change >= 0;
 
   return (
-    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+    <div className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-stone-100 dark:hover:bg-neutral-900/60">
       <div className="flex items-center gap-2">
         <span
           className={cn(
-            "w-5 h-5 rounded flex items-center justify-center text-xs font-bold",
+            "flex h-5 w-5 items-center justify-center rounded text-xs font-bold",
             index < 3
               ? isGainer
-                ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+              : "bg-stone-100 text-stone-500 dark:bg-neutral-800 dark:text-neutral-400"
           )}
         >
           {index + 1}
         </span>
         <div>
-          <span className="font-semibold text-gray-900 dark:text-gray-100">
-            {item.symbol}
-          </span>
-          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-            {(item.volume / 1000).toFixed(0)}K
-          </span>
+          <span className="font-semibold text-stone-900 dark:text-white">{item.symbol}</span>
+          <span className="ml-2 text-xs text-stone-500 dark:text-neutral-400">{(item.volume / 1000).toFixed(0)}K</span>
         </div>
       </div>
       <div className="text-right">
-        <p className="font-medium text-gray-900 dark:text-gray-100">
-          {item.price.toFixed(2)}
-        </p>
+        <p className="font-medium text-stone-900 dark:text-white">{item.price.toFixed(2)}</p>
         <p
           className={cn(
             "text-sm font-medium",
-            isPositive
-              ? "text-green-600 dark:text-green-400"
-              : "text-red-600 dark:text-red-400"
+            isPositive ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
           )}
         >
           {isPositive ? "+" : ""}
@@ -80,62 +70,47 @@ const MoverRow = React.memo(function MoverRow({
 function TopMoversWidgetBase() {
   const [activeTab, setActiveTab] = React.useState<"gainers" | "losers">("gainers");
 
-  // Memoize active tab data
-  const data = React.useMemo(
-    () => (activeTab === "gainers" ? MOCK_GAINERS : MOCK_LOSERS),
-    [activeTab]
-  );
+  const data = React.useMemo(() => (activeTab === "gainers" ? MOCK_GAINERS : MOCK_LOSERS), [activeTab]);
 
-  // Memoize tab handlers
   const handleGainersClick = React.useCallback(() => setActiveTab("gainers"), []);
   const handleLosersClick = React.useCallback(() => setActiveTab("losers"), []);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-800 mb-4">
+    <div className="flex h-full flex-col">
+      <div className="mb-4 flex border-b border-stone-200 dark:border-neutral-800">
         <button
           onClick={handleGainersClick}
           className={cn(
-            "flex-1 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1",
+            "flex flex-1 items-center justify-center gap-1 py-2 text-sm font-medium transition-colors",
             activeTab === "gainers"
-              ? "text-green-600 dark:text-green-400 border-b-2 border-green-500"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              ? "border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-400"
+              : "text-stone-500 hover:text-stone-700 dark:text-neutral-400 dark:hover:text-neutral-200"
           )}
         >
           <TrendingUp className="h-4 w-4" />
-          Tăng mạnh
+          Top Gainers
         </button>
         <button
           onClick={handleLosersClick}
           className={cn(
-            "flex-1 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1",
+            "flex flex-1 items-center justify-center gap-1 py-2 text-sm font-medium transition-colors",
             activeTab === "losers"
-              ? "text-red-600 dark:text-red-400 border-b-2 border-red-500"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              ? "border-b-2 border-rose-500 text-rose-700 dark:text-rose-400"
+              : "text-stone-500 hover:text-stone-700 dark:text-neutral-400 dark:hover:text-neutral-200"
           )}
         >
           <TrendingDown className="h-4 w-4" />
-          Giảm mạnh
+          Top Losers
         </button>
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-auto space-y-2">
+      <div className="flex-1 space-y-2 overflow-auto">
         {data.map((item, index) => (
-          <MoverRow
-            key={item.symbol}
-            item={item}
-            index={index}
-            isGainer={activeTab === "gainers"}
-          />
+          <MoverRow key={item.symbol} item={item} index={index} isGainer={activeTab === "gainers"} />
         ))}
       </div>
 
-      {/* Footer */}
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
-        HOSE - Cập nhật lúc 14:30
-      </p>
+      <p className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-500">HOSE update at 14:30</p>
     </div>
   );
 }

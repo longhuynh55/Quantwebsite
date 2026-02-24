@@ -70,7 +70,7 @@ export function AIResponsePanel({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-teal-500">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600">
               <Bot className="h-3.5 w-3.5 text-white" />
             </div>
             <CardTitle className="text-sm">Giai Thich Chien Luoc</CardTitle>
@@ -92,18 +92,18 @@ export function AIResponsePanel({
             {sections.map((section, index) => (
               <div key={index} className="space-y-1">
                 {section.title && (
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-stone-300">
                     {section.title}
                   </h4>
                 )}
-                <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                <p className="text-sm text-stone-700 dark:text-stone-200 whitespace-pre-wrap leading-relaxed">
                   {section.content}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+          <p className="text-sm text-stone-700 dark:text-stone-200 whitespace-pre-wrap leading-relaxed">
             {explanation}
           </p>
         )}
@@ -111,12 +111,12 @@ export function AIResponsePanel({
         {/* Raw Response Toggle */}
         {rawResponse && (
           <details className="group">
-            <summary className="flex cursor-pointer items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+            <summary className="flex cursor-pointer items-center gap-1 text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-300">
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
               <FileText className="h-3.5 w-3.5" />
               Xem phan hoi JSON goc
             </summary>
-            <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-gray-100 p-3 text-xs dark:bg-gray-800">
+            <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-stone-100 p-3 text-xs dark:bg-stone-900/60">
               {rawResponse}
             </pre>
           </details>

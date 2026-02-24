@@ -46,7 +46,7 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
   };
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+    <div className="border-t border-stone-200 bg-stone-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
       <div className="flex items-end gap-2">
         <div className="flex-1 relative">
           <label htmlFor={inputId} className="sr-only">
@@ -64,10 +64,10 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
             rows={1}
             aria-describedby={helperId}
             className={cn(
-              'w-full resize-none rounded-xl border border-gray-300 dark:border-gray-600',
-              'bg-gray-50 dark:bg-gray-800 px-4 py-3 pr-12',
-              'text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+              'w-full resize-none rounded-xl border border-stone-300 dark:border-neutral-600',
+              'bg-white dark:bg-neutral-800 px-4 py-3 pr-12',
+              'text-stone-900 dark:text-neutral-100 placeholder-stone-500 dark:placeholder-neutral-400',
+              'focus:outline-none focus:ring-2 focus:ring-emerald-600 dark:focus:ring-emerald-400 focus:border-transparent',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               'transition-all duration-200'
             )}
@@ -79,7 +79,7 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
           size="icon"
           className={cn(
             'flex-shrink-0 w-11 h-11 rounded-xl',
-            'bg-blue-600 hover:bg-blue-700 text-white',
+            'bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             'transition-all duration-200'
           )}
@@ -92,7 +92,7 @@ export function ChatInput({ onSend, isLoading, disabled = false }: ChatInputProp
           )}
         </Button>
       </div>
-      <p id={helperId} className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+      <p id={helperId} className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-400">
         Enter: send | Shift+Enter: new line
       </p>
     </div>

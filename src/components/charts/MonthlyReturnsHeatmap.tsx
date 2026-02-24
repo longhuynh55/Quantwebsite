@@ -280,13 +280,13 @@ export function MonthlyReturnsHeatmap({
     return (
       <div
         className={cn(
-          "flex items-center justify-center h-64 text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg",
+          "flex items-center justify-center h-64 text-stone-500 bg-stone-50 dark:bg-neutral-800/50 rounded-lg",
           className
         )}
       >
         <div className="text-center">
           <svg
-            className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600"
+            className="w-12 h-12 mx-auto mb-3 text-stone-300 dark:text-neutral-600"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -299,7 +299,7 @@ export function MonthlyReturnsHeatmap({
             />
           </svg>
           <p className="font-medium">No returns data available</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-stone-500 dark:text-neutral-400">
             Run a backtest to view monthly returns
           </p>
         </div>
@@ -312,14 +312,14 @@ export function MonthlyReturnsHeatmap({
       {/* Tooltip */}
       {tooltip.visible && (
         <div
-          className="fixed z-50 px-3 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-gray-700 rounded-lg shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full"
+          className="fixed z-50 px-3 py-2 text-sm font-medium text-white bg-stone-900 dark:bg-neutral-700 rounded-lg shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full"
           style={{
             left: tooltip.x,
             top: tooltip.y,
           }}
         >
           {tooltip.content}
-          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-stone-900 dark:border-t-neutral-700" />
         </div>
       )}
 
@@ -332,12 +332,12 @@ export function MonthlyReturnsHeatmap({
             {MONTHS.map((month) => (
               <div
                 key={month}
-                className="flex-1 min-w-[48px] text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider py-2"
+                className="flex-1 min-w-[48px] text-center text-xs font-semibold text-stone-500 dark:text-neutral-400 uppercase tracking-wider py-2"
               >
                 {month}
               </div>
             ))}
-            <div className="w-16 flex-shrink-0 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider py-2">
+            <div className="w-16 flex-shrink-0 text-center text-xs font-semibold text-stone-500 dark:text-neutral-400 uppercase tracking-wider py-2">
               Total
             </div>
           </div>
@@ -346,7 +346,7 @@ export function MonthlyReturnsHeatmap({
           {monthlyData.map((yearData) => (
             <div key={yearData.year} className="flex mb-1">
               {/* Year Label */}
-              <div className="w-14 flex-shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-start pr-2">
+              <div className="w-14 flex-shrink-0 text-sm font-medium text-stone-700 dark:text-neutral-300 flex items-center justify-start pr-2">
                 {yearData.year}
               </div>
 
@@ -359,7 +359,7 @@ export function MonthlyReturnsHeatmap({
                   tabIndex={0}
                   aria-label={`${MONTHS_FULL[monthIndex]} ${yearData.year}: ${formatReturnValue(value)}`}
                   style={{
-                    backgroundColor: value !== null ? getReturnColor(value, isDark) : (isDark ? "#1e293b" : "#f9fafb"),
+                    backgroundColor: value !== null ? getReturnColor(value, isDark) : (isDark ? "#171717" : "#fafaf9"),
                   }}
                   onMouseEnter={(e) => showTooltip(e.currentTarget, yearData.year, monthIndex, value)}
                   onMouseLeave={hideTooltip}
@@ -381,7 +381,7 @@ export function MonthlyReturnsHeatmap({
                   <span
                     className={cn(
                       "font-medium",
-                      value !== null ? getTextColor(value) : "text-gray-400 dark:text-gray-600"
+                      value !== null ? getTextColor(value) : "text-stone-400 dark:text-neutral-600"
                     )}
                   >
                     {formatReturnValue(value)}
@@ -396,7 +396,7 @@ export function MonthlyReturnsHeatmap({
                 tabIndex={0}
                 aria-label={`${yearData.year} total: ${formatReturnValue(yearData.total)}`}
                 style={{
-                  backgroundColor: yearData.total !== null ? getReturnColor(yearData.total, isDark) : (isDark ? "#1e293b" : "#f9fafb"),
+                  backgroundColor: yearData.total !== null ? getReturnColor(yearData.total, isDark) : (isDark ? "#171717" : "#fafaf9"),
                 }}
                 onMouseEnter={(e) => showTooltip(e.currentTarget, yearData.year, null, yearData.total)}
                 onMouseLeave={hideTooltip}
@@ -418,7 +418,7 @@ export function MonthlyReturnsHeatmap({
                 <span
                   className={cn(
                     "font-bold",
-                    yearData.total !== null ? getTextColor(yearData.total) : "text-gray-400 dark:text-gray-600"
+                    yearData.total !== null ? getTextColor(yearData.total) : "text-stone-400 dark:text-neutral-600"
                   )}
                 >
                   {formatReturnValue(yearData.total)}
@@ -431,28 +431,28 @@ export function MonthlyReturnsHeatmap({
 
       {/* Color Legend */}
       <div className="mt-6 flex items-center justify-center gap-2">
-        <span className="text-xs text-gray-500 dark:text-gray-400">-10%</span>
+        <span className="text-xs text-stone-500 dark:text-neutral-400">-10%</span>
         <div className="flex h-3 rounded overflow-hidden">
           {/* Red gradient */}
           <div className="w-6 bg-red-500 dark:bg-red-600" />
           <div className="w-6 bg-red-300 dark:bg-red-700" />
           <div className="w-6 bg-red-100 dark:bg-red-800" />
           {/* Neutral */}
-          <div className="w-6 bg-gray-100 dark:bg-gray-700" />
+          <div className="w-6 bg-stone-100 dark:bg-neutral-700" />
           {/* Green gradient */}
           <div className="w-6 bg-green-100 dark:bg-green-800" />
           <div className="w-6 bg-green-300 dark:bg-green-700" />
           <div className="w-6 bg-green-500 dark:bg-green-600" />
         </div>
-        <span className="text-xs text-gray-500 dark:text-gray-400">+10%</span>
+        <span className="text-xs text-stone-500 dark:text-neutral-400">+10%</span>
       </div>
 
       {/* Stats Summary */}
       {monthlyData.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="mt-4 pt-4 border-t border-stone-200 dark:border-neutral-700">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
                 Best Month
               </p>
               <p className="text-lg font-bold text-green-600 dark:text-green-400 font-mono">
@@ -467,7 +467,7 @@ export function MonthlyReturnsHeatmap({
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
                 Worst Month
               </p>
               <p className="text-lg font-bold text-red-600 dark:text-red-400 font-mono">
@@ -482,10 +482,10 @@ export function MonthlyReturnsHeatmap({
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
                 Avg Monthly
               </p>
-              <p className="text-lg font-bold text-gray-900 dark:text-gray-100 font-mono">
+              <p className="text-lg font-bold text-stone-900 dark:text-neutral-100 font-mono">
                 {formatReturnValue(
                   (() => {
                     const allMonths = monthlyData.flatMap((d) =>
@@ -499,10 +499,10 @@ export function MonthlyReturnsHeatmap({
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
                 Positive Months
               </p>
-              <p className="text-lg font-bold text-gray-900 dark:text-gray-100 font-mono">
+              <p className="text-lg font-bold text-stone-900 dark:text-neutral-100 font-mono">
                 {(() => {
                   const allMonths = monthlyData.flatMap((d) =>
                     d.months.filter((m): m is number => m !== null)
@@ -523,3 +523,4 @@ export function MonthlyReturnsHeatmap({
 }
 
 export default MonthlyReturnsHeatmap;
+

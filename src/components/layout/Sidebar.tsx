@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { statusColors } from "@/lib/design-system/colors";
 import {
   LayoutDashboard,
   Search,
@@ -21,8 +20,10 @@ import {
   Clock,
   History,
   GitBranch,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useAssistantStore } from "@/lib/stores/assistantStore";
 
 interface NavItem {
   href: string;
@@ -39,7 +40,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Analytics",
     items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/screener", label: "Stock Screener", icon: Search },
       { href: "/charts", label: "Charts & Analysis", icon: TrendingUp },
     ],
@@ -124,12 +125,12 @@ function CollapsibleSection({ title, collapsed, children, defaultExpanded = true
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center justify-between w-full px-3 py-1 mb-2 text-left group"
       >
-        <h3 className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">
+        <h3 className="text-[10px] font-bold text-stone-400 dark:text-neutral-500 uppercase tracking-widest">
           {title}
         </h3>
         <ChevronRight
           className={cn(
-            "w-3 h-3 text-gray-400 dark:text-slate-500 transition-transform duration-200",
+            "w-3 h-3 text-stone-400 dark:text-neutral-500 transition-transform duration-200",
             isExpanded && "rotate-90"
           )}
         />
@@ -151,6 +152,11 @@ export function Sidebar() {
   const [apiStatus, setApiStatus] = React.useState<ApiStatusType>("live");
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [isClient, setIsClient] = React.useState(false);
+  const assistantUiMode = useAssistantStore((state) => state.uiMode);
+  const isAssistantOpen = useAssistantStore((state) => state.isOpen);
+  const openAssistantPanel = useAssistantStore((state) => state.openPanel);
+  const closeAssistantPanel = useAssistantStore((state) => state.closePanel);
+  const setAssistantUiMode = useAssistantStore((state) => state.setUIMode);
 
   // Set initial date on client only to avoid hydration mismatch
   React.useEffect(() => {
@@ -194,45 +200,52 @@ export function Sidebar() {
       case "live":
         return {
           label: "Live",
-          text: statusColors.live.text,
-          bg: statusColors.live.bg,
-          statusClass: "status-live",
+          pillClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+          dotClass: "bg-emerald-600 dark:bg-emerald-400",
         };
       case "stale":
         return {
           label: "Stale",
-          text: statusColors.stale.text,
-          bg: statusColors.stale.bg,
-          statusClass: "status-stale",
+          pillClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
+          dotClass: "bg-amber-600 dark:bg-amber-400",
         };
       case "error":
         return {
           label: "Error",
-          text: statusColors.error.text,
-          bg: statusColors.error.bg,
-          statusClass: "status-error",
+          pillClass: "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200",
+          dotClass: "bg-rose-600 dark:bg-rose-400",
         };
     }
   };
 
   const statusInfo = getStatusInfo();
+  const isCopilotActive = isAssistantOpen && assistantUiMode === "copilot";
+
+  const handleAssistantToggle = React.useCallback(() => {
+    setAssistantUiMode("copilot");
+    if (isCopilotActive) {
+      closeAssistantPanel();
+      return;
+    }
+    openAssistantPanel();
+  }, [closeAssistantPanel, isCopilotActive, openAssistantPanel, setAssistantUiMode]);
 
   return (
     <aside
       className={cn(
-        "hidden lg:flex flex-col border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 z-40 sticky top-0 h-screen",
+        "hidden lg:flex flex-col border-r border-stone-200 dark:border-neutral-800 bg-stone-50 dark:bg-neutral-950 transition-all duration-300 z-40 sticky top-0 h-screen",
         collapsed ? "w-20" : "w-64"
       )}
     >
       {/* Sidebar Header */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-100 dark:border-slate-800/50">
+      <div className="h-16 flex items-center px-6 border-b border-stone-200 dark:border-neutral-800/50">
         <Link href="/" className="flex items-center space-x-3 group overflow-hidden">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
+          <div className="w-8 h-8 bg-emerald-700 rounded-lg flex items-center justify-center shrink-0 shadow-lg shadow-emerald-900/20">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
-            <span className="font-bold text-xl text-gray-900 dark:text-white tracking-tight animate-in fade-in duration-300">
-              QuantVN
+            <span className="font-serif text-xl font-bold text-stone-900 dark:text-white tracking-tight animate-in fade-in duration-300">
+              <span className="text-emerald-700 dark:text-emerald-400">Q</span>uantVN
             </span>
           )}
         </Link>
@@ -258,8 +271,8 @@ export function Sidebar() {
                     className={cn(
                       "flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
                       isActive
-                        ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                        : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-slate-200"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                        : "text-stone-600 dark:text-neutral-400 hover:bg-stone-100 dark:hover:bg-neutral-800/50 hover:text-stone-900 dark:hover:text-neutral-200"
                     )}
                   >
                     <Icon className={cn("w-5 h-5 shrink-0 transition-transform duration-200 group-hover:scale-110", isActive ? "" : "opacity-70 group-hover:opacity-100")} />
@@ -269,12 +282,12 @@ export function Sidebar() {
                       </span>
                     )}
                     {isActive && !collapsed && (
-                      <div className="absolute right-2 w-1 h-5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                      <div className="absolute right-2 w-1 h-5 bg-emerald-700 dark:bg-emerald-400 rounded-full" />
                     )}
                     {collapsed && (
-                      <div className="sidebar-tooltip absolute left-full ml-4 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 whitespace-nowrap shadow-lg">
+                      <div className="sidebar-tooltip absolute left-full ml-4 px-3 py-2 bg-stone-900 dark:bg-neutral-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 whitespace-nowrap shadow-lg">
                         <div className="font-semibold">{item.label}</div>
-                        <div className="text-gray-300 dark:text-slate-300 text-[10px] mt-0.5">
+                        <div className="text-stone-300 dark:text-neutral-300 text-[10px] mt-0.5">
                           {group.label} section
                         </div>
                       </div>
@@ -290,10 +303,10 @@ export function Sidebar() {
         {!collapsed && (
           <div className="px-4">
             <div className="flex items-center justify-between px-3 py-1 mb-2">
-              <h3 className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">
+              <h3 className="text-[10px] font-bold text-stone-400 dark:text-neutral-500 uppercase tracking-widest">
                 Recent
               </h3>
-              <History className="w-3 h-3 text-gray-400 dark:text-slate-500" />
+              <History className="w-3 h-3 text-stone-400 dark:text-neutral-500" />
             </div>
             <div className="space-y-1">
               {recentItems.slice(0, 4).map((item) => (
@@ -302,7 +315,7 @@ export function Sidebar() {
                   href={item.href}
                   className={cn(
                     "flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 group",
-                    "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-slate-200"
+                    "text-stone-600 dark:text-neutral-400 hover:bg-stone-100 dark:hover:bg-neutral-800/50 hover:text-stone-900 dark:hover:text-neutral-200"
                   )}
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -310,15 +323,15 @@ export function Sidebar() {
                       className={cn(
                         "w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center shrink-0",
                         item.type === "stock"
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                          : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300"
+                          ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+                          : "bg-stone-200 dark:bg-neutral-700 text-stone-600 dark:text-neutral-300"
                       )}
                     >
                       {item.type === "stock" ? item.label.charAt(0) : item.label.charAt(0)}
                     </span>
                     <span className="text-sm truncate">{item.label}</span>
                   </div>
-                  <span className="text-[10px] text-gray-400 dark:text-slate-500 shrink-0 ml-2">
+                  <span className="text-[10px] text-stone-400 dark:text-neutral-500 shrink-0 ml-2">
                     {formatTimeAgo(item.timestamp)}
                   </span>
                 </Link>
@@ -328,23 +341,48 @@ export function Sidebar() {
         )}
       </div>
 
+      {/* AI Assistant Shortcut */}      
+      {!collapsed && (
+        <div className="px-4 pb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAssistantToggle}
+            className={cn(
+              "w-full justify-between rounded-xl border-stone-200 bg-white text-stone-700 hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/20",
+              isCopilotActive && "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+            )}
+            aria-label="Toggle AI Assistant"
+            aria-pressed={isCopilotActive}
+          >
+            <span className="flex items-center gap-2">
+              <Bot className="w-4 h-4" />
+              <span className="text-xs font-semibold">AI Assistant</span>
+            </span>
+            <span className="text-[10px] font-medium text-stone-500 dark:text-neutral-400">
+              {isCopilotActive ? "Open" : "Copilot"}
+            </span>
+          </Button>
+        </div>
+      )}
+
       {/* Status Section - Above collapse button */}
       {!collapsed && (
         <div className="px-4 pb-2">
-          <div className="sidebar-status bg-gray-50 dark:bg-slate-800/50 rounded-xl p-3">
+          <div className="sidebar-status bg-stone-100/80 dark:bg-neutral-900/70 rounded-xl p-3">
             {/* API Status */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-gray-500 dark:text-slate-400" />
-                <span className="text-xs font-medium text-gray-600 dark:text-slate-300">API Status</span>
+                <Activity className="w-4 h-4 text-stone-500 dark:text-neutral-400" />
+                <span className="text-xs font-medium text-stone-600 dark:text-neutral-300">API Status</span>
               </div>
               <div
                 className={cn(
                   "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold",
-                  statusInfo.statusClass
+                  statusInfo.pillClass
                 )}
-                style={{ backgroundColor: statusInfo.bg, color: statusInfo.text, paddingLeft: "16px" }}
               >
+                <span className={cn("h-1.5 w-1.5 rounded-full", statusInfo.dotClass)} aria-hidden="true" />
                 {statusInfo.label}
               </div>
             </div>
@@ -352,10 +390,10 @@ export function Sidebar() {
             {/* Data Freshness */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-gray-500 dark:text-slate-400" />
-                <span className="text-xs font-medium text-gray-600 dark:text-slate-300">Last Updated</span>
+                <Clock className="w-4 h-4 text-stone-500 dark:text-neutral-400" />
+                <span className="text-xs font-medium text-stone-600 dark:text-neutral-300">Last Updated</span>
               </div>
-              <span className="text-[10px] text-gray-500 dark:text-slate-400">
+              <span className="text-[10px] text-stone-500 dark:text-neutral-400">
                 {formatTimeAgo(lastUpdated)}
               </span>
             </div>
@@ -365,10 +403,32 @@ export function Sidebar() {
 
       {/* Collapsed Status Indicator */}
       {collapsed && (
-        <div className="px-4 pb-2 flex justify-center">
+        <div className="px-4 pb-2 space-y-2">
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleAssistantToggle}
+              className={cn(
+                "relative group w-8 h-8 rounded-lg flex items-center justify-center",
+                isCopilotActive
+                  ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                  : "bg-stone-100 dark:bg-neutral-800 text-stone-500 dark:text-neutral-400 hover:bg-stone-200 dark:hover:bg-neutral-700"
+              )}
+              aria-label="Toggle AI Assistant"
+              aria-pressed={isCopilotActive}
+            >
+              <Bot className="w-4 h-4" />
+              <div className="sidebar-tooltip absolute left-full ml-4 px-3 py-2 bg-stone-900 dark:bg-neutral-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 whitespace-nowrap shadow-lg">
+                <div className="font-semibold">AI Assistant</div>
+                <div className="text-stone-300 dark:text-neutral-300 text-[10px] mt-0.5">
+                  {isCopilotActive ? "Copilot open" : "Open copilot"}
+                </div>
+              </div>
+            </button>
+          </div>
           <div
             className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center",
+              "relative mx-auto group w-8 h-8 rounded-lg flex items-center justify-center",
               apiStatus === "live" && "bg-green-100 dark:bg-green-900/30",
               apiStatus === "stale" && "bg-yellow-100 dark:bg-yellow-900/30",
               apiStatus === "error" && "bg-red-100 dark:bg-red-900/30"
@@ -383,9 +443,9 @@ export function Sidebar() {
               )}
             />
             {/* Tooltip for collapsed status */}
-            <div className="sidebar-tooltip absolute left-full ml-4 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 whitespace-nowrap shadow-lg">
+            <div className="sidebar-tooltip absolute left-full ml-4 px-3 py-2 bg-stone-900 dark:bg-neutral-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 whitespace-nowrap shadow-lg">
               <div className="font-semibold">API: {statusInfo.label}</div>
-              <div className="text-gray-300 dark:text-slate-300 text-[10px] mt-0.5">
+              <div className="text-stone-300 dark:text-neutral-300 text-[10px] mt-0.5">
                 Updated {formatTimeAgo(lastUpdated)}
               </div>
             </div>
@@ -394,11 +454,11 @@ export function Sidebar() {
       )}
 
       {/* Sidebar Footer / Toggle */}
-      <div className="p-4 border-t border-gray-100 dark:border-slate-800/50">
+      <div className="p-4 border-t border-stone-200 dark:border-neutral-800/50">
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-center text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800/50 rounded-xl"
+          className="w-full justify-center text-stone-500 dark:text-neutral-400 hover:bg-stone-100 dark:hover:bg-neutral-800/50 rounded-xl"
           onClick={() => setCollapsed(!collapsed)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >

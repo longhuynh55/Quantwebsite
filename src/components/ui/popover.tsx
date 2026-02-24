@@ -130,7 +130,7 @@ export const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentPro
           else if (ref) ref.current = node;
         }}
         className={cn(
-          "absolute top-full mt-2 z-50 rounded-xl border border-gray-200 bg-white p-4 shadow-lg",
+          "absolute top-full mt-2 z-50 border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4",
           "animate-in fade-in-0 zoom-in-95 duration-150",
           alignmentClasses[align],
           className

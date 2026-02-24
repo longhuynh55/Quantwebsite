@@ -9,31 +9,26 @@ interface BacktestControlsProps {
 
 export function BacktestControls({ onRun, loading, onReset }: BacktestControlsProps) {
   return (
-    <>
-      <div className="flex items-end pb-1">
-        <Button
-          onClick={onRun}
-          disabled={loading}
-          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-500/20 font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-        >
-          {loading ? (
-            <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2" />
-          ) : (
-            <Play className="w-5 h-5 mr-2 fill-current" />
-          )}
-          Execute Engine
-        </Button>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-xl border-gray-200 dark:border-slate-800"
-          onClick={onReset}
-        >
-          Reset All
-        </Button>
-      </div>
-    </>
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        onClick={onRun}
+        disabled={loading}
+        className="h-10 bg-emerald-700 px-4 text-xs font-semibold uppercase tracking-[0.12em] text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+      >
+        {loading ? (
+          <div className="mr-2 h-4 w-4 animate-spin border-2 border-white border-t-transparent" />
+        ) : (
+          <Play className="mr-2 h-4 w-4 fill-current" />
+        )}
+        Execute Engine
+      </Button>
+      <Button
+        variant="outline"
+        className="h-10 border-stone-300 bg-white px-4 text-xs font-semibold uppercase tracking-[0.12em] text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
+        onClick={onReset}
+      >
+        Reset
+      </Button>
+    </div>
   );
 }

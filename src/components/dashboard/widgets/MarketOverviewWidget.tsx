@@ -3,7 +3,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Mock data - in production this would come from API
 const MARKET_INDICES = [
   {
     name: "VN-Index",
@@ -14,9 +13,9 @@ const MARKET_INDICES = [
   },
   {
     name: "VN30-Index",
-    value: 1425.80,
+    value: 1425.8,
     change: 8.52,
-    changePercent: 0.60,
+    changePercent: 0.6,
     volume: "425.1M",
   },
   {
@@ -32,13 +31,10 @@ const MARKET_STATS = {
   advancing: 245,
   declining: 189,
   unchanged: 78,
-  ceiling: 45,
-  floor: 23,
   totalVolume: "1.1B",
   totalValue: "28.5T",
 };
 
-// Memoized index card component
 const IndexCard = React.memo(function IndexCard({
   index,
 }: {
@@ -47,25 +43,17 @@ const IndexCard = React.memo(function IndexCard({
   const isPositive = index.change >= 0;
 
   return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+    <div className="flex items-center justify-between border border-stone-200 bg-stone-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/60">
       <div>
-        <p className="font-semibold text-gray-900 dark:text-gray-100">
-          {index.name}
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          KL: {index.volume}
-        </p>
+        <p className="font-semibold text-stone-900 dark:text-white">{index.name}</p>
+        <p className="text-xs text-stone-500 dark:text-neutral-400">Volume: {index.volume}</p>
       </div>
       <div className="text-right">
-        <p className="font-bold text-gray-900 dark:text-gray-100">
-          {index.value.toFixed(2)}
-        </p>
+        <p className="font-bold text-stone-900 dark:text-white">{index.value.toFixed(2)}</p>
         <p
           className={cn(
             "text-sm font-medium",
-            isPositive
-              ? "text-green-600 dark:text-green-400"
-              : "text-red-600 dark:text-red-400"
+            isPositive ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
           )}
         >
           {isPositive ? "+" : ""}
@@ -77,7 +65,6 @@ const IndexCard = React.memo(function IndexCard({
   );
 });
 
-// Memoized market stats component
 const MarketStatsDisplay = React.memo(function MarketStatsDisplay({
   stats,
 }: {
@@ -85,7 +72,6 @@ const MarketStatsDisplay = React.memo(function MarketStatsDisplay({
 }) {
   const totalStocks = stats.advancing + stats.declining + stats.unchanged;
 
-  // Memoize percentage calculations
   const percentages = React.useMemo(
     () => ({
       advancing: (stats.advancing / totalStocks) * 100,
@@ -96,49 +82,28 @@ const MarketStatsDisplay = React.memo(function MarketStatsDisplay({
   );
 
   return (
-    <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-800">
-      {/* Advance/Decline */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex-1 h-2 flex rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
-          <div
-            className="bg-green-500"
-            style={{ width: `${percentages.advancing}%` }}
-          />
-          <div
-            className="bg-yellow-500"
-            style={{ width: `${percentages.unchanged}%` }}
-          />
-          <div
-            className="bg-red-500"
-            style={{ width: `${percentages.declining}%` }}
-          />
+    <div className="mt-auto border-t border-stone-200 pt-4 dark:border-neutral-800">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-stone-200 dark:bg-neutral-800">
+          <div className="bg-emerald-600" style={{ width: `${percentages.advancing}%` }} />
+          <div className="bg-yellow-500" style={{ width: `${percentages.unchanged}%` }} />
+          <div className="bg-rose-500" style={{ width: `${percentages.declining}%` }} />
         </div>
       </div>
       <div className="flex justify-between text-xs">
-        <span className="text-green-600 dark:text-green-400">
-          Tăng: {stats.advancing}
-        </span>
-        <span className="text-yellow-600 dark:text-yellow-400">
-          Không đổi: {stats.unchanged}
-        </span>
-        <span className="text-red-600 dark:text-red-400">
-          Giảm: {stats.declining}
-        </span>
+        <span className="text-emerald-700 dark:text-emerald-400">Adv: {stats.advancing}</span>
+        <span className="text-yellow-600 dark:text-yellow-400">Flat: {stats.unchanged}</span>
+        <span className="text-rose-700 dark:text-rose-400">Dec: {stats.declining}</span>
       </div>
 
-      {/* Volume & Value */}
-      <div className="grid grid-cols-2 gap-4 mt-4">
-        <div className="text-center p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Tổng KL</p>
-          <p className="font-semibold text-gray-900 dark:text-gray-100">
-            {stats.totalVolume}
-          </p>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="border border-stone-200 bg-stone-50 p-2 text-center dark:border-neutral-800 dark:bg-neutral-900/60">
+          <p className="text-xs text-stone-500 dark:text-neutral-400">Total Vol</p>
+          <p className="font-semibold text-stone-900 dark:text-white">{stats.totalVolume}</p>
         </div>
-        <div className="text-center p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Tổng GT</p>
-          <p className="font-semibold text-gray-900 dark:text-gray-100">
-            {stats.totalValue} VND
-          </p>
+        <div className="border border-stone-200 bg-stone-50 p-2 text-center dark:border-neutral-800 dark:bg-neutral-900/60">
+          <p className="text-xs text-stone-500 dark:text-neutral-400">Total Value</p>
+          <p className="font-semibold text-stone-900 dark:text-white">{stats.totalValue} VND</p>
         </div>
       </div>
     </div>
@@ -147,15 +112,13 @@ const MarketStatsDisplay = React.memo(function MarketStatsDisplay({
 
 function MarketOverviewWidgetBase() {
   return (
-    <div className="h-full flex flex-col">
-      {/* Indices */}
-      <div className="space-y-3 mb-4">
+    <div className="flex h-full flex-col">
+      <div className="mb-4 space-y-3">
         {MARKET_INDICES.map((index) => (
           <IndexCard key={index.name} index={index} />
         ))}
       </div>
 
-      {/* Market Stats */}
       <MarketStatsDisplay stats={MARKET_STATS} />
     </div>
   );

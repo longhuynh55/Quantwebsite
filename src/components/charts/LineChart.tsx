@@ -202,8 +202,8 @@ const LineChartInner = React.memo(function LineChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center" style={{ height: totalHeight }}>
-        <p className="text-sm text-gray-500 dark:text-gray-400">No chart data available</p>
+      <div className="w-full rounded-lg border border-stone-200 dark:border-neutral-700 bg-stone-50 dark:bg-neutral-800/50 flex items-center justify-center" style={{ height: totalHeight }}>
+        <p className="text-sm text-stone-500 dark:text-neutral-400">No chart data available</p>
       </div>
     );
   }
@@ -229,20 +229,20 @@ const LineChartInner = React.memo(function LineChart({
 
       <ResponsiveContainer width="100%" height={height}>
         <ChartComponent data={visibleData} className={showCrosshair ? "chart-crosshair" : undefined}>
-          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />}
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-neutral-700" />}
           <XAxis
             dataKey="date"
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={{ stroke: "#e5e7eb" }}
-            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400"
+            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400"
           />
           <YAxis
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={{ stroke: "#e5e7eb" }}
             tickFormatter={formatValue}
-            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400"
+            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400"
           />
           {renderTooltip !== null && <Tooltip content={renderTooltip as React.ComponentProps<typeof Tooltip>['content']} />}
           {/* Annotations as ReferenceLines */}
@@ -285,11 +285,11 @@ const LineChartInner = React.memo(function LineChart({
             <Brush
               dataKey="date"
               height={30}
-              stroke="#3b82f6"
-              fill="#3b82f6"
+              stroke="#047857"
+              fill="#047857"
               fillOpacity={0.1}
               onChange={handleBrushChange}
-              className="chart-brush-selection dark:fill-blue-400"
+              className="chart-brush-selection dark:fill-emerald-400"
             />
           )}
         </ChartComponent>
@@ -312,16 +312,16 @@ export const BarChart = React.memo(function BarChart({ data, height = 300, horiz
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RechartsBarChart data={data} layout={horizontal ? "vertical" : "horizontal"}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-neutral-700" />
         {horizontal ? (
           <>
-            <XAxis type="number" tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400" />
-            <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={80} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400" />
+            <XAxis type="number" tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400" />
+            <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={80} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400" />
           </>
         ) : (
           <>
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400" />
-            <YAxis tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400" />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400" />
+            <YAxis tick={{ fontSize: 12 }} className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400" />
           </>
         )}
         <Tooltip
@@ -332,7 +332,7 @@ export const BarChart = React.memo(function BarChart({ data, height = 300, horiz
             color: "var(--foreground)",
           }}
         />
-        <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="value" fill="#047857" radius={[4, 4, 0, 0]} />
       </RechartsBarChart>
     </ResponsiveContainer>
   );
@@ -510,8 +510,8 @@ export const MultiLineChart = React.memo(function MultiLineChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center" style={{ height: totalHeight }}>
-        <p className="text-sm text-gray-500 dark:text-gray-400">No chart data available</p>
+      <div className="w-full rounded-lg border border-stone-200 dark:border-neutral-700 bg-stone-50 dark:bg-neutral-800/50 flex items-center justify-center" style={{ height: totalHeight }}>
+        <p className="text-sm text-stone-500 dark:text-neutral-400">No chart data available</p>
       </div>
     );
   }
@@ -537,16 +537,16 @@ export const MultiLineChart = React.memo(function MultiLineChart({
 
       <ResponsiveContainer width="100%" height={height}>
         <RechartsLineChart data={visibleData} className={showCrosshair ? "chart-crosshair" : undefined}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-neutral-700" />
           <XAxis
             dataKey={xKey}
             tick={{ fontSize: 12 }}
-            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400"
+            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400"
           />
           <YAxis
             tick={{ fontSize: 12 }}
             tickFormatter={formatValue}
-            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-gray-400"
+            className="dark:[&_.recharts-cartesian-axis-tick-text]:fill-neutral-400"
           />
           {renderTooltip !== null && <Tooltip content={renderTooltip as React.ComponentProps<typeof Tooltip>['content']} />}
           <Legend />
@@ -583,11 +583,11 @@ export const MultiLineChart = React.memo(function MultiLineChart({
             <Brush
               dataKey={xKey}
               height={30}
-              stroke="#3b82f6"
-              fill="#3b82f6"
+              stroke="#047857"
+              fill="#047857"
               fillOpacity={0.1}
               onChange={handleBrushChange}
-              className="chart-brush-selection dark:fill-blue-400"
+              className="chart-brush-selection dark:fill-emerald-400"
             />
           )}
         </RechartsLineChart>
@@ -597,3 +597,4 @@ export const MultiLineChart = React.memo(function MultiLineChart({
 });
 
 MultiLineChart.displayName = "MultiLineChart";
+

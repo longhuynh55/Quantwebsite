@@ -161,16 +161,30 @@ export default function PortfolioPage() {
         <p className="sr-only" role="status" aria-live="polite">{statusMessage}</p>
         
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Portfolio Optimization</h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400">Construct mathematically optimal portfolios based on historical risk/return profiles</p>
+        <header className="mb-12 pb-8 border-b border-stone-200 dark:border-neutral-800">
+          {/* Kicker with emerald accent */}
+          <div className="flex items-center gap-3 mb-4">
+            <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+            <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+              Quantitative Finance
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Headline - Serif, dramatic */}
+          <h1 className="font-serif text-4xl md:text-5xl font-bold text-stone-900 dark:text-white leading-tight">
+            Portfolio Optimization
+          </h1>
+
+          {/* Subheadline */}
+          <p className="font-sans text-base text-stone-600 dark:text-neutral-400 max-w-2xl leading-relaxed mt-4">
+            Construct mathematically optimal portfolios based on historical risk/return profiles
+          </p>
+
+          <div className="mt-6 flex justify-end">
             <Button
               variant="outline"
               size="sm"
-              className="rounded-xl border-gray-200 dark:border-slate-800"
+              className="border-stone-200 dark:border-neutral-800"
               onClick={() => {
                 setResult(null);
                 setSymbols(["AAA", "ACB", "VIC", "VNM", "FPT"]);
@@ -179,42 +193,42 @@ export default function PortfolioPage() {
               Reset Universe
             </Button>
           </div>
-        </div>
+        </header>
 
         {/* Optimization Engine Panel */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 bg-gray-50/50 dark:bg-slate-900/50 border-gray-100 dark:border-slate-800 rounded-2xl overflow-hidden">
-            <CardHeader className="pb-2 border-b border-gray-100 dark:border-slate-800/50 mb-4 bg-white/50 dark:bg-slate-900/50">
-              <CardTitle className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center">
-                <Layers className="w-3 h-3 mr-2 text-blue-500" />
+          <Card className="lg:col-span-2 bg-stone-100/50 dark:bg-neutral-900/50 border-stone-100 dark:border-neutral-800 overflow-hidden">
+            <CardHeader className="pb-2 border-b border-stone-100 dark:border-neutral-800/50 mb-4 bg-white/50 dark:bg-neutral-900/50">
+              <CardTitle className="text-[10px] font-bold text-stone-400 dark:text-neutral-500 uppercase tracking-widest flex items-center">
+                <Layers className="w-3 h-3 mr-2 text-emerald-600" />
                 Asset Universe ({symbols.length}/{MAX_SYMBOLS})
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mb-6 min-h-[40px]">
                 {symbols.map((sym) => (
-                  <Badge key={sym} variant="secondary" className="flex items-center gap-1.5 py-1.5 px-3 bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg group shadow-sm transition-all hover:border-red-200 dark:hover:border-red-900/50">
+                  <Badge key={sym} variant="secondary" className="flex items-center gap-1.5 py-1.5 px-3 bg-white dark:bg-neutral-800 border-stone-200 dark:border-neutral-700 text-stone-900 dark:text-white group transition-all hover:border-red-200 dark:hover:border-red-900/50">
                     <span className="font-bold text-xs">{sym}</span>
-                    <button onClick={() => removeSymbol(sym)} className="ml-1 text-gray-400 hover:text-red-500 transition-colors">
+                    <button onClick={() => removeSymbol(sym)} className="ml-1 text-stone-400 hover:text-red-500 transition-colors">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </Badge>
                 ))}
                 {symbols.length === 0 && (
-                  <span className="text-xs text-gray-400 italic py-2">No assets selected. Add tickers below.</span>
+                  <span className="text-xs text-stone-400 italic py-2">No assets selected. Add tickers below.</span>
                 )}
               </div>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Input 
-                    value={newSymbol} 
-                    onChange={(e) => setNewSymbol(e.target.value.toUpperCase())} 
-                    placeholder="Enter Stock Ticker (e.g. FPT)" 
-                    onKeyDown={(e) => e.key === "Enter" && addSymbol()} 
-                    className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl font-bold uppercase" 
+                  <Input
+                    value={newSymbol}
+                    onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+                    placeholder="Enter Stock Ticker (e.g. FPT)"
+                    onKeyDown={(e) => e.key === "Enter" && addSymbol()}
+                    className="bg-white dark:bg-neutral-800 border-stone-200 dark:border-neutral-700 font-bold uppercase"
                   />
                 </div>
-                <Button onClick={addSymbol} variant="outline" className="rounded-xl border-gray-200 dark:border-slate-700 px-4">
+                <Button onClick={addSymbol} variant="outline" className="border-stone-200 dark:border-neutral-700 px-4">
                   <Plus className="w-4 h-4 mr-2" />
                   Add
                 </Button>
@@ -222,9 +236,9 @@ export default function PortfolioPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-blue-600 dark:bg-blue-700 border-none rounded-2xl shadow-lg shadow-blue-500/20 text-white flex flex-col">
+          <Card className="bg-emerald-700 dark:bg-emerald-800 border-none text-white flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-blue-100 uppercase tracking-widest flex items-center">
+              <CardTitle className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest flex items-center">
                 <Settings className="w-3 h-3 mr-2" />
                 Solver Configuration
               </CardTitle>
@@ -232,33 +246,33 @@ export default function PortfolioPage() {
             <CardContent className="flex-1 flex flex-col justify-between">
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-blue-100 uppercase tracking-widest px-1">Optimization Method</label>
-                  <Select 
-                    value={method} 
-                    onChange={(e) => setMethod(e.target.value)} 
+                  <label className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest px-1">Optimization Method</label>
+                  <Select
+                    value={method}
+                    onChange={(e) => setMethod(e.target.value)}
                     options={[
-                      { value: "mean_variance", label: "Mean-Variance (Markowitz)" }, 
-                      { value: "min_variance", label: "Minimum Volatility" }, 
-                      { value: "risk_parity", label: "Risk Parity" }, 
+                      { value: "mean_variance", label: "Mean-Variance (Markowitz)" },
+                      { value: "min_variance", label: "Minimum Volatility" },
+                      { value: "risk_parity", label: "Risk Parity" },
                       { value: "equal_weight", label: "Equally Weighted" }
-                    ]} 
-                    className="bg-blue-500 dark:bg-blue-600 border-blue-400 dark:border-blue-500 text-white rounded-xl text-xs font-bold"
+                    ]}
+                    className="bg-emerald-500 dark:bg-emerald-700 border-emerald-400 dark:border-emerald-500 text-white text-xs font-bold"
                   />
                 </div>
-                <p className="text-[10px] text-blue-100/70 leading-relaxed italic px-1">
+                <p className="text-[10px] text-emerald-100/70 leading-relaxed italic px-1">
                   {method === 'mean_variance' && "Maximizes expected return for a given level of risk."}
                   {method === 'min_variance' && "Constructs the lowest risk portfolio regardless of returns."}
                   {method === 'risk_parity' && "Equalizes the risk contribution of each asset."}
                   {method === 'equal_weight' && "Simple 1/N allocation across all selected instruments."}
                 </p>
               </div>
-              <Button 
-                onClick={optimize} 
+              <Button
+                onClick={optimize}
                 disabled={loading || symbols.length < 2}
-                className="w-full mt-6 h-12 bg-white text-blue-600 hover:bg-blue-50 dark:hover:bg-white rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full mt-6 h-12 bg-white text-emerald-700 hover:bg-emerald-50 dark:hover:bg-white font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 {loading ? (
-                  <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
+                  <div className="animate-spin w-5 h-5 border-2 border-emerald-700 border-t-transparent mr-2"></div>
                 ) : (
                   <PieChartIcon className="w-5 h-5 mr-2 fill-current" />
                 )}
@@ -283,11 +297,11 @@ export default function PortfolioPage() {
         {result && !loading && (
           <ErrorBoundary
             fallback={
-              <div className="p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
+              <div className="p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-center">
                 <p className="text-red-600 dark:text-red-400 font-medium mb-2">
                   Error displaying portfolio results
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <p className="text-sm text-stone-600 dark:text-neutral-400 mb-4">
                   The results couldn&apos;t be rendered. Please try running the optimization again.
                 </p>
                 <Button size="sm" onClick={optimize}>
@@ -303,7 +317,7 @@ export default function PortfolioPage() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Exp. Return</span>
+                      <span className="text-[10px] font-bold text-stone-500 dark:text-neutral-500 uppercase tracking-wider">Exp. Return</span>
                     </div>
                     <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatPercent(result.expectedReturn)}</p>
                   </CardContent>
@@ -313,29 +327,29 @@ export default function PortfolioPage() {
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Activity className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Volatility</span>
+                      <span className="text-[10px] font-bold text-stone-500 dark:text-neutral-500 uppercase tracking-wider">Volatility</span>
                     </div>
                     <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{formatPercent(result.volatility)}</p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
+                <Card className="bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900/30">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Sharpe Ratio</span>
+                      <BarChart3 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                      <span className="text-[10px] font-bold text-stone-500 dark:text-neutral-500 uppercase tracking-wider">Sharpe Ratio</span>
                     </div>
-                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{result.sharpeRatio?.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{result.sharpeRatio?.toFixed(2)}</p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <Shield className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Diversification</span>
+                      <Shield className="w-3.5 h-3.5 text-neutral-500" />
+                      <span className="text-[10px] font-bold text-stone-500 dark:text-neutral-500 uppercase tracking-wider">Diversification</span>
                     </div>
-                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                    <p className="text-lg font-bold text-stone-900 dark:text-white">
                       {Number.isFinite(result.diversificationRatio) ? Number(result.diversificationRatio).toFixed(2) : "N/A"}
                     </p>
                   </CardContent>
@@ -344,10 +358,10 @@ export default function PortfolioPage() {
                 <Card>
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <Activity className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Effective N</span>
+                      <Activity className="w-3.5 h-3.5 text-neutral-500" />
+                      <span className="text-[10px] font-bold text-stone-500 dark:text-neutral-500 uppercase tracking-wider">Effective N</span>
                     </div>
-                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                    <p className="text-lg font-bold text-stone-900 dark:text-white">
                       {Number.isFinite(result.effectiveN) ? Number(result.effectiveN).toFixed(2) : "N/A"}
                     </p>
                   </CardContent>
@@ -355,26 +369,26 @@ export default function PortfolioPage() {
               </div>
 
               <Tabs defaultValue="allocation" className="w-full">
-              <div className="flex items-center justify-between mb-4 bg-gray-50/50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800">
+              <div className="flex items-center justify-between mb-4 bg-stone-100/50 dark:bg-neutral-900/50 p-1.5 border border-stone-100 dark:border-neutral-800">
                 <TabsList className="bg-transparent border-none">
-                  <TabsTrigger value="allocation" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                  <TabsTrigger value="allocation" className="data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-800 text-xs font-bold">
                     <PieChartIcon className="w-3.5 h-3.5 mr-2" />
                     Portfolio Weights
                   </TabsTrigger>
-                  <TabsTrigger value="metrics" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                  <TabsTrigger value="metrics" className="data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-800 text-xs font-bold">
                     <Activity className="w-3.5 h-3.5 mr-2" />
                     Asset Metrics
                   </TabsTrigger>
-                  <TabsTrigger value="risk" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm text-xs font-bold">
+                  <TabsTrigger value="risk" className="data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-800 text-xs font-bold">
                     <Shield className="w-3.5 h-3.5 mr-2" />
                     Risk Analysis
                   </TabsTrigger>
                 </TabsList>
-                
+
                 <div className="flex items-center gap-2 pr-2">
-                  <span className="text-[10px] text-gray-400 font-medium mr-2">Ref: {result.benchmark || 'VN-INDEX'} • {result.asOfDate ? String(result.asOfDate).slice(0, 10) : 'Live'}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" aria-label="Refresh data">
-                    <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="text-[10px] text-stone-400 font-medium mr-2">Ref: {result.benchmark || 'VN-INDEX'} - {result.asOfDate ? String(result.asOfDate).slice(0, 10) : 'Live'}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Refresh data">
+                    <RefreshCw className="w-3.5 h-3.5 text-stone-400" />
                   </Button>
                 </div>
               </div>
@@ -383,7 +397,7 @@ export default function PortfolioPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider">Optimal Weights Breakdown</CardTitle>
+                      <CardTitle className="text-xs font-bold text-stone-500 uppercase tracking-wider">Optimal Weights Breakdown</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <BarChart data={result.allocations.map((a) => ({ name: a.symbol, value: a.weight * 100 }))} height={300} />
@@ -401,7 +415,7 @@ export default function PortfolioPage() {
                           cell: (a) => (
                             <TickerMenu symbol={a.symbol}>
                               <div className="flex items-center gap-3 group/ticker">
-                                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                <div className="w-2 h-2 bg-emerald-500" />
                                 <span className="font-bold group-hover/ticker:underline">{a.symbol}</span>
                               </div>
                             </TickerMenu>
@@ -413,7 +427,7 @@ export default function PortfolioPage() {
                           accessorKey: "weight",
                           sortable: true,
                           align: "right",
-                          cell: (a) => <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{formatPercent(a.weight)}</span>,
+                          cell: (a) => <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{formatPercent(a.weight)}</span>,
                           width: "35%",
                         },
                         {
@@ -432,7 +446,7 @@ export default function PortfolioPage() {
               </TabsContent>
 
               <TabsContent value="metrics" className="mt-0">
-                <Card className="overflow-hidden border-none shadow-none">
+                <Card className="overflow-hidden border-none">
                   <DataTable
                     data={result.assetStats || []}
                     columns={[
@@ -474,7 +488,7 @@ export default function PortfolioPage() {
                   <div className="lg:col-span-2">
                     <Card>
                       <CardHeader className="pb-4">
-                        <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider">Asset Correlation Matrix</CardTitle>
+                        <CardTitle className="text-xs font-bold text-stone-500 uppercase tracking-wider">Asset Correlation Matrix</CardTitle>
                         <CardDescription className="text-[10px]">Quantifying the linear relationship between asset returns</CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -491,14 +505,14 @@ export default function PortfolioPage() {
                   <div className="space-y-6">
                     <Card>
                       <CardHeader>
-                        <CardTitle className="text-xs font-bold text-gray-500 uppercase">System Insights</CardTitle>
+                        <CardTitle className="text-xs font-bold text-stone-500 uppercase">System Insights</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="flex items-start gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                          <Info className="w-4 h-4 text-blue-500 mt-0.5" />
+                        <div className="flex items-start gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30">
+                          <Info className="w-4 h-4 text-emerald-600 mt-0.5" />
                           <div className="space-y-1">
-                            <p className="text-xs font-bold text-blue-700 dark:text-blue-400">Optimal Diversification</p>
-                            <p className="text-[10px] text-blue-600/80 dark:text-blue-400/80 leading-relaxed">
+                            <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Optimal Diversification</p>
+                            <p className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 leading-relaxed">
                               The {method.replace('_', ' ')} solver identified {result.allocations.filter(a => a.weight > 0.01).length} active positions.
                             </p>
                           </div>
@@ -506,7 +520,7 @@ export default function PortfolioPage() {
                         
                         {Array.isArray(result.excludedSymbols) && result.excludedSymbols.length > 0 && (
                           <div className="space-y-2">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase px-1">Exclusions</p>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase px-1">Exclusions</p>
                             <div className="flex flex-wrap gap-1.5">
                               {result.excludedSymbols.slice(0, 10).map((item) => (
                                 <Badge key={item.symbol} variant="outline" className="text-[9px] py-0 border-amber-200 text-amber-700 bg-amber-50/50" title={item.reason}>

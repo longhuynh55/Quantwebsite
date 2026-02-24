@@ -9,16 +9,16 @@ interface StrategyParamsProps {
 
 export function StrategyParams({ strategyParams, onStrategyParamChange }: StrategyParamsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50/30 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-800">
+    <div className="grid grid-cols-1 gap-4 border border-stone-200 bg-stone-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/60 sm:grid-cols-2 lg:grid-cols-4">
       {Object.entries(strategyParams).map(([key, value]) => (
         <div key={key} className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             {PARAM_LABELS[key] ?? key}
           </label>
           <Input
             type="number"
             value={value}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) => onStrategyParamChange(key, e.target.value)}
           />
         </div>
@@ -35,16 +35,16 @@ interface ExecutionConfigProps {
 
 export function ExecutionConfig({ config, onConfigChange, onPresetApply }: ExecutionConfigProps) {
   return (
-    <div className="space-y-4 p-4 bg-gray-50/30 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-800">
+    <div className="space-y-4 border border-stone-200 bg-stone-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
       <div className="flex flex-wrap gap-2 mb-2">
-        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center mr-2 px-1">
+        <span className="mr-2 flex items-center px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
           Presets:
         </span>
         {ADVANCED_CONFIG_PRESETS.map((preset) => (
           <button
             key={preset.key}
             type="button"
-            className="h-7 text-[10px] font-bold rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+            className="h-7 border border-stone-300 bg-white px-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-700 transition-colors hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
             onClick={() => onPresetApply(preset.key)}
           >
             {preset.label}
@@ -53,12 +53,12 @@ export function ExecutionConfig({ config, onConfigChange, onPresetApply }: Execu
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             Execution Model
           </label>
           <Select
             value={config.executionModel}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs"
+            className="border-stone-200 bg-white text-xs dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) =>
               onConfigChange({ executionModel: e.target.value as "next_open" | "same_close" })
             }
@@ -69,49 +69,49 @@ export function ExecutionConfig({ config, onConfigChange, onPresetApply }: Execu
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             Fee (bps)
           </label>
           <Input
             type="number"
             value={config.feeBps}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) => onConfigChange({ feeBps: e.target.value })}
             min="0"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             Tax (bps)
           </label>
           <Input
             type="number"
             value={config.sellTaxBps}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) => onConfigChange({ sellTaxBps: e.target.value })}
             min="0"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             Slippage (bps)
           </label>
           <Input
             type="number"
             value={config.slippageBps}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) => onConfigChange({ slippageBps: e.target.value })}
             min="0"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest px-1">
+          <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
             Lot Size
           </label>
           <Input
             type="number"
             value={config.lotSize}
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             onChange={(e) => onConfigChange({ lotSize: e.target.value })}
             min="1"
           />

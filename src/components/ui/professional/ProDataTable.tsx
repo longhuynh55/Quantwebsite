@@ -124,7 +124,7 @@ function SkeletonRow({ columns, enableSelection }: { columns: ProColumn<unknown>
     <tr className="animate-pulse">
       {enableSelection && (
         <td className="px-4 py-3">
-          <div className="h-4 w-4 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-4 rounded bg-stone-200 dark:bg-neutral-700" />
         </td>
       )}
       {columns.map((column) => (
@@ -139,7 +139,7 @@ function SkeletonRow({ columns, enableSelection }: { columns: ProColumn<unknown>
         >
           <div
             className={cn(
-              "h-4 rounded bg-gray-200 dark:bg-gray-700",
+              "h-4 rounded bg-stone-200 dark:bg-neutral-700",
               column.align === "center" && "mx-auto",
               column.align === "right" && "ml-auto"
             )}
@@ -161,7 +161,7 @@ function StatusIndicator({ status }: { status: RowStatus }) {
         "inline-block w-2 h-2 rounded-full mr-2",
         status === "live" && "bg-green-500 animate-pulse",
         status === "stale" && "bg-yellow-500",
-        status === "inactive" && "bg-gray-400"
+        status === "inactive" && "bg-stone-400"
       )}
       aria-label={`Status: ${status}`}
     />
@@ -313,7 +313,7 @@ function ProDataTableInner<T>({
             "font-medium",
             value > 0 && "text-green-600 dark:text-green-400",
             value < 0 && "text-red-600 dark:text-red-400",
-            value === 0 && "text-gray-600 dark:text-gray-400"
+            value === 0 && "text-stone-600 dark:text-neutral-400"
           )}
         >
           {value > 0 && "+"}
@@ -328,25 +328,25 @@ function ProDataTableInner<T>({
   // Loading state with skeleton rows
   if (loading) {
     return (
-      <div className={cn("overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700", className)}>
+      <div className={cn("overflow-x-auto rounded-lg border border-stone-200 dark:border-neutral-700", className)}>
         <table className="table-pro w-full">
           <thead
             className={cn(
-              "bg-gray-50 dark:bg-gray-800",
+              "bg-stone-50 dark:bg-neutral-800",
               stickyHeader && "sticky top-0 z-10"
             )}
           >
             <tr>
               {enableRowSelection && (
                 <th className="w-12 px-4 py-3">
-                  <div className="h-4 w-4 rounded bg-gray-200 dark:bg-gray-700" />
+                  <div className="h-4 w-4 rounded bg-stone-200 dark:bg-neutral-700" />
                 </th>
               )}
               {columns.map((column) => (
                 <th
                   key={column.key}
                   className={cn(
-                    "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400",
+                    "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-neutral-400",
                     column.align === "center" && "text-center",
                     column.align === "right" && "text-right"
                   )}
@@ -357,7 +357,7 @@ function ProDataTableInner<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-900">
+          <tbody className="divide-y divide-stone-100 dark:divide-neutral-700 bg-white dark:bg-neutral-900">
             {Array.from({ length: skeletonRows }).map((_, index) => (
               <SkeletonRow
                 key={index}
@@ -376,12 +376,12 @@ function ProDataTableInner<T>({
     return (
       <div
         className={cn(
-          "flex flex-col items-center justify-center py-12 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900",
+          "flex flex-col items-center justify-center py-12 px-4 rounded-lg border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-900",
           className
         )}
       >
         <svg
-          className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4"
+          className="w-12 h-12 text-stone-300 dark:text-neutral-600 mb-4"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -394,7 +394,7 @@ function ProDataTableInner<T>({
             d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
           />
         </svg>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{emptyMessage}</p>
+        <p className="text-sm text-stone-500 dark:text-neutral-400">{emptyMessage}</p>
       </div>
     );
   }
@@ -413,7 +413,7 @@ function ProDataTableInner<T>({
           "transition-colors duration-150",
           onRowClick && "cursor-pointer",
           isSelected && "bg-primary-50 dark:bg-primary-900/20",
-          "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+          "hover:bg-stone-50 dark:hover:bg-neutral-800/50"
         )}
       >
         {enableRowSelection && getRowId && (
@@ -427,7 +427,7 @@ function ProDataTableInner<T>({
               onChange={(e) =>
                 handleRowSelect(rowId, e.target.checked)
               }
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:focus:ring-primary-500 dark:focus:ring-offset-gray-800"
+              className="h-4 w-4 rounded border-stone-300 text-primary-600 focus:ring-primary-500 dark:border-neutral-600 dark:bg-neutral-700 dark:focus:ring-primary-500 dark:focus:ring-offset-neutral-800"
               aria-label={`Select row ${rowId}`}
             />
           </td>
@@ -443,7 +443,7 @@ function ProDataTableInner<T>({
             <td
               key={column.key}
               className={cn(
-                "px-4 py-3 text-sm text-gray-900 dark:text-gray-100",
+                "px-4 py-3 text-sm text-stone-900 dark:text-neutral-100",
                 column.align === "center" && "text-center",
                 column.align === "right" && "text-right",
                 column.className
@@ -462,7 +462,7 @@ function ProDataTableInner<T>({
   const tableHeader = (
     <thead
       className={cn(
-        "bg-gray-50 dark:bg-gray-800",
+        "bg-stone-50 dark:bg-neutral-800",
         stickyHeader && "sticky top-0 z-10"
       )}
     >
@@ -478,7 +478,7 @@ function ProDataTableInner<T>({
                 }
               }}
               onChange={(e) => handleSelectAll(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:focus:ring-primary-500 dark:focus:ring-offset-gray-800"
+              className="h-4 w-4 rounded border-stone-300 text-primary-600 focus:ring-primary-500 dark:border-neutral-600 dark:bg-neutral-700 dark:focus:ring-primary-500 dark:focus:ring-offset-neutral-800"
               aria-label="Select all rows"
             />
           </th>
@@ -492,7 +492,7 @@ function ProDataTableInner<T>({
           <th
             key={column.key}
             className={cn(
-              "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400",
+              "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-neutral-400",
               column.align === "center" && "text-center",
               column.align === "right" && "text-right",
               column.className
@@ -511,12 +511,12 @@ function ProDataTableInner<T>({
     return (
       <div
         ref={tableContainerRef}
-        className={cn("overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 max-h-[600px]", className)}
+        className={cn("overflow-auto rounded-lg border border-stone-200 dark:border-neutral-700 max-h-[600px]", className)}
       >
         <table className="table-pro w-full">
           {tableHeader}
           <tbody
-            className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-900 relative"
+            className="divide-y divide-stone-100 dark:divide-neutral-700 bg-white dark:bg-neutral-900 relative"
             style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -542,7 +542,7 @@ function ProDataTableInner<T>({
                     "transition-colors duration-150",
                     onRowClick && "cursor-pointer",
                     isSelected && "bg-primary-50 dark:bg-primary-900/20",
-                    "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    "hover:bg-stone-50 dark:hover:bg-neutral-800/50"
                   )}
                 >
                   {enableRowSelection && getRowId && (
@@ -556,7 +556,7 @@ function ProDataTableInner<T>({
                         onChange={(e) =>
                           handleRowSelect(rowId, e.target.checked)
                         }
-                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:focus:ring-primary-500 dark:focus:ring-offset-gray-800"
+                        className="h-4 w-4 rounded border-stone-300 text-primary-600 focus:ring-primary-500 dark:border-neutral-600 dark:bg-neutral-700 dark:focus:ring-primary-500 dark:focus:ring-offset-neutral-800"
                         aria-label={`Select row ${rowId}`}
                       />
                     </td>
@@ -572,7 +572,7 @@ function ProDataTableInner<T>({
                       <td
                         key={column.key}
                         className={cn(
-                          "px-4 py-3 text-sm text-gray-900 dark:text-gray-100",
+                          "px-4 py-3 text-sm text-stone-900 dark:text-neutral-100",
                           column.align === "center" && "text-center",
                           column.align === "right" && "text-right",
                           column.className
@@ -594,10 +594,10 @@ function ProDataTableInner<T>({
 
   // Non-virtualized rendering (default)
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700", className)}>
+    <div className={cn("overflow-x-auto rounded-lg border border-stone-200 dark:border-neutral-700", className)}>
       <table className="table-pro w-full">
         {tableHeader}
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-900">
+        <tbody className="divide-y divide-stone-100 dark:divide-neutral-700 bg-white dark:bg-neutral-900">
           {data.map((item, rowIndex) => renderRow(item, rowIndex))}
         </tbody>
       </table>

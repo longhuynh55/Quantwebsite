@@ -240,8 +240,8 @@ export function QuickActions({ onAction, disabled = false, context }: QuickActio
   }, [context]);
 
   return (
-    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-medium">
+    <div className="border-b border-stone-200 p-4 dark:border-neutral-700">
+      <p className="mb-3 text-xs font-medium text-stone-500 dark:text-neutral-400">
         Try these prompts
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -254,14 +254,14 @@ export function QuickActions({ onAction, disabled = false, context }: QuickActio
               disabled={disabled}
               className={cn(
                 "flex items-center gap-2 px-3 py-2 rounded-lg text-left",
-                "text-sm text-gray-700 dark:text-gray-300",
-                "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700",
-                "border border-transparent hover:border-gray-300 dark:hover:border-gray-600",
+                "text-sm text-stone-700 dark:text-neutral-300",
+                "bg-stone-100 dark:bg-neutral-800 hover:bg-stone-200 dark:hover:bg-neutral-700",
+                "border border-transparent hover:border-stone-300 dark:hover:border-neutral-600",
                 "transition-all duration-200",
                 "disabled:opacity-50 disabled:cursor-not-allowed"
               )}
             >
-              <Icon className="w-4 h-4 flex-shrink-0 text-blue-500" />
+              <Icon className="h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-300" />
               <span className="truncate text-xs">{action.label}</span>
             </button>
           );

@@ -18,9 +18,9 @@ export function StrategySelector({
   onCapitalChange,
 }: StrategySelectorProps) {
   return (
-    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-slate-800">
+    <div className="grid grid-cols-1 gap-4 border border-stone-200 bg-stone-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/60 md:grid-cols-3 lg:col-span-3">
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest px-1">
+        <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
           Instrument
         </label>
         <div className="relative">
@@ -28,13 +28,13 @@ export function StrategySelector({
             value={symbol}
             onChange={(e) => onSymbolChange(e.target.value.toUpperCase())}
             placeholder="TICKER"
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl font-bold uppercase"
+            className="border-stone-200 bg-white text-xs font-semibold uppercase tracking-[0.08em] dark:border-neutral-700 dark:bg-neutral-950"
             maxLength={10}
           />
         </div>
       </div>
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest px-1">
+        <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
           Algorithm
         </label>
         <Select
@@ -47,11 +47,11 @@ export function StrategySelector({
             { value: "bollinger_bands", label: "Bollinger Band Breakout" },
             { value: "momentum", label: "Momentum Strategy" },
           ]}
-          className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl"
+          className="border-stone-200 bg-white text-xs dark:border-neutral-700 dark:bg-neutral-950"
         />
       </div>
       <div className="space-y-1.5">
-        <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest px-1">
+        <label className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500 dark:text-neutral-500">
           Initial Capital
         </label>
         <div className="relative">
@@ -60,7 +60,7 @@ export function StrategySelector({
             value={capital}
             onChange={(e) => onCapitalChange(e.target.value)}
             placeholder="100,000"
-            className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 rounded-xl font-mono"
+            className="border-stone-200 bg-white text-xs font-mono dark:border-neutral-700 dark:bg-neutral-950"
             min="1"
           />
         </div>

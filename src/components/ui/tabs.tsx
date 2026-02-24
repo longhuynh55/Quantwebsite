@@ -91,7 +91,7 @@ const TabsList = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
         role="tablist"
         aria-orientation="horizontal"
         className={cn(
-          "inline-flex h-9 items-center justify-center rounded-lg bg-gray-100 p-1 text-gray-500",
+          "inline-flex h-9 items-center justify-center bg-stone-100 p-1 text-stone-500 dark:bg-neutral-800 dark:text-neutral-400",
           className
         )}
         onKeyDown={handleKeyDown}
@@ -128,8 +128,8 @@ const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>(
         aria-controls={contentId}
         tabIndex={isSelected ? 0 : -1}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-white transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-          isSelected ? "bg-white text-gray-950 shadow" : "text-gray-600 hover:text-gray-900",
+          "inline-flex items-center justify-center whitespace-nowrap px-3 py-1 text-sm font-medium ring-offset-white transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+          isSelected ? "bg-white text-stone-950 dark:bg-neutral-900 dark:text-neutral-100" : "text-stone-600 hover:text-stone-900 dark:text-neutral-300 dark:hover:text-neutral-100",
           className
         )}
         onClick={(event) => {
@@ -167,7 +167,7 @@ const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(
         data-state={isSelected ? "active" : "inactive"}
         tabIndex={0}
         className={cn(
-          "mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2",
+          "mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-2",
           className
         )}
         {...props}

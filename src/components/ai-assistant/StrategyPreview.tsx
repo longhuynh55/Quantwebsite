@@ -31,16 +31,16 @@ interface StrategyPreviewProps {
 const nodeTypeConfig = {
   dataSource: {
     icon: Database,
-    color: 'bg-blue-500',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/30',
-    borderColor: 'border-blue-200 dark:border-blue-800',
+    color: 'bg-emerald-500',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-900/30',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
     label: 'Nguon Du Lieu',
   },
   indicator: {
     icon: TrendingUp,
-    color: 'bg-purple-500',
-    bgColor: 'bg-purple-50 dark:bg-purple-900/30',
-    borderColor: 'border-purple-200 dark:border-purple-800',
+    color: 'bg-teal-500',
+    bgColor: 'bg-teal-50 dark:bg-teal-900/30',
+    borderColor: 'border-teal-200 dark:border-teal-800',
     label: 'Chi Bao',
   },
   filter: {
@@ -159,7 +159,7 @@ export function StrategyPreview({
 
         {/* Node Flow Preview */}
         <div className="space-y-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
             Luong Chien Luoc
           </h4>
           <div className="flex flex-wrap items-center gap-1 overflow-x-auto pb-2">
@@ -185,7 +185,7 @@ export function StrategyPreview({
                     </span>
                   </div>
                   {!isLast && (
-                    <ArrowRight className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                    <ArrowRight className="h-3.5 w-3.5 text-stone-400 flex-shrink-0" />
                   )}
                 </React.Fragment>
               );
@@ -195,7 +195,7 @@ export function StrategyPreview({
 
         {/* Detailed Node List */}
         <div className="space-y-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
             Chi Tiet Cac Node
           </h4>
           <div className="grid gap-2 max-h-60 overflow-y-auto pr-1">
@@ -215,7 +215,7 @@ export function StrategyPreview({
                 >
                   <Icon className={cn('h-4 w-4 mt-0.5 flex-shrink-0', config.color.replace('bg-', 'text-'))} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">
+                    <p className="text-xs font-medium text-stone-800 dark:text-stone-100 truncate">
                       {node.data.label}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -223,7 +223,7 @@ export function StrategyPreview({
                         value !== undefined && value !== null && value !== '' && (
                           <span
                             key={key}
-                            className="text-[10px] px-1.5 py-0.5 rounded bg-white/50 dark:bg-black/20 text-gray-600 dark:text-gray-300"
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-white/50 dark:bg-black/20 text-stone-600 dark:text-stone-300"
                           >
                             {key}: {String(value).slice(0, 20)}
                           </span>
@@ -238,7 +238,7 @@ export function StrategyPreview({
         </div>
 
         {/* Edge Count */}
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
           <GitBranch className="h-3.5 w-3.5" />
           <span>{strategy.edges.length} ket noi giua cac node</span>
         </div>

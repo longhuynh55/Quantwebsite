@@ -4,55 +4,53 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { ExternalLink, Clock } from "lucide-react";
 
-// Mock data - in production this would come from API
 const MOCK_NEWS = [
   {
     id: 1,
-    title: "VN-Index tiếp tục tăng phiên thứ 5 liên tiếp",
-    summary: "Thị trường chứng khoán Việt Nam duy trì đà tăng với thanh khoản cải thiện...",
+    title: "VN-Index extends gains for a fifth straight session",
+    summary: "Vietnam equities continue to rise with stronger liquidity and broad participation.",
     source: "Cafef",
-    time: "2 giờ trước",
+    time: "2h ago",
     category: "market",
   },
   {
     id: 2,
-    title: "Ngân hàng Nhà nước tiếp tục giảm lãi suất điều hành",
-    summary: "Động thái này nhằm hỗ trợ tăng trưởng kinh tế trong năm 2026...",
+    title: "State Bank keeps policy rates accommodative",
+    summary: "The latest guidance aims to support growth momentum through 2026.",
     source: "VnEconomy",
-    time: "4 giờ trước",
+    time: "4h ago",
     category: "economy",
   },
   {
     id: 3,
-    title: "VIC công bố kết quả kinh doanh Q4/2025 vượt kỳ vọng",
-    summary: "Doanh thu quý 4 tăng 25% so với cùng kỳ năm trước...",
+    title: "VIC posts Q4 earnings above consensus",
+    summary: "Revenue growth accelerated year-over-year with margin expansion.",
     source: "Vietstock",
-    time: "5 giờ trước",
+    time: "5h ago",
     category: "company",
   },
   {
     id: 4,
-    title: "Khối ngoại tiếp tục mua ròng phiên thứ 3",
-    summary: "Nộp ròng hôm nay đạt 250 tỷ đồng, tập trung vào nhóm blue-chip...",
+    title: "Foreign investors remain net buyers",
+    summary: "Net inflow reached 250B VND, concentrated in large-cap names.",
     source: "TBTC",
-    time: "6 giờ trước",
+    time: "6h ago",
     category: "market",
   },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  market: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  economy: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  company: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  market: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  economy: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  company: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  market: "Thị trường",
-  economy: "Kinh tế",
-  company: "Doanh nghiệp",
+  market: "Market",
+  economy: "Economy",
+  company: "Company",
 };
 
-// Memoized news card component
 const NewsCard = React.memo(function NewsCard({
   news,
 }: {
@@ -62,39 +60,24 @@ const NewsCard = React.memo(function NewsCard({
   const categoryLabel = CATEGORY_LABELS[news.category] || news.category;
 
   return (
-    <article className="p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group">
-      {/* Category & Time */}
-      <div className="flex items-center gap-2 mb-1.5">
-        <span
-          className={cn(
-            "text-xs px-2 py-0.5 rounded-full font-medium",
-            categoryColor
-          )}
-        >
-          {categoryLabel}
-        </span>
-        <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+    <article className="group cursor-pointer rounded-lg p-3 transition-colors hover:bg-stone-100 dark:hover:bg-neutral-900/60">
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", categoryColor)}>{categoryLabel}</span>
+        <span className="flex items-center gap-1 text-xs text-stone-500 dark:text-neutral-500">
           <Clock className="h-3 w-3" />
           {news.time}
         </span>
       </div>
 
-      {/* Title */}
-      <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+      <h4 className="line-clamp-2 text-sm font-medium text-stone-900 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-400">
         {news.title}
       </h4>
 
-      {/* Summary */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-        {news.summary}
-      </p>
+      <p className="mt-1 line-clamp-2 text-xs text-stone-600 dark:text-neutral-400">{news.summary}</p>
 
-      {/* Source */}
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-xs text-gray-400 dark:text-gray-500">
-          {news.source}
-        </span>
-        <ExternalLink className="h-3 w-3 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-xs text-stone-500 dark:text-neutral-500">{news.source}</span>
+        <ExternalLink className="h-3 w-3 text-stone-400 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-600" />
       </div>
     </article>
   );
@@ -102,16 +85,15 @@ const NewsCard = React.memo(function NewsCard({
 
 function NewsWidgetBase() {
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto space-y-3">
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-3 overflow-auto">
         {MOCK_NEWS.map((news) => (
           <NewsCard key={news.id} news={news} />
         ))}
       </div>
 
-      {/* Footer */}
-      <button className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline text-center w-full">
-        Xem tất cả tin tức
+      <button className="mt-4 w-full text-center text-sm text-emerald-700 hover:underline dark:text-emerald-400">
+        View all news
       </button>
     </div>
   );

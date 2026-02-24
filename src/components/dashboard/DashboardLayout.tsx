@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 // Use legacy import for v1 API compatibility with WidthProvider
@@ -170,39 +170,57 @@ export function DashboardLayout() {
   );
 
   return (
-    <div className="h-full">
+    <div className="h-full space-y-5">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-gray-500" />
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Dashboard
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={resetToDefault}
-            className="gap-2"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Äáº·t láº¡i
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={togglePalette}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            ThÃªm Widget
-          </Button>
+      <div className="overflow-hidden border border-stone-200 bg-gradient-to-r from-stone-50 to-stone-100/60 shadow-sm dark:border-neutral-800 dark:from-neutral-950 dark:to-neutral-900">
+        <div className="h-1 bg-emerald-700 dark:bg-emerald-600" />
+        <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="h-px w-8 bg-emerald-700 dark:bg-emerald-500" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-neutral-500">
+                Workspace
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700 dark:border-emerald-900 dark:bg-neutral-900 dark:text-emerald-400">
+                <LayoutGrid className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="font-serif text-2xl font-bold text-stone-900 dark:text-white">
+                  Dashboard
+                </h1>
+                <p className="text-sm text-stone-600 dark:text-neutral-400">
+                  Organize your market workspace and pin key signals.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetToDefault}
+              className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-600"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset Layout
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={togglePalette}
+              className="gap-2 bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+            >
+              <Plus className="h-4 w-4" />
+              Add Widget
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Grid Layout */}
-      <div className="bg-gray-50 dark:bg-gray-950 rounded-lg p-4 min-h-[800px]">
+      <div className="min-h-[800px] border border-stone-200 bg-stone-100/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
         <ResponsiveGridLayout
           className="layout"
           breakpoints={BREAKPOINTS}
@@ -226,13 +244,13 @@ export function DashboardLayout() {
 
         {/* Empty state */}
         {widgets.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-            <LayoutGrid className="h-16 w-16 mb-4 opacity-50" />
-            <p className="text-lg font-medium">Dashboard is empty</p>
-            <p className="text-sm mt-2">Click &quot;Add Widget&quot; to get started</p>
+          <div className="flex h-[400px] flex-col items-center justify-center rounded-xl border border-dashed border-stone-300 bg-white/80 text-stone-500 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400">
+            <LayoutGrid className="mb-4 h-16 w-16 text-emerald-700/60 dark:text-emerald-500/60" />
+            <p className="font-serif text-xl font-semibold text-stone-900 dark:text-white">Dashboard is empty</p>
+            <p className="mt-2 text-sm">Click &quot;Add Widget&quot; to get started</p>
             <Button
               variant="default"
-              className="mt-4 gap-2"
+              className="mt-5 gap-2 bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
               onClick={togglePalette}
             >
               <Plus className="h-4 w-4" />

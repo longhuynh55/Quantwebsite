@@ -13,7 +13,6 @@ import {
 } from "recharts";
 import { useTheme } from "next-themes";
 
-// Generate performance data
 const generatePerformanceData = () => {
   const data = [];
   let value = 100;
@@ -30,7 +29,6 @@ const generatePerformanceData = () => {
   return data;
 };
 
-// Memoized stats component
 const ChartStats = React.memo(function ChartStats({
   data,
 }: {
@@ -39,20 +37,18 @@ const ChartStats = React.memo(function ChartStats({
   const lastValue = data[data.length - 1]?.value ?? 100;
 
   return (
-    <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-800 mt-4">
+      <div className="mt-4 grid grid-cols-3 gap-4 border-t border-stone-200 pt-4 dark:border-neutral-800">
       <div className="text-center">
-        <p className="text-xs text-gray-500 dark:text-gray-400">30 ngày</p>
-        <p className="font-semibold text-green-600 dark:text-green-400">
-          +{(lastValue - 100).toFixed(2)}%
-        </p>
+        <p className="text-xs text-stone-500 dark:text-neutral-400">30D</p>
+        <p className="font-semibold text-emerald-700 dark:text-emerald-400">+{(lastValue - 100).toFixed(2)}%</p>
       </div>
       <div className="text-center">
-        <p className="text-xs text-gray-500 dark:text-gray-400">Max Drawdown</p>
-        <p className="font-semibold text-red-600 dark:text-red-400">-5.2%</p>
+        <p className="text-xs text-stone-500 dark:text-neutral-400">Max Drawdown</p>
+        <p className="font-semibold text-rose-700 dark:text-rose-400">-5.2%</p>
       </div>
       <div className="text-center">
-        <p className="text-xs text-gray-500 dark:text-gray-400">Sharpe</p>
-        <p className="font-semibold text-gray-900 dark:text-gray-100">1.85</p>
+        <p className="text-xs text-stone-500 dark:text-neutral-400">Sharpe</p>
+        <p className="font-semibold text-stone-900 dark:text-white">1.85</p>
       </div>
     </div>
   );
@@ -62,51 +58,46 @@ function PerformanceChartWidgetBase() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  // Memoize data generation
   const data = React.useMemo(() => generatePerformanceData(), []);
 
-  // Memoize theme-dependent colors
   const colors = React.useMemo(
     () => ({
-      gridColor: isDark ? "#374151" : "#E5E7EB",
-      textColor: isDark ? "#9CA3AF" : "#6B7280",
-      backgroundColor: isDark ? "#1F2937" : "#FFFFFF",
-      benchmarkColor: isDark ? "#6B7280" : "#9CA3AF",
+      gridColor: isDark ? "#2a2a2a" : "#d6d3d1",
+      textColor: isDark ? "#a3a3a3" : "#78716c",
+      backgroundColor: isDark ? "#171717" : "#ffffff",
+      benchmarkColor: isDark ? "#737373" : "#a8a29e",
+      portfolioColor: "#065f46",
+      portfolioFillTop: "#10b981",
+      portfolioFillBottom: "#10b981",
     }),
     [isDark]
   );
 
-  // Memoize tooltip formatter
   const tooltipFormatter = React.useCallback(
-    (value: number, name: string) => [
-      `${value.toFixed(2)}%`,
-      name === "value" ? "Danh mục" : "VN-Index",
-    ],
+    (value: number, name: string) => [`${value.toFixed(2)}%`, name === "value" ? "Portfolio" : "VN-Index"],
     []
   );
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Legend */}
-      <div className="flex items-center gap-4 mb-4">
+    <div className="flex h-full flex-col">
+      <div className="mb-4 flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">Danh mục</span>
+          <div className="h-3 w-3 rounded-full bg-emerald-600" />
+          <span className="text-xs text-stone-500 dark:text-neutral-400">Portfolio</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-gray-400" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">VN-Index</span>
+          <div className="h-3 w-3 rounded-full bg-stone-400" />
+          <span className="text-xs text-stone-500 dark:text-neutral-400">VN-Index</span>
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                <stop offset="5%" stopColor={colors.portfolioFillTop} stopOpacity={0.25} />
+                <stop offset="95%" stopColor={colors.portfolioFillBottom} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} />
@@ -137,7 +128,7 @@ function PerformanceChartWidgetBase() {
             <Area
               type="monotone"
               dataKey="value"
-              stroke="#3B82F6"
+              stroke={colors.portfolioColor}
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorValue)"
@@ -154,7 +145,6 @@ function PerformanceChartWidgetBase() {
         </ResponsiveContainer>
       </div>
 
-      {/* Stats */}
       <ChartStats data={data} />
     </div>
   );

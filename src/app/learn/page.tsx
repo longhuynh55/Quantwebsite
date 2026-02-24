@@ -49,28 +49,28 @@ const LEVEL_VISUALS: LevelVisualConfig[] = [
   {
     level: "beginner",
     icon: GraduationCap,
-    cardClassName: "bg-gradient-to-br from-green-50 to-green-100 border-green-200",
-    iconClassName: "bg-green-500",
-    topicCountClassName: "text-green-700",
-    sectionIconClassName: "text-green-600",
+    cardClassName: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800",
+    iconClassName: "bg-emerald-600 dark:bg-emerald-500",
+    topicCountClassName: "text-emerald-700 dark:text-emerald-400",
+    sectionIconClassName: "text-emerald-600 dark:text-emerald-400",
     levelBadgeVariant: "success",
   },
   {
     level: "intermediate",
     icon: BookOpen,
-    cardClassName: "bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200",
-    iconClassName: "bg-blue-500",
-    topicCountClassName: "text-blue-700",
-    sectionIconClassName: "text-blue-600",
+    cardClassName: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
+    iconClassName: "bg-amber-600 dark:bg-amber-500",
+    topicCountClassName: "text-amber-700 dark:text-amber-400",
+    sectionIconClassName: "text-amber-600 dark:text-amber-400",
     levelBadgeVariant: "default",
   },
   {
     level: "advanced",
     icon: Award,
-    cardClassName: "bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200",
+    cardClassName: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800",
     iconClassName: "bg-purple-500",
-    topicCountClassName: "text-purple-700",
-    sectionIconClassName: "text-purple-600",
+    topicCountClassName: "text-purple-700 dark:text-purple-400",
+    sectionIconClassName: "text-purple-600 dark:text-purple-400",
     levelBadgeVariant: "secondary",
   },
 ];
@@ -89,13 +89,25 @@ export default async function LearnPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-12 text-center">
-        <h1 className="text-4xl font-bold mb-4">Education Intelligence</h1>
-        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+      {/* Header */}
+      <header className="mb-12 pb-8 border-b border-stone-200 dark:border-neutral-800 text-center">
+        {/* Kicker */}
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+          <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+            Learning Center
+          </span>
+          <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+        </div>
+
+        <h1 className="font-serif text-4xl md:text-5xl font-bold text-stone-900 dark:text-white leading-tight mb-4">
+          Education Intelligence
+        </h1>
+        <p className="text-lg text-stone-600 dark:text-neutral-400 max-w-3xl mx-auto">
           A structured learning track for quantitative finance, oriented toward Vietnamese equities: from data and
           statistics to strategy research, portfolios, and advanced modeling.
         </p>
-      </div>
+      </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         {LEVEL_VISUALS.map((levelConfig) => {
@@ -110,7 +122,7 @@ export default async function LearnPage() {
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div
-                    className={`w-12 h-12 ${levelConfig.iconClassName} rounded-full flex items-center justify-center`}
+                    className={`w-12 h-12 ${levelConfig.iconClassName} flex items-center justify-center`}
                   >
                     <Icon className="w-6 h-6 text-white" />
                   </div>
@@ -119,7 +131,7 @@ export default async function LearnPage() {
                     <p className={`text-sm ${levelConfig.topicCountClassName}`}>{topicCount} topics</p>
                   </div>
                 </div>
-                <p className="text-gray-600 mb-4">{levelMeta.cardSummary}</p>
+                <p className="text-stone-600 dark:text-neutral-400 mb-4">{levelMeta.cardSummary}</p>
                 <Badge variant={levelConfig.levelBadgeVariant}>
                   ~{formatLearnDuration(totalMinutes)} total
                 </Badge>
@@ -141,20 +153,20 @@ export default async function LearnPage() {
                 <Icon className={`w-6 h-6 ${levelConfig.sectionIconClassName}`} />
                 <h2 className="text-2xl font-bold">{levelMeta.sectionTitle}</h2>
               </div>
-              <p className="text-gray-600 mb-4">{levelMeta.summary}</p>
+              <p className="text-stone-600 dark:text-neutral-400 mb-4">{levelMeta.summary}</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {levelTopics.map((topic) => (
                   <Link key={topic.slug} href={`/learn/${topic.slug}`}>
-                    <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+                    <Card className="h-full hover:border-stone-400 dark:hover:border-neutral-600 transition-colors cursor-pointer group border border-stone-200 dark:border-neutral-800">
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-semibold text-lg mb-2 group-hover:text-blue-600">
+                            <h3 className="font-semibold text-lg mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
                               {topic.title}
                             </h3>
-                            <p className="text-gray-600 text-sm">{topic.description}</p>
+                            <p className="text-stone-600 dark:text-neutral-400 text-sm">{topic.description}</p>
                           </div>
-                          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-transform" />
+                          <ArrowRight className="w-5 h-5 text-stone-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:translate-x-1 transition-transform" />
                         </div>
                         <div className="mt-4 flex items-center gap-2">
                           <Badge variant="outline">
@@ -174,4 +186,3 @@ export default async function LearnPage() {
     </div>
   );
 }
-

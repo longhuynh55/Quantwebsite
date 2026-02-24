@@ -34,17 +34,17 @@ export function AiAssistantTrigger() {
   };
 
   return (
-    <div className="flex items-center rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="flex items-center overflow-hidden rounded-lg border border-stone-200 dark:border-neutral-700">
       <Button
         variant="ghost"
         size="sm"
         onClick={handleCopilotMode}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-none border-r border-gray-200 dark:border-gray-700',
-          'text-gray-600 dark:text-gray-300',
-          'hover:bg-gray-50 dark:hover:bg-gray-800',
+          'flex items-center gap-2 px-3 py-2 rounded-none border-r border-stone-200 dark:border-neutral-700',
+          'text-stone-600 dark:text-neutral-300',
+          'hover:bg-stone-100 dark:hover:bg-neutral-800',
           'transition-colors duration-200',
-          isOpen && uiMode === 'copilot' && 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+          isOpen && uiMode === 'copilot' && 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
         )}
         aria-label="Open AI Assistant Copilot"
         aria-pressed={isOpen && uiMode === 'copilot'}
@@ -56,8 +56,8 @@ export function AiAssistantTrigger() {
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
-            'h-9 px-2 text-gray-600 dark:text-gray-300',
-            'hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'
+            'h-9 px-2 text-stone-600 dark:text-neutral-300',
+            'hover:bg-stone-100 dark:hover:bg-neutral-800 transition-colors'
           )}
           aria-label="Choose assistant mode"
         >

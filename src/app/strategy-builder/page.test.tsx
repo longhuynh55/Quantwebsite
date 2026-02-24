@@ -24,8 +24,11 @@ type MockStoreState = {
   } | null;
   createNewStrategy: jest.Mock;
   saveStrategy: jest.Mock;
+  updateStrategyName: jest.Mock;
   updateNodeData: jest.Mock;
   addNode: jest.Mock;
+  setNodes: jest.Mock;
+  setEdges: jest.Mock;
   deleteNode: jest.Mock;
   setSelectedNode: jest.Mock;
   isSaving: boolean;
@@ -47,6 +50,8 @@ jest.mock("@/components/strategy-builder", () => ({
   StrategyCanvas: () => <div data-testid="strategy-canvas" />,
   NodePalette: () => <div data-testid="node-palette" />,
   PropertyPanel: () => <div data-testid="property-panel" />,
+  TemplateGallery: () => <div data-testid="template-gallery" />,
+  AiSuggestDialog: () => <div data-testid="ai-suggest-dialog" />,
 }));
 
 jest.mock("@/lib/stores/strategyBuilderStore", () => ({
@@ -83,8 +88,11 @@ function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
     },
     createNewStrategy: jest.fn(),
     saveStrategy: jest.fn().mockResolvedValue(undefined),
+    updateStrategyName: jest.fn(),
     updateNodeData: jest.fn(),
     addNode: jest.fn(),
+    setNodes: jest.fn(),
+    setEdges: jest.fn(),
     deleteNode: jest.fn(),
     setSelectedNode: jest.fn(),
     isSaving: false,
@@ -207,8 +215,8 @@ describe("strategy-builder page", () => {
       expect(mockCreateStrategyLabRunClient).toHaveBeenCalledTimes(1);
     });
 
-    expect(await screen.findByText("Latest Backtest Result")).toBeInTheDocument();
-    expect(screen.getByText("Total Return")).toBeInTheDocument();
+    expect(await screen.findByText("Latest Backtest")).toBeInTheDocument();
+    expect(screen.getByText("Return")).toBeInTheDocument();
     expect(screen.getByText("12.34%")).toBeInTheDocument();
     expect(mockToast.success).toHaveBeenCalledWith(
       "Backtest completed successfully."
@@ -276,7 +284,7 @@ describe("strategy-builder page", () => {
     render(<StrategyBuilderPage />);
     fireEvent.click(screen.getByRole("button", { name: "Run Backtest" }));
 
-    const cancelButton = await screen.findByRole("button", { name: "Cancel Run" });
+    const cancelButton = await screen.findByRole("button", { name: "Cancel" });
     fireEvent.click(cancelButton);
 
     expect(mockCancelStrategyLabRunClient).toHaveBeenCalledWith("run-1");

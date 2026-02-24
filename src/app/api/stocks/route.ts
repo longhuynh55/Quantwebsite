@@ -380,7 +380,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol")?.trim().toUpperCase();
-  const search = searchParams.get("search")?.trim().toUpperCase();
+  const search = searchParams.get("search")?.trim() ?? "";
   const dateRaw = searchParams.get("date")?.trim() ?? "";
   const fromRaw = searchParams.get("from")?.trim() ?? "";
   const toRaw = searchParams.get("to")?.trim() ?? "";
@@ -608,14 +608,21 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      const normalized = search.replace(/[^A-Z0-9]/g, "").slice(0, 10);
-      if (!normalized) {
+      const normalizedSymbolQuery = search.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+      const normalizedTextQuery = normalizeForMatch(search).slice(0, 80);
+      if (!normalizedSymbolQuery && !normalizedTextQuery) {
         if (csvRequested) {
           return csvResponse(traceId, buildMetadataCsv([]), buildStocksCsvFilename());
         }
         return jsonResponse(traceId, { stocks: [], total: 0 });
       }
-      const filtered = metadata.filter((s) => s.symbol.includes(normalized));
+      const filtered = metadata.filter((s) => {
+        const symbolMatch = normalizedSymbolQuery ? s.symbol.includes(normalizedSymbolQuery) : false;
+        const textMatch = normalizedTextQuery
+          ? normalizeForMatch(`${s.organName ?? ""} ${s.icbName4 ?? ""}`).includes(normalizedTextQuery)
+          : false;
+        return symbolMatch || textMatch;
+      });
       const refined = applyMetadataFilters(filtered, {
         status: statusFilter,
         listingPhase: listingPhaseFilter,
@@ -629,7 +636,11 @@ export async function GET(request: Request) {
         const slice = hasServerPagination
           ? refined.slice((effectivePage - 1) * effectivePageSize, effectivePage * effectivePageSize)
           : (limitAll ? refined : refined.slice(0, limit!));
-        return csvResponse(traceId, buildMetadataCsv(slice), buildStocksCsvFilename(normalized));
+        return csvResponse(
+          traceId,
+          buildMetadataCsv(slice),
+          buildStocksCsvFilename(normalizedSymbolQuery || normalizedTextQuery)
+        );
       }
       if (hasServerPagination) {
         const offset = (effectivePage - 1) * effectivePageSize;

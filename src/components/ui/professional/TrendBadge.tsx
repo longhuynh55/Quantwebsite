@@ -61,8 +61,8 @@ const TrendBadge = React.memo(
               "dark:bg-red-900/30 dark:text-red-400",
             ],
             trend === "neutral" && [
-              "bg-gray-100 text-gray-600",
-              "dark:bg-gray-800/50 dark:text-gray-400",
+              "bg-stone-100 text-stone-600",
+              "dark:bg-neutral-800/50 dark:text-neutral-400",
             ],
             // Size
             sizeStyles[size],
@@ -79,7 +79,7 @@ const TrendBadge = React.memo(
                 // Trend-specific icon colors
                 trend === "up" && "text-green-600 dark:text-green-400",
                 trend === "down" && "text-red-600 dark:text-red-400",
-                trend === "neutral" && "text-gray-500 dark:text-gray-400"
+                trend === "neutral" && "text-stone-500 dark:text-neutral-400"
               )}
               style={{
                 animationIterationCount: 1,

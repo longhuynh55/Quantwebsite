@@ -85,13 +85,15 @@ describe("ScreenerClient", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("applies uppercase search query and refetches", async () => {
+  it("applies symbol search query and refetches", async () => {
     mockFetch.mockResolvedValue(createFetchResponse(successPayload));
 
     render(<ScreenerClient />);
     await screen.findByText("FPT");
 
-    const searchInput = screen.getByPlaceholderText("Type a symbol (e.g., FPT, VNM)");
+    const searchInput = screen.getByPlaceholderText(
+      "Type symbol/company (e.g., FPT, Vinamilk, Banking)"
+    );
     fireEvent.change(searchInput, { target: { value: "vnm" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
@@ -100,7 +102,27 @@ describe("ScreenerClient", () => {
     });
 
     const latestCallUrl = String(mockFetch.mock.calls.at(-1)?.[0] ?? "");
-    expect(latestCallUrl).toContain("search=VNM");
+    expect(latestCallUrl).toContain("search=vnm");
+  });
+
+  it("accepts company keyword search input and sends it to api", async () => {
+    mockFetch.mockResolvedValue(createFetchResponse(successPayload));
+
+    render(<ScreenerClient />);
+    await screen.findByText("FPT");
+
+    const searchInput = screen.getByPlaceholderText(
+      "Type symbol/company (e.g., FPT, Vinamilk, Banking)"
+    );
+    fireEvent.change(searchInput, { target: { value: "vinamilk" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    const latestCallUrl = String(mockFetch.mock.calls.at(-1)?.[0] ?? "");
+    expect(latestCallUrl).toContain("search=vinamilk");
   });
 
   it("shows error state and retries successfully", async () => {

@@ -32,6 +32,12 @@ function parsePeriod(raw: string | null): string | null {
   const normalized = period.toUpperCase();
   if (VALID_PERIOD_REGEX.test(normalized)) return normalized;
 
+  const yearOnly = /^(\d{4})$/.exec(period);
+  if (yearOnly) return `${yearOnly[1]}Q4`;
+
+  const fy = /^FY[\s/-]*(\d{4})$/i.exec(period);
+  if (fy) return `${fy[1]}Q4`;
+
   const quarterFirst = /^Q([1-4])[\s/-]*(\d{4})$/i.exec(period);
   if (quarterFirst) return `${quarterFirst[2]}Q${quarterFirst[1]}`;
   return null;

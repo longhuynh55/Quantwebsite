@@ -52,7 +52,7 @@ const TIME_RANGES = [
 
 const COMPARE_SYMBOL_LIMIT = 5;
 const HOSE_EXCHANGE = "HOSE";
-const COMPARE_LINE_COLORS = ["#2563eb", "#16a34a", "#ea580c", "#9333ea", "#0891b2"];
+const COMPARE_LINE_COLORS = ["#047857", "#0f766e", "#b45309", "#57534e", "#0f766e"];
 
 interface StockPoint {
   date: string;
@@ -660,20 +660,20 @@ function ChartsContent() {
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b border-gray-200 dark:border-gray-700">
+          <thead className="border-b border-stone-200 dark:border-neutral-700">
             <tr>
-              <th className="py-2 pr-4 text-left font-medium text-gray-600 dark:text-gray-300">Field</th>
-              <th className="py-2 text-right font-medium text-gray-600 dark:text-gray-300">Value</th>
+              <th className="py-2 pr-4 text-left font-medium text-stone-600 dark:text-neutral-300">Field</th>
+              <th className="py-2 text-right font-medium text-stone-600 dark:text-neutral-300">Value</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+          <tbody className="divide-y divide-stone-100 dark:divide-neutral-700">
             {filtered.map((r) => (
-              <tr key={r.key} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="py-2 pr-4 text-gray-700 dark:text-gray-200">
+              <tr key={r.key} className="hover:bg-stone-100 dark:hover:bg-neutral-800/50">
+                <td className="py-2 pr-4 text-stone-700 dark:text-neutral-200">
                   <span className="block font-medium">{r.label}</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 font-mono">{r.key}</span>
+                  <span className="block text-xs text-stone-500 dark:text-neutral-400 font-mono">{r.key}</span>
                 </td>
-                <td className="py-2 text-right text-gray-900 dark:text-gray-100 font-mono">
+                <td className="py-2 text-right text-stone-900 dark:text-white font-mono">
                   {formatFundamentalValue(r.value)}
                 </td>
               </tr>
@@ -687,16 +687,26 @@ function ChartsContent() {
   return (
     <>
       {/* Header */}
-      <div className="mb-8">
+      <header className="mb-12 pb-8 border-b border-stone-200 dark:border-neutral-800">
+        {/* Kicker */}
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+          <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+            Technical Analysis
+          </span>
+        </div>
+
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Interactive Charts</h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <h1 className="font-serif text-4xl md:text-5xl font-bold text-stone-900 dark:text-white leading-tight">
+              Interactive Charts
+            </h1>
+            <p className="text-stone-600 dark:text-neutral-400 mt-2">
               Analyze individual stocks with professional candlestick charts
             </p>
             {stockMeta?.organName ? (
               <p
-                className="mt-2 text-sm text-gray-700 dark:text-gray-300 line-clamp-1"
+                className="mt-2 text-sm text-stone-700 dark:text-neutral-300 line-clamp-1"
                 title={stockMeta.organName}
               >
                 {stockMeta.organName}
@@ -719,8 +729,10 @@ function ChartsContent() {
               </div>
             ) : null}
           </div>
+        </div>
+      </header>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+      <div className="mb-6 flex flex-col gap-3 border border-stone-200 bg-stone-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/60 sm:flex-row sm:items-center sm:justify-between">
             {/* Time Range Selector */}
             <TimeRangeSelector
               ranges={TIME_RANGES}
@@ -736,13 +748,17 @@ function ChartsContent() {
                   onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="Enter symbol..."
-                  className="w-32 pl-3"
+                  className="w-32 border-stone-300 bg-white pl-3 dark:border-neutral-700 dark:bg-neutral-950"
                   maxLength={10}
                 />
               </div>
-              <Button onClick={handleSearch} disabled={loading}>
+              <Button
+                onClick={handleSearch}
+                disabled={loading}
+                className="bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
                 {loading ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent" />
                 ) : (
                   <Search className="w-4 h-4" />
                 )}
@@ -750,6 +766,7 @@ function ChartsContent() {
               {uiFeatureFlags.watchlistBridge ? (
                 <Button
                   variant="outline"
+                  className="border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
                   onClick={() => {
                     const action = isCurrentSymbolInWatchlist ? "removed" : "added";
                     toggleWatchlistSymbol(symbol);
@@ -774,25 +791,25 @@ function ChartsContent() {
                   value={symbol}
                   onChange={(event) => handleWatchlistSelect(event.target.value)}
                   options={watchlistOptions}
+                  className="border-stone-300 bg-white text-stone-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200"
                 />
               </div>
             ) : uiFeatureFlags.watchlistBridge ? (
-              <div className="text-xs text-gray-500 dark:text-gray-400 self-center">
+              <div className="text-xs text-stone-500 dark:text-neutral-400 self-center">
                 Watchlist is empty
               </div>
             ) : null}
           </div>
-        </div>
-      </div>
 
       {/* Compare Picker */}
-      <Card className="mb-6 border-blue-100 dark:border-blue-900/50">
+      <Card className="mb-6 overflow-hidden border-stone-200 dark:border-neutral-800">
+        <div className="h-px bg-emerald-700 dark:bg-emerald-500" />
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
               <div>
-                <p className="font-semibold text-gray-900 dark:text-white">HOSE Compare (max {COMPARE_SYMBOL_LIMIT})</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="font-semibold text-stone-900 dark:text-white">HOSE Compare (max {COMPARE_SYMBOL_LIMIT})</p>
+                <p className="text-sm text-stone-600 dark:text-neutral-400">
                   Add symbols to compare normalized performance. HOSE symbols only.
                 </p>
               </div>
@@ -803,21 +820,26 @@ function ChartsContent() {
                   onKeyDown={(event) => event.key === "Enter" && void handleAddCompareSymbol()}
                   placeholder="Add HOSE symbol..."
                   maxLength={10}
-                  className="w-44"
+                  className="w-44 border-stone-300 bg-white dark:border-neutral-700 dark:bg-neutral-950"
                   disabled={compareInputLoading || compareSymbols.length >= COMPARE_SYMBOL_LIMIT}
                 />
                 <Button
                   onClick={() => void handleAddCompareSymbol()}
                   disabled={compareInputLoading || compareSymbols.length >= COMPARE_SYMBOL_LIMIT}
+                  className="bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                 >
                   {compareInputLoading ? (
-                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent" />
                   ) : (
                     "Add"
                   )}
                 </Button>
                 {compareExtraSymbols.length > 0 ? (
-                  <Button variant="outline" onClick={handleClearCompareSymbols}>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearCompareSymbols}
+                    className="border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
+                  >
                     Clear
                   </Button>
                 ) : null}
@@ -833,7 +855,7 @@ function ChartsContent() {
                       <button
                         type="button"
                         onClick={() => handleRemoveCompareSymbol(item)}
-                        className="inline-flex items-center justify-center rounded hover:text-red-500"
+                        className="inline-flex items-center justify-center hover:text-rose-600 dark:hover:text-rose-400"
                         aria-label={`Remove ${item}`}
                       >
                         <X className="w-3 h-3" />
@@ -862,18 +884,21 @@ function ChartsContent() {
         <SkeletonStats count={6} className="mb-6" />
       ) : stats ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-800 border-blue-100 dark:border-blue-800">
+          <Card className="relative overflow-hidden border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+            <div className="absolute inset-x-0 top-0 h-px bg-emerald-600/80 dark:bg-emerald-500/70" />
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Symbol</p>
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{symbol}</p>
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">Symbol</p>
+              <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{symbol}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Price</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.lastPrice.toFixed(2)}</p>
-              <div className={`flex items-center text-xs font-medium ${dailyChange >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">Price</p>
+              <p className="text-xl font-bold text-stone-900 dark:text-white">{stats.lastPrice.toFixed(2)}</p>
+              <div
+                className={`flex items-center text-xs font-medium ${dailyChange >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}
+              >
                 {dailyChange >= 0 ? (
                   <TrendingUp className="w-3 h-3 mr-1" />
                 ) : (
@@ -887,8 +912,10 @@ function ChartsContent() {
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period Return</p>
-              <p className={`text-xl font-bold ${stats.totalReturn >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">Period Return</p>
+              <p
+                className={`text-xl font-bold ${stats.totalReturn >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}
+              >
                 {formatPercent(stats.totalReturn)}
               </p>
             </CardContent>
@@ -896,8 +923,8 @@ function ChartsContent() {
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">52W High / Low</p>
-              <p className="text-sm font-bold text-gray-900 dark:text-white">
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">52W High / Low</p>
+              <p className="text-sm font-bold text-stone-900 dark:text-white">
                 {stats.highestPrice.toFixed(2)} / {stats.lowestPrice.toFixed(2)}
               </p>
             </CardContent>
@@ -905,16 +932,16 @@ function ChartsContent() {
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Volatility</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.volatility.toFixed(1)}%</p>
-              <p className="text-xs text-gray-400">Annualized</p>
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">Volatility</p>
+              <p className="text-xl font-bold text-stone-900 dark:text-white">{stats.volatility.toFixed(1)}%</p>
+              <p className="text-xs text-stone-400">Annualized</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Volume</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(stats.avgVolume)}</p>
+              <p className="text-xs text-stone-500 dark:text-neutral-400 mb-1">Avg Volume</p>
+              <p className="text-lg font-bold text-stone-900 dark:text-white">{formatCurrency(stats.avgVolume)}</p>
             </CardContent>
           </Card>
         </div>
@@ -922,15 +949,15 @@ function ChartsContent() {
 
       {/* Chart */}
       {loading ? (
-        <SkeletonChart height={450} className="border border-gray-200 dark:border-gray-700 rounded-xl" />
+        <SkeletonChart height={450} className="border border-stone-200 dark:border-neutral-700" />
       ) : chartData.length > 0 ? (
         <ErrorBoundary
           fallback={
-            <div className="p-8 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
-              <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+            <div className="border border-rose-200 bg-rose-50/70 p-8 text-center dark:border-rose-900/40 dark:bg-rose-900/10">
+              <p className="mb-2 font-medium text-rose-700 dark:text-rose-400">
                 Error displaying chart
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-sm text-stone-600 dark:text-neutral-400 mb-4">
                 The chart could not be rendered. Please try refreshing or selecting a different symbol.
               </p>
               <Button size="sm" onClick={() => setRefreshCounter(prev => prev + 1)}>
@@ -945,8 +972,8 @@ function ChartsContent() {
           height={450}
           showVolume={true}
           indicators={[
-            { type: "sma", period: 20, color: "#f59e0b" },
-            { type: "ema", period: 50, color: "#8b5cf6" },
+            { type: "sma", period: 20, color: "#d97706" },
+            { type: "ema", period: 50, color: "#047857" },
           ]}
         />
         </ErrorBoundary>
@@ -954,14 +981,15 @@ function ChartsContent() {
         <NoResultsState
           title="No chart data available"
           description="Enter a valid stock symbol to view the chart"
-          className="h-96 bg-gray-50 dark:bg-gray-800/50 rounded-xl"
+          className="h-96 bg-stone-100 dark:bg-neutral-800/50"
         />
       )}
 
       {/* Compare Canvas */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Compare Performance</CardTitle>
+      <Card className="mt-6 overflow-hidden border-stone-200 dark:border-neutral-800">
+        <div className="h-px bg-emerald-700 dark:bg-emerald-500" />
+        <CardHeader className="border-b border-stone-200 bg-stone-50/70 dark:border-neutral-800 dark:bg-neutral-900/60">
+          <CardTitle className="font-serif text-lg text-stone-900 dark:text-white">Compare Performance</CardTitle>
           <CardDescription>Normalized return (%) from each symbol&apos;s first visible data point.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -998,7 +1026,7 @@ function ChartsContent() {
 
       {/* Period Info */}
       {data.length > 0 && !loading && (
-        <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+        <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-stone-500 dark:text-neutral-400">
           <div className="flex items-center gap-1">
             <Calendar className="w-4 h-4" />
             <span>
@@ -1018,27 +1046,28 @@ function ChartsContent() {
       {/* Fundamentals */}
       <ErrorBoundary
         fallback={
-          <Card className="mt-8">
+          <Card className="mt-8 border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-900/10">
             <CardContent className="p-8 text-center">
-              <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+              <p className="mb-2 font-medium text-rose-700 dark:text-rose-400">
                 Error loading fundamentals
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-stone-600 dark:text-neutral-400">
                 Please try reloading the fundamentals data.
               </p>
             </CardContent>
           </Card>
         }
       >
-        <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Fundamentals (Quarterly)</CardTitle>
+        <Card className="mt-8 overflow-hidden border-stone-200 dark:border-neutral-800">
+        <div className="h-px bg-emerald-700 dark:bg-emerald-500" />
+        <CardHeader className="border-b border-stone-200 bg-stone-50/70 dark:border-neutral-800 dark:bg-neutral-900/60">
+          <CardTitle className="font-serif text-lg text-stone-900 dark:text-white">Fundamentals (Quarterly)</CardTitle>
           <CardDescription>Balance Sheet, Income Statement, Cash Flow</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
             <div className="w-full md:w-44">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-stone-700 dark:text-neutral-300 mb-1">
                 Period
               </label>
               <Select
@@ -1049,7 +1078,7 @@ function ChartsContent() {
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-stone-700 dark:text-neutral-300 mb-1">
                 Filter Fields
               </label>
               <Input
@@ -1065,7 +1094,7 @@ function ChartsContent() {
                 disabled={fundLoading || !symbol}
               >
                 {fundLoading ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-gray-900 dark:border-gray-100 border-t-transparent rounded-full" />
+                  <div className="animate-spin w-4 h-4 border-2 border-stone-900 dark:border-neutral-100 border-t-transparent" />
                 ) : (
                   "Reload"
                 )}
@@ -1113,25 +1142,25 @@ function ChartsContent() {
 
 function ChartsLoading() {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="space-y-6">
       {/* Header skeleton */}
       <div className="mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <div className="h-9 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
-            <div className="h-5 w-72 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            <div className="h-9 w-48 bg-stone-200 dark:bg-neutral-700 animate-pulse mb-2" />
+            <div className="h-5 w-72 bg-stone-200 dark:bg-neutral-700 animate-pulse" />
           </div>
         </div>
       </div>
       <SkeletonStats count={6} className="mb-6" />
-      <SkeletonChart height={450} className="border border-gray-200 dark:border-gray-700 rounded-xl" />
+      <SkeletonChart height={450} className="border border-stone-200 dark:border-neutral-700" />
     </div>
   );
 }
 
 export default function ChartsPage() {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="space-y-6">
       <Suspense fallback={<ChartsLoading />}>
         <ChartsContent />
       </Suspense>

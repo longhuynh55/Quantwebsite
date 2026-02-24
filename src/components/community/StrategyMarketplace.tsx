@@ -184,49 +184,55 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
 
   return (
     <PageTransition variant="fade" className={cn("min-h-screen", className)}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-full space-y-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+        <header className="mb-10 border-b border-stone-200 pb-8 dark:border-neutral-800">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="h-px w-8 bg-emerald-700 dark:bg-emerald-500" />
+            <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+              Community Signals
+            </span>
+          </div>
+          <h1 className="font-serif text-4xl font-bold leading-tight text-stone-900 dark:text-white md:text-5xl">
             Strategy Community
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Discover and share high-quality trading strategies from the community
+          <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-stone-600 dark:text-neutral-400">
+            Discover, evaluate, and import high-quality strategy templates from the community.
           </p>
-        </div>
+        </header>
 
         {/* Stats bar */}
         {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="flex items-center gap-3 border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
+                <TrendingUp className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Avg Return</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                <p className="text-sm text-stone-500 dark:text-neutral-400">Avg Return</p>
+                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
                   +{stats.avgReturn.toFixed(1)}%
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                <Star className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            <div className="flex items-center gap-3 border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
+                <Star className="w-5 h-5 text-amber-700 dark:text-amber-300" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Avg Rating</p>
-                <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                <p className="text-sm text-stone-500 dark:text-neutral-400">Avg Rating</p>
+                <p className="text-lg font-bold text-amber-700 dark:text-amber-300">
                   {stats.avgRating.toFixed(1)}/5
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Download className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="flex items-center gap-3 border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-lg bg-stone-200 p-2 dark:bg-neutral-800">
+                <Download className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Downloads</p>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                <p className="text-sm text-stone-500 dark:text-neutral-400">Total Downloads</p>
+                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
                   {stats.totalDownloads.toLocaleString()}
                 </p>
               </div>
@@ -235,12 +241,14 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
         )}
 
         {/* Search and filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        <div className="mb-6 overflow-hidden border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="h-1 bg-emerald-700 dark:bg-emerald-600" />
+          <div className="p-4">
           {/* Main search row */}
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Search input */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
               <Input
                 type="text"
                 placeholder="Search strategies..."
@@ -251,7 +259,7 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
                   aria-label="Clear search"
                 >
                   <X className="w-4 h-4" />
@@ -265,7 +273,7 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as StrategiesQueryParams["sortBy"])}
                 options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.labelEn }))}
-                className="w-48"
+                className="w-48 border-stone-300 dark:border-neutral-700"
               />
               <Button
                 variant="outline"
@@ -319,9 +327,9 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
 
           {/* Expanded filters */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="mt-4 pt-4 border-t border-stone-200 dark:border-neutral-700">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <h3 className="text-sm font-medium text-stone-700 dark:text-neutral-300">
                   Strategy categories
                 </h3>
                 {hasActiveFilters && (
@@ -337,12 +345,12 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
                     onClick={() => handleTagToggle(tag.value)}
                     aria-pressed={selectedTags.includes(tag.value)}
                     aria-label={selectedTags.includes(tag.value) ? `Unselect ${tag.label}` : `Select ${tag.label}`}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
-                      selectedTags.includes(tag.value)
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-300 dark:border-blue-700"
-                        : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                    )}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              selectedTags.includes(tag.value)
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700"
+                : "bg-stone-100 text-stone-700 dark:bg-neutral-700 dark:text-neutral-300 hover:bg-stone-200 dark:hover:bg-neutral-600"
+            )}
                   >
                     {tag.label}
                   </button>
@@ -350,11 +358,12 @@ export function StrategyMarketplace({ className }: StrategyMarketplaceProps) {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Results count */}
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-stone-500 dark:text-neutral-400">
             {isLoading ? (
               "Loading..."
             ) : (

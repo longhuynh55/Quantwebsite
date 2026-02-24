@@ -210,7 +210,7 @@ export const Sparkline = memo(
               stroke="currentColor"
               strokeWidth={strokeWidth}
               strokeDasharray="2 2"
-              className="text-gray-300 dark:text-gray-600"
+              className="text-stone-300 dark:text-neutral-600"
             />
           </svg>
         );

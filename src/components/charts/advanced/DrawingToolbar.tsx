@@ -154,8 +154,8 @@ export function DrawingToolbar({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 p-1.5 rounded-lg border border-gray-200 bg-white shadow-sm",
-        "dark:border-gray-700 dark:bg-gray-800",
+        "flex items-center gap-1 p-1.5 rounded-lg border border-stone-200 bg-white shadow-sm",
+        "dark:border-neutral-700 dark:bg-neutral-800",
         isVertical ? "flex-col" : "flex-row flex-wrap",
         className
       )}
@@ -182,7 +182,7 @@ export function DrawingToolbar({
                 <span>
                   {tool.label}
                   {tool.shortcut && (
-                    <span className="ml-2 text-gray-400 dark:text-gray-500">
+                    <span className="ml-2 text-stone-400 dark:text-neutral-500">
                       ({tool.shortcut})
                     </span>
                   )}
@@ -197,7 +197,7 @@ export function DrawingToolbar({
                 className={cn(
                   "h-8 w-8",
                   isActive &&
-                    "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                    "bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                 )}
                 aria-label={tool.label}
                 aria-pressed={isActive}
@@ -212,7 +212,7 @@ export function DrawingToolbar({
       {/* Divider */}
       <div
         className={cn(
-          "bg-gray-200 dark:bg-gray-600",
+          "bg-stone-200 dark:bg-neutral-600",
           isVertical ? "w-6 h-px my-1" : "w-px h-6 mx-1"
         )}
         role="separator"
@@ -257,7 +257,7 @@ export function DrawingToolbar({
       {/* Divider */}
       <div
         className={cn(
-          "bg-gray-200 dark:bg-gray-600",
+          "bg-stone-200 dark:bg-neutral-600",
           isVertical ? "w-6 h-px my-1" : "w-px h-6 mx-1"
         )}
         role="separator"
@@ -286,7 +286,7 @@ export function DrawingToolbar({
               </Button>
             </Tooltip>
 
-            <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[3rem] text-center">
+            <span className="text-xs text-stone-500 dark:text-stone-400 min-w-[3rem] text-center">
               {Math.round(zoom * 100)}%
             </span>
 
@@ -318,7 +318,7 @@ export function DrawingToolbar({
           {/* Divider */}
           <div
             className={cn(
-              "bg-gray-200 dark:bg-gray-600",
+              "bg-stone-200 dark:bg-neutral-600",
               isVertical ? "w-6 h-px my-1" : "w-px h-6 mx-1"
             )}
             role="separator"
@@ -355,7 +355,7 @@ export function DrawingToolbar({
       {/* Divider */}
       <div
         className={cn(
-          "bg-gray-200 dark:bg-gray-600",
+          "bg-stone-200 dark:bg-neutral-600",
           isVertical ? "w-6 h-px my-1" : "w-px h-6 mx-1"
         )}
         role="separator"
@@ -424,3 +424,4 @@ export function DrawingToolbar({
 }
 
 export default DrawingToolbar;
+

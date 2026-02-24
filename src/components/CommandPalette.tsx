@@ -29,6 +29,7 @@ import {
   CommandShortcut,
   CommandSeparator,
 } from "@/components/ui/command";
+import { COMMAND_PALETTE_OPEN_EVENT } from "@/lib/commandPaletteEvents";
 
 interface StockResult {
   symbol: string;
@@ -49,9 +50,16 @@ export function CommandPalette() {
         setOpen((open) => !open);
       }
     };
+    const openPalette = () => {
+      setOpen(true);
+    };
 
     document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
+    return () => {
+      document.removeEventListener("keydown", down);
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
+    };
   }, []);
 
   // Fetch stocks when searching
@@ -127,7 +135,7 @@ export function CommandPalette() {
         {searchQuery.length === 0 && (
           <CommandGroup heading="Suggestions">
             <CommandItem onSelect={() => runCommand(() => router.push("/screener"))}>
-              <Search className="mr-2 h-4 w-4 text-blue-500" />
+              <Search className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-300" />
               <span>Explore Stock Screener</span>
               <CommandShortcut>G S</CommandShortcut>
             </CommandItem>
@@ -137,7 +145,7 @@ export function CommandPalette() {
               <CommandShortcut>G C</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push("/backtesting"))}>
-              <LineChart className="mr-2 h-4 w-4 text-purple-500" />
+              <LineChart className="mr-2 h-4 w-4 text-emerald-700 dark:text-emerald-400" />
               <span>Run Backtest Strategy</span>
               <CommandShortcut>G B</CommandShortcut>
             </CommandItem>
@@ -153,12 +161,12 @@ export function CommandPalette() {
                 onSelect={() => handleStockSelect(stock.symbol)}
                 className="flex items-center"
               >
-                <CandlestickChart className="mr-2 h-4 w-4 text-blue-400" />
+                <CandlestickChart className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                 <div className="flex flex-col">
                   <span className="font-bold">{stock.symbol}</span>
-                  {stock.name && <span className="text-[10px] text-gray-400">{stock.name}</span>}
+                  {stock.name && <span className="text-[10px] text-stone-500 dark:text-neutral-400">{stock.name}</span>}
                 </div>
-                <div className="ml-auto flex items-center text-[10px] text-gray-400 font-mono">
+                <div className="ml-auto flex items-center text-[10px] font-mono text-stone-500 dark:text-neutral-400">
                   View Chart <ArrowRight className="ml-1 h-3 w-3" />
                 </div>
               </CommandItem>
@@ -203,7 +211,7 @@ export function CommandPalette() {
           <CommandItem onSelect={() => runCommand(() => {})}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
-            <CommandShortcut>⌘S</CommandShortcut>
+            <CommandShortcut>Ctrl+S</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => runCommand(() => {})}>
             <HelpCircle className="mr-2 h-4 w-4" />
@@ -213,19 +221,19 @@ export function CommandPalette() {
       </CommandList>
       
       {/* Footer Info */}
-      <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 px-4 py-3 text-[10px] text-gray-500 dark:text-slate-400 font-medium">
+      <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50/70 px-4 py-3 text-[10px] font-medium text-stone-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1">
-            <kbd className="rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1 py-0.5">↑↓</kbd>
+            <kbd className="rounded border border-stone-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-800">Up/Down</kbd>
             <span>Navigate</span>
           </div>
           <div className="flex items-center gap-1">
-            <kbd className="rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1 py-0.5">↵</kbd>
+            <kbd className="rounded border border-stone-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-800">Enter</kbd>
             <span>Select</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Sparkles className="h-3 w-3 text-blue-500" />
+          <Sparkles className="h-3 w-3 text-emerald-600 dark:text-emerald-300" />
           <span>QuantVN Command Engine v1.0</span>
         </div>
       </div>

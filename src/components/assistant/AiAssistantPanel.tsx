@@ -132,7 +132,7 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
 
     const page =
-      pathname === '/'
+      pathname === '/' || pathname === '/dashboard'
         ? 'home'
         : pathname === '/screener'
           ? 'screener'
@@ -528,8 +528,9 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
         onKeyDown={handlePanelKeyDown}
         className={cn(
           'fixed z-50',
-          'bg-white dark:bg-gray-900',
-          'shadow-2xl shadow-black/20 dark:shadow-black/40',
+          'bg-stone-50 dark:bg-stone-950',
+          'shadow-2xl shadow-stone-900/15 dark:shadow-black/35',
+          'border border-stone-200/80 dark:border-stone-800',
           // Mobile: full screen
           'inset-0 lg:inset-auto',
           // Desktop: side panel
@@ -540,21 +541,24 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-600 to-teal-600">
+        <div className="relative flex items-center justify-between px-4 py-3 border-b border-stone-200 dark:border-stone-700 bg-stone-100/95 dark:bg-stone-900/95">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-600/80 via-emerald-500/65 to-stone-400/40" />
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <Bot className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 rounded-full bg-emerald-600/90 dark:bg-emerald-500/85 flex items-center justify-center ring-1 ring-emerald-700/20 dark:ring-emerald-300/25">
+              <Bot className="w-5 h-5 text-emerald-50" />
             </div>
             <div>
-              <h2 id="assistant-panel-title" className="font-semibold text-white">AI Assistant</h2>
-              <p className="text-xs text-white/80">Grounded Vietnamese Stock Market Copilot</p>
-              <div className="mt-1.5 inline-flex items-center rounded-lg bg-white/15 p-0.5 border border-white/20">
+              <h2 id="assistant-panel-title" className="font-semibold text-stone-900 dark:text-stone-100">AI Assistant</h2>
+              <p className="text-xs text-stone-600 dark:text-stone-300">Grounded Vietnamese Stock Market Copilot</p>
+              <div className="mt-1.5 inline-flex items-center rounded-lg bg-stone-200/80 dark:bg-stone-800 p-0.5 border border-stone-300/80 dark:border-stone-700/80">
                 <button
                   type="button"
                   onClick={switchToCopilotMode}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
-                    uiMode === "copilot" ? "bg-white text-blue-700" : "text-white/90 hover:bg-white/15"
+                    uiMode === "copilot"
+                      ? "bg-stone-50 text-stone-900 dark:bg-stone-100 dark:text-stone-900"
+                      : "text-stone-700 dark:text-stone-300 hover:bg-stone-300/55 dark:hover:bg-stone-700/70"
                   )}
                 >
                   <PanelTop className="w-3.5 h-3.5" />
@@ -565,7 +569,9 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
                   onClick={switchToScreenerMode}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
-                    uiMode === "screener" ? "bg-white text-blue-700" : "text-white/90 hover:bg-white/15"
+                    uiMode === "screener"
+                      ? "bg-emerald-600 text-emerald-50 dark:bg-emerald-500 dark:text-emerald-950"
+                      : "text-stone-700 dark:text-stone-300 hover:bg-stone-300/55 dark:hover:bg-stone-700/70"
                   )}
                 >
                   <Table2 className="w-3.5 h-3.5" />
@@ -573,9 +579,9 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
                 </button>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Grounded Data</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Policy Guardrails</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white/90">Citations</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200/90 text-stone-700 dark:bg-stone-800 dark:text-stone-300">Grounded Data</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">Policy Guardrails</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200/90 text-stone-700 dark:bg-stone-800 dark:text-stone-300">Citations</span>
               </div>
             </div>
           </div>
@@ -585,7 +591,7 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
                 variant="ghost"
                 size="icon"
                 onClick={handleClearChat}
-                className="text-white/70 hover:text-white hover:bg-white/10"
+                className="text-stone-500 hover:text-stone-900 hover:bg-stone-200/70 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700/60"
                 aria-label="Clear chat"
               >
                 <Trash2 className="w-4 h-4" />
@@ -595,7 +601,7 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
               variant="ghost"
               size="icon"
               onClick={closePanel}
-              className="text-white/70 hover:text-white hover:bg-white/10"
+              className="text-stone-500 hover:text-stone-900 hover:bg-stone-200/70 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700/60"
               aria-label="Close panel"
             >
               <X className="w-5 h-5" />
@@ -622,31 +628,31 @@ const AiAssistantPanel = React.memo(function AiAssistantPanel() {
           {/* Welcome Message */}
           {messages.length === 0 && (
             <div className="p-4 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center">
-                <Bot className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-stone-200 to-emerald-300 dark:from-stone-800 dark:to-emerald-700 flex items-center justify-center ring-1 ring-stone-300/70 dark:ring-stone-700/70">
+                <Bot className="w-8 h-8 text-emerald-800 dark:text-emerald-100" />
               </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="font-semibold text-stone-900 dark:text-stone-100 mb-2">
                 Welcome to QuantVN AI Assistant
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
                 Ask about symbols, metrics, valuation, risk, and market structure. Responses prioritize grounded evidence.
               </p>
               <div className="grid grid-cols-1 gap-2 text-left">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
-                  <Database className="w-4 h-4 text-blue-500 mt-0.5" />
-                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                <div className="rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-100/60 dark:bg-stone-900/40 p-2.5 flex items-start gap-2">
+                  <Database className="w-4 h-4 text-stone-600 dark:text-stone-300 mt-0.5" />
+                  <p className="text-xs text-stone-700 dark:text-stone-300">
                     <span className="font-medium">Grounded Data:</span> numeric outputs are fetched from internal QuantVN APIs.
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
+                <div className="rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-100/60 dark:bg-stone-900/40 p-2.5 flex items-start gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-500 mt-0.5" />
-                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                  <p className="text-xs text-stone-700 dark:text-stone-300">
                     <span className="font-medium">Guardrails:</span> missing evidence triggers abstain/fallback behavior.
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2.5 flex items-start gap-2">
-                  <ScrollText className="w-4 h-4 text-purple-500 mt-0.5" />
-                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                <div className="rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-100/60 dark:bg-stone-900/40 p-2.5 flex items-start gap-2">
+                  <ScrollText className="w-4 h-4 text-emerald-700 dark:text-emerald-300 mt-0.5" />
+                  <p className="text-xs text-stone-700 dark:text-stone-300">
                     <span className="font-medium">Traceability:</span> each response includes sources and execution trace.
                   </p>
                 </div>

@@ -54,8 +54,8 @@ export function ChartToolbar({
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 rounded-md border border-gray-200 bg-gray-50/80 p-1",
-        "dark:border-gray-700 dark:bg-gray-800/80",
+        "flex items-center gap-0.5 rounded-md border border-stone-200 bg-stone-50/80 p-1",
+        "dark:border-neutral-700 dark:bg-neutral-800/80",
         className
       )}
       role="toolbar"
@@ -70,7 +70,7 @@ export function ChartToolbar({
               size="icon"
               onClick={onZoomIn}
               disabled={!onZoomIn}
-              className="h-7 w-7 rounded-sm text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+              className="h-7 w-7 rounded-sm text-stone-600 hover:bg-stone-200 hover:text-stone-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
               aria-label="Zoom in"
             >
               <ZoomIn className="h-4 w-4" />
@@ -83,7 +83,7 @@ export function ChartToolbar({
               size="icon"
               onClick={onZoomOut}
               disabled={!onZoomOut}
-              className="h-7 w-7 rounded-sm text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+              className="h-7 w-7 rounded-sm text-stone-600 hover:bg-stone-200 hover:text-stone-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
               aria-label="Zoom out"
             >
               <ZoomOut className="h-4 w-4" />
@@ -96,7 +96,7 @@ export function ChartToolbar({
               size="icon"
               onClick={onReset}
               disabled={!onReset}
-              className="h-7 w-7 rounded-sm text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+              className="h-7 w-7 rounded-sm text-stone-600 hover:bg-stone-200 hover:text-stone-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
               aria-label="Reset zoom"
             >
               <RotateCcw className="h-4 w-4" />
@@ -104,7 +104,7 @@ export function ChartToolbar({
           </Tooltip>
 
           {/* Divider */}
-          <div className="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-600" />
+          <div className="mx-1 h-5 w-px bg-stone-300 dark:bg-neutral-600" />
         </>
       )}
 
@@ -118,9 +118,9 @@ export function ChartToolbar({
               onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
               disabled={!onExport}
               className={cn(
-                "h-7 w-auto px-1.5 rounded-sm text-gray-600 hover:bg-gray-200 hover:text-gray-900",
-                "dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100",
-                isExportDropdownOpen && "bg-gray-200 dark:bg-gray-700"
+                "h-7 w-auto px-1.5 rounded-sm text-stone-600 hover:bg-stone-200 hover:text-stone-900",
+                "dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100",
+                isExportDropdownOpen && "bg-stone-200 dark:bg-neutral-700"
               )}
               aria-label="Export chart"
               aria-expanded={isExportDropdownOpen}
@@ -135,8 +135,8 @@ export function ChartToolbar({
           {isExportDropdownOpen && (
             <div
               className={cn(
-                "absolute right-0 top-full z-50 mt-1 min-w-[100px] rounded-md border border-gray-200 bg-white py-1 shadow-lg",
-                "dark:border-gray-700 dark:bg-gray-800",
+                "absolute right-0 top-full z-50 mt-1 min-w-[100px] rounded-md border border-stone-200 bg-white py-1 shadow-lg",
+                "dark:border-neutral-700 dark:bg-neutral-800",
                 "animate-in fade-in-0 zoom-in-95 duration-150"
               )}
               role="menu"
@@ -146,9 +146,9 @@ export function ChartToolbar({
                 type="button"
                 onClick={() => handleExport("png")}
                 className={cn(
-                  "flex w-full items-center px-3 py-1.5 text-sm text-gray-700",
-                  "hover:bg-gray-100 hover:text-gray-900",
-                  "dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                  "flex w-full items-center px-3 py-1.5 text-sm text-stone-700",
+                  "hover:bg-stone-100 hover:text-stone-900",
+                  "dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
                 )}
                 role="menuitem"
               >
@@ -158,9 +158,9 @@ export function ChartToolbar({
                 type="button"
                 onClick={() => handleExport("svg")}
                 className={cn(
-                  "flex w-full items-center px-3 py-1.5 text-sm text-gray-700",
-                  "hover:bg-gray-100 hover:text-gray-900",
-                  "dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                  "flex w-full items-center px-3 py-1.5 text-sm text-stone-700",
+                  "hover:bg-stone-100 hover:text-stone-900",
+                  "dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
                 )}
                 role="menuitem"
               >
@@ -170,7 +170,7 @@ export function ChartToolbar({
           )}
 
           {/* Divider */}
-          <div className="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-600 inline-block" />
+          <div className="mx-1 h-5 w-px bg-stone-300 dark:bg-neutral-600 inline-block" />
         </div>
       )}
 
@@ -182,7 +182,7 @@ export function ChartToolbar({
             size="icon"
             onClick={onFullscreen}
             disabled={!onFullscreen}
-            className="h-7 w-7 rounded-sm text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+            className="h-7 w-7 rounded-sm text-stone-600 hover:bg-stone-200 hover:text-stone-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
             aria-label="Toggle fullscreen"
           >
             <Maximize2 className="h-4 w-4" />
@@ -192,3 +192,4 @@ export function ChartToolbar({
     </div>
   );
 }
+

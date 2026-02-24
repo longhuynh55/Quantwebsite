@@ -798,15 +798,15 @@ export function AdvancedPriceChart({
     return (
       <div
         className={cn(
-          "flex items-center justify-center h-64 text-gray-500 bg-gray-50 rounded-lg",
-          "dark:bg-gray-800 dark:text-gray-400",
+          "flex items-center justify-center h-64 text-stone-500 bg-stone-50 rounded-lg",
+          "dark:bg-neutral-800 dark:text-neutral-400",
           className
         )}
       >
         <div className="text-center">
-          <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+          <TrendingUp className="w-12 h-12 mx-auto mb-3 text-stone-300 dark:text-neutral-600" />
           <p className="font-medium">No chart data available</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">
+          <p className="text-sm text-stone-400 dark:text-stone-500">
             Select a stock to view the chart
           </p>
         </div>
@@ -821,7 +821,7 @@ export function AdvancedPriceChart({
         <div>
           <div className="flex items-center gap-3">
             <span className="text-xl font-bold">{symbol}</span>
-            <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            <span className="text-2xl font-bold text-stone-900 dark:text-neutral-100">
               {lastCandle?.close.toFixed(2)}
             </span>
             <Badge
@@ -837,7 +837,7 @@ export function AdvancedPriceChart({
               {priceChange.toFixed(2)}%
             </Badge>
           </div>
-          <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <div className="flex gap-4 text-xs text-stone-500 dark:text-neutral-400 mt-1">
             <span>O: {priceDisplayInfo.open}</span>
             <span>H: {priceDisplayInfo.high}</span>
             <span>L: {priceDisplayInfo.low}</span>
@@ -892,8 +892,8 @@ export function AdvancedPriceChart({
             <CardContent className="p-0 relative">
               {/* Loading overlay */}
               {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 z-10">
-                  <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-neutral-900/80 z-10">
+                  <div className="animate-spin w-8 h-8 border-2 border-emerald-700 border-t-transparent rounded-full" />
                 </div>
               )}
 
@@ -908,7 +908,7 @@ export function AdvancedPriceChart({
                   size="icon"
                   variant="ghost"
                   onClick={handleZoomIn}
-                  className="h-7 w-7 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800"
+                  className="h-7 w-7 bg-white/80 dark:bg-neutral-800/80 hover:bg-white dark:hover:bg-neutral-800"
                   aria-label="Zoom in"
                 >
                   <ZoomIn className="w-4 h-4" />
@@ -917,7 +917,7 @@ export function AdvancedPriceChart({
                   size="icon"
                   variant="ghost"
                   onClick={handleZoomOut}
-                  className="h-7 w-7 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800"
+                  className="h-7 w-7 bg-white/80 dark:bg-neutral-800/80 hover:bg-white dark:hover:bg-neutral-800"
                   aria-label="Zoom out"
                 >
                   <ZoomOut className="w-4 h-4" />
@@ -926,7 +926,7 @@ export function AdvancedPriceChart({
                   size="icon"
                   variant="ghost"
                   onClick={handleReset}
-                  className="h-7 w-7 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800"
+                  className="h-7 w-7 bg-white/80 dark:bg-neutral-800/80 hover:bg-white dark:hover:bg-neutral-800"
                   aria-label="Reset view"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -935,7 +935,7 @@ export function AdvancedPriceChart({
                   size="icon"
                   variant="ghost"
                   onClick={handleFullscreen}
-                  className="h-7 w-7 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800"
+                  className="h-7 w-7 bg-white/80 dark:bg-neutral-800/80 hover:bg-white dark:hover:bg-neutral-800"
                   aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                 >
                   {isFullscreen ? (
@@ -951,12 +951,12 @@ export function AdvancedPriceChart({
                 <div className="absolute bottom-2 left-2 z-10">
                   <Badge
                     variant="outline"
-                    className="bg-white/90 dark:bg-gray-800/90 text-xs"
+                    className="bg-white/90 dark:bg-neutral-800/90 text-xs"
                   >
                     Drawing: {activeTool}
                     <button
                       onClick={cancelDrawing}
-                      className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      className="ml-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
                     >
                       Cancel
                     </button>
@@ -982,7 +982,7 @@ export function AdvancedPriceChart({
 
       {/* Drawing count indicator */}
       {drawings.length > 0 && (
-        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex items-center justify-between text-xs text-stone-500 dark:text-neutral-400">
           <span>{drawings.length} drawing(s) on chart</span>
           <Button
             variant="ghost"
@@ -999,3 +999,4 @@ export function AdvancedPriceChart({
 }
 
 export default AdvancedPriceChart;
+

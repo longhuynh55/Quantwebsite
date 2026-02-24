@@ -25,8 +25,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={cn(
           'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
           isUser
-            ? 'bg-blue-600 text-white'
-            : 'bg-gradient-to-br from-blue-500 to-teal-500 text-white'
+            ? 'bg-emerald-700 text-white'
+            : 'bg-gradient-to-br from-emerald-700 to-teal-600 text-white'
         )}
       >
         {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
@@ -37,8 +37,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={cn(
           'flex-1 max-w-[84%] rounded-2xl px-4 py-3',
           isUser
-            ? 'bg-blue-600 text-white rounded-tr-sm'
-            : 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm text-gray-900 dark:text-gray-100 rounded-tl-sm'
+            ? 'bg-emerald-700 text-white rounded-tr-sm'
+            : 'bg-white dark:bg-neutral-900 border border-stone-200 dark:border-neutral-700 shadow-sm text-stone-900 dark:text-neutral-100 rounded-tl-sm'
         )}
       >
         {!isUser && (
@@ -88,8 +88,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         )}
         {!isUser && message.citations && message.citations.length > 0 && (
-          <div className="mt-3 border-t border-gray-200/70 dark:border-gray-700/70 pt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+          <div className="mt-3 border-t border-stone-200/70 dark:border-neutral-700/70 pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400 mb-1">
               Sources ({message.citations.length})
             </p>
             <div className="space-y-2">
@@ -110,7 +110,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         <div
           className={cn(
             'text-xs mt-3 flex items-center gap-2 flex-wrap',
-            isUser ? 'text-blue-200' : 'text-gray-500 dark:text-gray-400'
+            isUser ? 'text-emerald-200' : 'text-stone-500 dark:text-neutral-400'
           )}
         >
           <Clock3 className="w-3 h-3" />
@@ -131,21 +131,21 @@ export const MemoizedChatMessage = memo(ChatMessage);
 
 function CitationCard({ citation }: { citation: AssistantCitation }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 p-2.5">
+    <div className="rounded-lg border border-stone-200 dark:border-neutral-700 bg-stone-100/70 dark:bg-neutral-800/40 p-2.5">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium text-gray-700 dark:text-gray-200">{citation.title}</p>
+        <p className="text-xs font-medium text-stone-700 dark:text-neutral-200">{citation.title}</p>
         <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
           {citation.sourceType}
         </Badge>
       </div>
       <div className="mt-1 flex flex-wrap gap-1">
         {citation.symbol && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200/80 dark:bg-gray-700/70 text-gray-700 dark:text-gray-200">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-stone-200/80 dark:bg-neutral-700/70 text-stone-700 dark:text-neutral-200">
             {citation.symbol}
           </span>
         )}
         {citation.period && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200/80 dark:bg-gray-700/70 text-gray-700 dark:text-gray-200">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-stone-200/80 dark:bg-neutral-700/70 text-stone-700 dark:text-neutral-200">
             {citation.period}
           </span>
         )}
@@ -157,12 +157,12 @@ function CitationCard({ citation }: { citation: AssistantCitation }) {
               href={citation.endpoint}
               target="_blank"
               rel="noreferrer"
-              className="text-blue-600 dark:text-blue-300 underline underline-offset-2 break-all"
+              className="text-emerald-700 dark:text-emerald-300 underline underline-offset-2 break-all"
             >
               {citation.endpoint}
             </a>
           ) : (
-            <code className="text-gray-600 dark:text-gray-300 break-all">{citation.endpoint}</code>
+            <code className="text-stone-600 dark:text-neutral-300 break-all">{citation.endpoint}</code>
           )}
         </div>
       )}
@@ -195,9 +195,9 @@ function ResponseTrace({
   return (
     <details
       open={shouldAutoOpen}
-      className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/30"
+      className="mt-3 rounded-lg border border-stone-200 dark:border-neutral-700 bg-stone-100/60 dark:bg-neutral-800/30"
     >
-      <summary className="cursor-pointer list-none px-3 py-2 text-[11px] uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center justify-between">
+      <summary className="cursor-pointer list-none px-3 py-2 text-[11px] uppercase tracking-wide text-stone-600 dark:text-neutral-300 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <Wrench className="w-3.5 h-3.5" />
           Execution Trace
@@ -206,7 +206,7 @@ function ResponseTrace({
       </summary>
       <div className="px-3 pb-3 space-y-2">
         {meta && (
-          <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+          <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-600 dark:text-neutral-300">
             <span>Provider: {meta.providerUsed}</span>
             <span>Latency: {typeof meta.latencyMs === 'number' ? `${meta.latencyMs}ms` : 'n/a'}</span>
             <span>Mode: {meta.policyMode ?? 'n/a'}</span>
@@ -217,9 +217,9 @@ function ResponseTrace({
           </div>
         )}
         {meta?.semantic && (
-          <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/70 dark:bg-gray-900/35 p-2.5 space-y-1.5">
+          <div className="rounded-lg border border-stone-200/80 dark:border-neutral-700/80 bg-white/70 dark:bg-neutral-900/35 p-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 inline-flex items-center gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-600 dark:text-neutral-300 inline-flex items-center gap-1">
                 <ListChecks className="w-3.5 h-3.5" />
                 Semantic Gate
               </p>
@@ -230,7 +230,7 @@ function ResponseTrace({
                 {meta.semantic.phase}
               </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-600 dark:text-neutral-300">
               <span>Version: {String(meta.semantic.version || "n/a")}</span>
               <span>Checks: {semanticSummary.total}</span>
               <span>Pass rate: {formatSemanticPercent(meta.semantic.passRate, semanticSummary.passRate)}</span>
@@ -239,14 +239,14 @@ function ResponseTrace({
             {Array.isArray(meta.semantic.checklist) && meta.semantic.checklist.length > 0 && (
               <div className="space-y-1">
                 {meta.semantic.checklist.slice(0, 4).map((item) => (
-                  <div key={`semantic-${item.id}`} className="text-[11px] text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                  <div key={`semantic-${item.id}`} className="text-[11px] text-stone-600 dark:text-neutral-300 flex items-start gap-1.5">
                     <SemanticStatusIcon status={item.status} />
                     <span className="font-medium">{item.label}</span>
-                    {item.guard && <span className="uppercase tracking-wide text-[10px] text-gray-500 dark:text-gray-400">guard</span>}
+                    {item.guard && <span className="uppercase tracking-wide text-[10px] text-stone-500 dark:text-neutral-400">guard</span>}
                   </div>
                 ))}
                 {meta.semantic.checklist.length > 4 && (
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                  <p className="text-[10px] text-stone-500 dark:text-neutral-400">
                     +{meta.semantic.checklist.length - 4} more checks
                   </p>
                 )}
@@ -260,12 +260,12 @@ function ResponseTrace({
           </p>
         )}
         {policyReason && (
-          <p className="text-[11px] text-gray-600 dark:text-gray-300">
+          <p className="text-[11px] text-stone-600 dark:text-neutral-300">
             Reason: {formatPolicyReason(policyReason)}
           </p>
         )}
         {meta?.toolStatusSummary && (
-          <p className="text-[11px] text-gray-600 dark:text-gray-300 break-words">
+          <p className="text-[11px] text-stone-600 dark:text-neutral-300 break-words">
             Tool summary: {meta.toolStatusSummary}
           </p>
         )}
@@ -274,12 +274,12 @@ function ResponseTrace({
             {usedTools.map((tool, toolIndex) => (
               <div
                 key={`${tool.name}-${tool.status}-${tool.errorCode ?? ''}-${toolIndex}`}
-                className="text-[11px] text-gray-600 dark:text-gray-300 flex items-start gap-1.5"
+                className="text-[11px] text-stone-600 dark:text-neutral-300 flex items-start gap-1.5"
               >
                 <ToolStatusIcon status={tool.status} />
                 <span className="font-medium">{tool.name}</span>
                 <span className="uppercase tracking-wide">{tool.status}</span>
-                {tool.errorCode && <span className="text-gray-500 dark:text-gray-400">({tool.errorCode})</span>}
+                {tool.errorCode && <span className="text-stone-500 dark:text-neutral-400">({tool.errorCode})</span>}
               </div>
             ))}
           </div>
@@ -292,14 +292,14 @@ function ResponseTrace({
 function ToolStatusIcon({ status }: { status: AssistantToolUsage['status'] }) {
   if (status === 'success') return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300 mt-0.5" />;
   if (status === 'error') return <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-300 mt-0.5" />;
-  return <ShieldAlert className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-0.5" />;
+  return <ShieldAlert className="w-3.5 h-3.5 text-stone-500 dark:text-neutral-400 mt-0.5" />;
 }
 
 function SemanticStatusIcon({ status }: { status: AssistantSemanticCheckItem["status"] }) {
   if (status === "pass") return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300 mt-0.5" />;
   if (status === "warn") return <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 mt-0.5" />;
   if (status === "fail") return <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-300 mt-0.5" />;
-  return <Clock3 className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-0.5" />;
+  return <Clock3 className="w-3.5 h-3.5 text-stone-500 dark:text-neutral-400 mt-0.5" />;
 }
 
 function summarizeSemanticChecklist(checklist?: AssistantSemanticCheckItem[]) {
@@ -460,15 +460,15 @@ function MessageBlockView({
           "rounded-lg border p-3",
           isDiagnostics
             ? "border-amber-300/80 dark:border-amber-500/40 bg-amber-50/70 dark:bg-amber-900/20"
-            : "border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-900/30"
+            : "border-stone-200 dark:border-neutral-700 bg-white/60 dark:bg-neutral-900/30"
         )}
       >
         {block.title && (
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400 mb-1">
             {block.title}
           </p>
         )}
-        <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{block.content}</p>
+        <p className="text-sm text-stone-700 dark:text-neutral-200 whitespace-pre-wrap leading-relaxed">{block.content}</p>
       </div>
     );
   }
@@ -482,15 +482,15 @@ function MessageBlockView({
   const numericColumns = detectNumericColumns(block.rows);
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/35 shadow-sm overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-200/70 dark:border-gray-700/70 bg-gray-50/80 dark:bg-gray-800/60 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+    <div className="rounded-xl border border-stone-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/35 shadow-sm overflow-hidden">
+      <div className="px-3 py-2 border-b border-stone-200/70 dark:border-neutral-700/70 bg-stone-100/80 dark:bg-neutral-800/60 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-neutral-300">
           {block.title}
         </p>
         {financeExportUrl && (
           <a
             href={financeExportUrl}
-            className="inline-flex items-center gap-1 rounded border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            className="inline-flex items-center gap-1 rounded border border-emerald-200 dark:border-emerald-700 bg-white dark:bg-neutral-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
           >
             <FileDown className="w-3 h-3" />
             Export Excel
@@ -501,12 +501,12 @@ function MessageBlockView({
         <table className="w-full min-w-[520px] text-xs border-collapse" aria-label={block.title}>
           <caption className="sr-only">{block.title}</caption>
         <thead>
-          <tr className="bg-gray-100/70 dark:bg-gray-800/70">
+          <tr className="bg-stone-100/70 dark:bg-neutral-800/70">
               {block.columns.map((column, columnIndex) => (
               <th
                 key={column}
                 className={cn(
-                  "py-2 px-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 uppercase tracking-wide text-[10px]",
+                  "py-2 px-3 border-b border-stone-200 dark:border-neutral-700 text-stone-600 dark:text-neutral-300 uppercase tracking-wide text-[10px]",
                   numericColumns.has(columnIndex) ? "text-right" : "text-left"
                 )}
                 scope="col"
@@ -521,15 +521,15 @@ function MessageBlockView({
               <tr
                 key={rowIndex}
                 className={cn(
-                  rowIndex % 2 === 0 ? "bg-transparent" : "bg-gray-50/60 dark:bg-gray-800/40",
-                  isSummaryLikeRow(row) && "bg-blue-50/70 dark:bg-blue-900/15"
+                  rowIndex % 2 === 0 ? "bg-transparent" : "bg-stone-100/60 dark:bg-neutral-800/40",
+                  isSummaryLikeRow(row) && "bg-emerald-50/70 dark:bg-emerald-900/15"
                 )}
               >
               {row.map((cell, cellIndex) => (
                 <td
                   key={cellIndex}
                     className={cn(
-                      "py-2 px-3 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-200",
+                      "py-2 px-3 border-b border-stone-100 dark:border-neutral-800 text-stone-700 dark:text-neutral-200",
                       numericColumns.has(cellIndex) ? "text-right tabular-nums" : "text-left",
                       getSignedValueTone(cell, block.columns[cellIndex])
                     )}
@@ -543,7 +543,7 @@ function MessageBlockView({
       </table>
       </div>
       {block.note && (
-        <p className="px-3 py-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200/70 dark:border-gray-700/70">
+        <p className="px-3 py-2 text-[11px] text-stone-500 dark:text-neutral-400 border-t border-stone-200/70 dark:border-neutral-700/70">
           {block.note}
         </p>
       )}
@@ -587,12 +587,12 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
     const delta = latest.y - first.y;
 
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/35 shadow-sm overflow-hidden">
-        <div className="px-3 py-2 border-b border-gray-200/70 dark:border-gray-700/70 bg-gray-50/80 dark:bg-gray-800/60">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+      <div className="rounded-xl border border-stone-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/35 shadow-sm overflow-hidden">
+        <div className="px-3 py-2 border-b border-stone-200/70 dark:border-neutral-700/70 bg-stone-100/80 dark:bg-neutral-800/60">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-neutral-300">
             {block.title}
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-[11px] text-stone-500 dark:text-neutral-400 mt-0.5">
             {formatChartMetric(latest.y)}
             {delta !== 0 ? ` (${delta > 0 ? "+" : ""}${formatChartMetric(delta)} vs first point)` : ""}
           </p>
@@ -605,19 +605,19 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
               x2={CHART_WIDTH - CHART_PADDING.right}
               y2={CHART_HEIGHT - CHART_PADDING.bottom}
               stroke="currentColor"
-              className="text-gray-300 dark:text-gray-700"
+              className="text-stone-300 dark:text-neutral-700"
               strokeWidth={1}
             />
             <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} />
             <circle cx={scaleX(points.length - 1)} cy={scaleY(latest.y)} r={3} fill="#2563eb" />
           </svg>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+          <div className="mt-1 flex items-center justify-between text-[11px] text-stone-500 dark:text-neutral-400">
             <span>{first.x}</span>
             <span>{latest.x}</span>
           </div>
         </div>
         {block.note && (
-          <p className="px-3 py-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200/70 dark:border-gray-700/70">
+          <p className="px-3 py-2 text-[11px] text-stone-500 dark:text-neutral-400 border-t border-stone-200/70 dark:border-neutral-700/70">
             {block.note}
           </p>
         )}
@@ -649,12 +649,12 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
   const latest = candles[candles.length - 1];
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/35 shadow-sm overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-200/70 dark:border-gray-700/70 bg-gray-50/80 dark:bg-gray-800/60">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+    <div className="rounded-xl border border-stone-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/35 shadow-sm overflow-hidden">
+      <div className="px-3 py-2 border-b border-stone-200/70 dark:border-neutral-700/70 bg-stone-100/80 dark:bg-neutral-800/60">
+        <p className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-neutral-300">
           {block.title}
         </p>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+        <p className="text-[11px] text-stone-500 dark:text-neutral-400 mt-0.5">
           Latest {latest.x}: O {formatChartMetric(latest.open)}, H {formatChartMetric(latest.high)}, L {formatChartMetric(latest.low)}, C {formatChartMetric(latest.close)}
         </p>
       </div>
@@ -666,7 +666,7 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
             x2={CHART_WIDTH - CHART_PADDING.right}
             y2={CHART_HEIGHT - CHART_PADDING.bottom}
             stroke="currentColor"
-            className="text-gray-300 dark:text-gray-700"
+            className="text-stone-300 dark:text-neutral-700"
             strokeWidth={1}
           />
           {candles.map((candle, index) => {
@@ -695,13 +695,13 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
             );
           })}
         </svg>
-        <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="mt-1 flex items-center justify-between text-[11px] text-stone-500 dark:text-neutral-400">
           <span>{candles[0].x}</span>
           <span>{latest.x}</span>
         </div>
       </div>
       {block.note && (
-        <p className="px-3 py-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200/70 dark:border-gray-700/70">
+        <p className="px-3 py-2 text-[11px] text-stone-500 dark:text-neutral-400 border-t border-stone-200/70 dark:border-neutral-700/70">
           {block.note}
         </p>
       )}
@@ -711,10 +711,10 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
 
 function EmptyChartState({ title, note }: { title: string; note?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-900/30 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{title}</p>
-      <p className="text-sm text-gray-700 dark:text-gray-200">No chart data available.</p>
-      {note && <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{note}</p>}
+    <div className="rounded-lg border border-stone-200 dark:border-neutral-700 bg-white/60 dark:bg-neutral-900/30 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-neutral-400 mb-1">{title}</p>
+      <p className="text-sm text-stone-700 dark:text-neutral-200">No chart data available.</p>
+      {note && <p className="mt-2 text-[11px] text-stone-500 dark:text-neutral-400">{note}</p>}
     </div>
   );
 }
@@ -803,7 +803,7 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
               key={`code-${index}`}
               className={cn(
                 'overflow-x-auto p-3 rounded-lg text-sm my-2',
-                isUser ? 'bg-blue-700/50' : 'bg-gray-100 dark:bg-gray-950'
+                isUser ? 'bg-emerald-700/50' : 'bg-stone-100 dark:bg-neutral-950'
               )}
             >
               <code>{block.code}</code>
@@ -827,10 +827,10 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
               key={`section-${index}`}
               className={cn(
                 "rounded-lg border px-3 py-2",
-                isUser ? "border-blue-300/60 bg-blue-500/20 text-blue-50" : "border-blue-200 dark:border-blue-800/60 bg-blue-50/70 dark:bg-blue-900/20"
+                isUser ? "border-emerald-300/60 bg-emerald-500/20 text-emerald-50" : "border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-900/20"
               )}
             >
-              <p className={cn("text-xs font-semibold uppercase tracking-wide", isUser ? "text-blue-100" : "text-blue-700 dark:text-blue-200")}>
+              <p className={cn("text-xs font-semibold uppercase tracking-wide", isUser ? "text-emerald-100" : "text-emerald-700 dark:text-emerald-200")}>
                 {block.title}
               </p>
             </div>
@@ -863,7 +863,7 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
               key={`quote-${index}`}
               className={cn(
                 'border-l-2 pl-3 italic',
-                isUser ? 'border-blue-300 text-blue-100' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                isUser ? 'border-emerald-300 text-emerald-100' : 'border-stone-300 dark:border-neutral-600 text-stone-600 dark:text-neutral-300'
               )}
             >
               {block.lines.map((line, lineIndex) => (
@@ -1005,16 +1005,16 @@ function InlineMarkdownTable({
   block: Extract<ContentBlock, { type: "mdtable" }>;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/35 shadow-sm overflow-hidden">
+    <div className="rounded-xl border border-stone-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/35 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-xs border-collapse" aria-label="Assistant markdown table">
           <thead>
-            <tr className="bg-gray-100/80 dark:bg-gray-800/70">
+            <tr className="bg-stone-100/80 dark:bg-neutral-800/70">
               {block.headers.map((header, headerIndex) => (
                 <th
                   key={`${header}-${headerIndex}`}
                   className={cn(
-                    "py-2 px-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 uppercase tracking-wide text-[10px]",
+                    "py-2 px-3 border-b border-stone-200 dark:border-neutral-700 text-stone-600 dark:text-neutral-300 uppercase tracking-wide text-[10px]",
                     block.alignments[headerIndex] === "right"
                       ? "text-right"
                       : block.alignments[headerIndex] === "center"
@@ -1030,12 +1030,12 @@ function InlineMarkdownTable({
           </thead>
           <tbody>
             {block.rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className={rowIndex % 2 === 0 ? "bg-transparent" : "bg-gray-50/60 dark:bg-gray-800/40"}>
+              <tr key={rowIndex} className={rowIndex % 2 === 0 ? "bg-transparent" : "bg-stone-100/60 dark:bg-neutral-800/40"}>
                 {row.map((cell, cellIndex) => (
                   <td
                     key={cellIndex}
                     className={cn(
-                      "py-2 px-3 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-200",
+                      "py-2 px-3 border-b border-stone-100 dark:border-neutral-800 text-stone-700 dark:text-neutral-200",
                       block.alignments[cellIndex] === "right"
                         ? "text-right tabular-nums"
                         : block.alignments[cellIndex] === "center"
@@ -1322,7 +1322,7 @@ function renderInline(line: string, isUser: boolean): ReactNode {
           key={`code-${matchIndex}`}
           className={cn(
             'px-1.5 py-0.5 rounded text-sm',
-            isUser ? 'bg-blue-700/50' : 'bg-gray-200 dark:bg-gray-700'
+            isUser ? 'bg-emerald-700/50' : 'bg-stone-200 dark:bg-neutral-700'
           )}
         >
           {token.slice(1, -1)}
@@ -1339,7 +1339,7 @@ function renderInline(line: string, isUser: boolean): ReactNode {
             rel="noreferrer"
             className={cn(
               "underline underline-offset-2",
-              isUser ? "text-blue-100" : "text-blue-600 dark:text-blue-300"
+              isUser ? "text-emerald-100" : "text-emerald-700 dark:text-emerald-300"
             )}
           >
             {linkMatch[1]}
@@ -1370,3 +1370,4 @@ function formatTime(timestamp: Date | string): string {
   if (Number.isNaN(date.getTime())) return '--:--';
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+

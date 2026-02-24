@@ -162,7 +162,7 @@ const DialogContent = React.memo(function DialogContent({ children, className, .
         aria-modal="true"
         tabIndex={-1}
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-xl bg-white dark:bg-gray-800 p-6 shadow-xl",
+          "relative z-50 w-full max-w-lg bg-white dark:bg-neutral-800 p-6",
           "animate-in fade-in-0 zoom-in-95 duration-200",
           className
         )}
@@ -186,7 +186,7 @@ const DialogTitle = React.memo(function DialogTitle({ className, id, ...props }:
   return (
     <h2
       id={id}
-      className={cn("text-lg font-semibold text-gray-900 dark:text-white", className)}
+      className={cn("text-lg font-semibold text-stone-900 dark:text-white", className)}
       {...props}
     />
   );
@@ -196,7 +196,7 @@ DialogTitle.displayName = "DialogTitle";
 const DialogDescription = React.memo(function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
-      className={cn("text-sm text-gray-500 dark:text-gray-400 mt-1", className)}
+      className={cn("mt-1 text-sm text-stone-500 dark:text-neutral-400", className)}
       {...props}
     />
   );

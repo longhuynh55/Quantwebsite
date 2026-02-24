@@ -47,7 +47,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           )}>
             <ErrorBoundaryWrapper>{children}</ErrorBoundaryWrapper>
           </MainContent>
-          <Footer />
+          {!isFullWidth && <Footer />}
         </div>
       </div>
       <CommandPalette />

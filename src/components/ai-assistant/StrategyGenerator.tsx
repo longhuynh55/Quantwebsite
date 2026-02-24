@@ -125,7 +125,7 @@ export function StrategyGenerator({
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-teal-500">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600">
               <Wand2 className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -145,16 +145,16 @@ export function StrategyGenerator({
               onKeyDown={handleKeyDown}
               placeholder="Vi du: Tao chien luoc RSI mean reversion cho VNM - mua khi RSI < 30, ban khi RSI > 70 voi stop loss 5%"
               className={cn(
-                'flex min-h-[100px] w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm shadow-sm',
-                'placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500',
+                'flex min-h-[100px] w-full rounded-md border border-stone-300 bg-transparent px-3 py-2 text-sm shadow-sm',
+                'placeholder:text-stone-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                'dark:border-gray-600 dark:placeholder:text-gray-500 dark:focus-visible:ring-blue-400',
+                'dark:border-stone-600 dark:placeholder:text-stone-500 dark:focus-visible:ring-emerald-400',
                 'resize-none'
               )}
               disabled={state.isLoading}
               aria-label="Mo ta chien luoc"
             />
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
               <span>Nhan Ctrl+Enter de gui</span>
               <span>{prompt.length}/2000</span>
             </div>
@@ -200,15 +200,15 @@ export function StrategyGenerator({
                   onClick={() => handleExampleClick(example.prompt)}
                   aria-label={`Su dung vi du: ${example.name}`}
                   className={cn(
-                    'flex flex-col items-start gap-1 rounded-lg border border-gray-200 p-3 text-left transition-all',
-                    'hover:border-blue-300 hover:bg-blue-50/50',
-                    'dark:border-gray-700 dark:hover:border-blue-600 dark:hover:bg-blue-900/20'
+                    'flex flex-col items-start gap-1 rounded-lg border border-stone-200 p-3 text-left transition-all',
+                    'hover:border-emerald-300 hover:bg-emerald-50/60',
+                    'dark:border-stone-700 dark:hover:border-emerald-600 dark:hover:bg-emerald-950/20'
                   )}
                 >
-                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                     {example.name}
                   </span>
-                  <span className="text-xs text-gray-600 dark:text-gray-300">
+                  <span className="text-xs text-stone-600 dark:text-stone-300">
                     {example.description}
                   </span>
                 </button>

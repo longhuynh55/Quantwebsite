@@ -1,0 +1,271 @@
+/* Strategy Canvas — React Flow Custom Styles */
+
+/* ============================================================
+   CRITICAL FIX: Force node visibility after measurement.
+   React Flow v12+ sets visibility: hidden on nodes during
+   the initial measurement pass. Sometimes this gets stuck
+   (especially with SSR/hydration). This override ensures
+   nodes become visible once they have width/height measured.
+   ============================================================ */
+.react-flow-visible-override .react-flow__node {
+  visibility: visible !important;
+}
+
+/* ============================================================
+   Node Hover & Selection Polish
+   ============================================================ */
+.strategy-canvas-flow .react-flow__node {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.strategy-canvas-flow .react-flow__node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
+  z-index: 10 !important;
+}
+
+:is(.dark) .strategy-canvas-flow .react-flow__node:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.strategy-canvas-flow .react-flow__node.selected {
+  box-shadow: none;
+  /* handled by ring utility in JSX */
+  border-radius: 8px;
+}
+
+/* ============================================================
+   Canvas Background
+   ============================================================ */
+.strategy-canvas-flow {
+  background-color: #fafaf9;
+  /* stone-50 */
+}
+
+:is(.dark) .strategy-canvas-flow {
+  background-color: #0a0a0a;
+  /* neutral-950 */
+}
+
+/* ============================================================
+   Edge Styling
+   ============================================================ */
+.strategy-canvas-flow .react-flow__edge-path {
+  stroke-width: 2;
+  transition: stroke-width 0.2s ease;
+}
+
+.strategy-canvas-flow .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3;
+}
+
+.strategy-canvas-flow .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3;
+  stroke: #059669;
+  /* emerald-600 */
+}
+
+/* Animated edge (for active connections) */
+.strategy-canvas-flow .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5 5;
+  animation: edge-flow 1s linear infinite;
+}
+
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Connection line (while dragging) */
+.strategy-canvas-flow .react-flow__connection-line {
+  stroke: #059669;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+}
+
+/* ============================================================
+   Node Handle Styling
+   ============================================================ */
+.strategy-canvas-flow .react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  transition: all 0.15s ease;
+}
+
+:is(.dark) .strategy-canvas-flow .react-flow__handle {
+  border-color: #171717;
+  /* neutral-900 */
+}
+
+.strategy-canvas-flow .react-flow__handle:hover {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.25);
+}
+
+.strategy-canvas-flow .react-flow__handle-connecting {
+  box-shadow: 0 0 0 6px rgba(5, 150, 105, 0.4);
+}
+
+/* Valid connection target glow */
+.strategy-canvas-flow .react-flow__handle-valid {
+  box-shadow: 0 0 0 6px rgba(5, 150, 105, 0.5);
+  background-color: #059669 !important;
+}
+
+/* ============================================================
+   Controls Panel Styling
+   ============================================================ */
+.strategy-canvas-controls {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid #e7e5e4 !important;
+  /* stone-200 */
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden;
+}
+
+:is(.dark) .strategy-canvas-controls {
+  background: rgba(38, 38, 38, 0.75) !important;
+  /* neutral-800 / 75% */
+  border-color: #404040 !important;
+  /* neutral-700 */
+}
+
+.strategy-canvas-controls button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid #e7e5e4 !important;
+  color: #78716c !important;
+  /* stone-500 */
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+}
+
+:is(.dark) .strategy-canvas-controls button {
+  border-bottom-color: #404040 !important;
+  color: #a3a3a3 !important;
+}
+
+.strategy-canvas-controls button:hover {
+  background: #f5f5f4 !important;
+  /* stone-100 */
+  color: #1c1917 !important;
+  /* stone-900 */
+}
+
+:is(.dark) .strategy-canvas-controls button:hover {
+  background: #404040 !important;
+  color: white !important;
+}
+
+.strategy-canvas-controls button:last-child {
+  border-bottom: none !important;
+}
+
+.strategy-canvas-controls button svg {
+  width: 16px !important;
+  height: 16px !important;
+  fill: currentColor !important;
+}
+
+/* ============================================================
+   MiniMap Styling
+   ============================================================ */
+.strategy-canvas-minimap {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid #e7e5e4 !important;
+  /* stone-200 */
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+:is(.dark) .strategy-canvas-minimap {
+  background: rgba(23, 23, 23, 0.75) !important;
+  /* neutral-900 / 75% */
+  border-color: #404040 !important;
+}
+
+/* ============================================================
+   Selection Box
+   ============================================================ */
+.strategy-canvas-flow .react-flow__selection {
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(5, 150, 105, 0.4);
+}
+
+/* ============================================================
+   Node Selection Ring
+   ============================================================ */
+.strategy-canvas-flow .react-flow__node.selected {
+  box-shadow: 0 0 0 2px #059669;
+}
+
+/* ============================================================
+   Attribution hiding (already using proOptions in some setups)
+   ============================================================ */
+.strategy-canvas-flow .react-flow__attribution {
+  opacity: 0.3;
+  font-size: 9px;
+}
+
+.strategy-canvas-flow .react-flow__attribution:hover {
+  opacity: 1;
+}
+
+/* ============================================================
+   Drag Preview Ghost (palette items while dragging)
+   ============================================================ */
+.node-drag-ghost {
+  opacity: 0.7;
+  background: rgba(5, 150, 105, 0.08);
+  border: 1.5px dashed #059669;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #059669;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+/* ============================================================
+   Connection Handle Tooltip (shows connection status)
+   ============================================================ */
+.strategy-canvas-flow .react-flow__handle::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: #059669;
+  transition: all 0.15s ease;
+  pointer-events: none;
+}
+
+.strategy-canvas-flow .react-flow__handle:hover::after {
+  width: 5px;
+  height: 5px;
+  top: -3px;
+  right: -3px;
+  box-shadow: 0 0 4px rgba(5, 150, 105, 0.5);
+}
+
+/* ============================================================
+   Edge hover glow effect
+   ============================================================ */
+.strategy-canvas-flow .react-flow__edge:hover .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px rgba(5, 150, 105, 0.3));
+}

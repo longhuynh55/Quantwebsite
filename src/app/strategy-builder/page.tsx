@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { StrategyCanvas, NodePalette, PropertyPanel, TemplateGallery, AiSuggestDialog } from "@/components/strategy-builder";
 import type { StrategyNode, StrategyEdge } from "@/lib/stores/strategyBuilderStore";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,12 @@ const hasPersistedStrategySnapshot = (): boolean => {
     };
     return Boolean(parsed?.state?.currentStrategy);
   } catch {
-    return true;
+    try {
+      window.localStorage.removeItem(STRATEGY_BUILDER_STORAGE_KEY);
+    } catch {
+      // no-op
+    }
+    return false;
   }
 };
 
@@ -84,11 +89,12 @@ export default function StrategyBuilderPage() {
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isPropertyPanelOpen, setIsPropertyPanelOpen] = useState(true);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<StrategyLabRunStatus | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [runSummary, setRunSummary] = useState<StrategyLabSummaryResult | null>(null);
   const [isRunSubmitting, setIsRunSubmitting] = useState(false);
+  const runRequestSequenceRef = useRef(0);
+  const runPollAbortRef = useRef<AbortController | null>(null);
 
   const {
     currentStrategy,
@@ -153,6 +159,12 @@ export default function StrategyBuilderPage() {
     }
   }, [currentStrategyName]);
 
+  useEffect(() => {
+    if (selectedNode && !isPropertyPanelOpen) {
+      setIsPropertyPanelOpen(true);
+    }
+  }, [isPropertyPanelOpen, selectedNode]);
+
   const runPreview = useMemo(() => {
     if (!currentStrategy) {
       return { payload: null, error: "Create a strategy before running." };
@@ -203,8 +215,12 @@ export default function StrategyBuilderPage() {
   const isRunActive = runStatus === "queued" || runStatus === "running";
 
   const resetRunState = useCallback(() => {
+    runRequestSequenceRef.current += 1;
+    if (runPollAbortRef.current) {
+      runPollAbortRef.current.abort();
+      runPollAbortRef.current = null;
+    }
     setActiveRunId(null);
-    setActiveJobId(null);
     setRunStatus(null);
     setRunError(null);
     setRunSummary(null);
@@ -304,29 +320,48 @@ export default function StrategyBuilderPage() {
       return;
     }
 
+    const requestId = runRequestSequenceRef.current + 1;
+    runRequestSequenceRef.current = requestId;
+    if (runPollAbortRef.current) {
+      runPollAbortRef.current.abort();
+    }
+    const pollAbortController = new AbortController();
+    runPollAbortRef.current = pollAbortController;
+
     setIsRunSubmitting(true);
     setRunSummary(null);
     setRunError(null);
 
     try {
       const created = await createStrategyLabRunClient(payload);
+      if (runRequestSequenceRef.current !== requestId) {
+        return;
+      }
       setActiveRunId(created.runId);
-      setActiveJobId(created.jobId);
       setRunStatus(created.status);
       toast.info("Backtest queued. Waiting for completion...");
 
       const terminalRun = await waitForStrategyLabRunTerminal(created.runId, {
         pollIntervalMs: 1000,
         timeoutMs: 90_000,
+        signal: pollAbortController.signal,
         onStatusChange: (nextRun) => {
-          setRunStatus(nextRun.status);
+          if (runRequestSequenceRef.current === requestId) {
+            setRunStatus(nextRun.status);
+          }
         },
       });
+      if (runRequestSequenceRef.current !== requestId) {
+        return;
+      }
 
       setRunStatus(terminalRun.status);
 
       if (terminalRun.status === "succeeded") {
         const summary = await getStrategyLabRunSummaryClient(created.runId);
+        if (runRequestSequenceRef.current !== requestId) {
+          return;
+        }
         setRunSummary(summary);
         toast.success("Backtest completed successfully.");
         return;
@@ -342,11 +377,22 @@ export default function StrategyBuilderPage() {
       setRunError(failureMessage);
       toast.error(failureMessage);
     } catch (error) {
+      if (error instanceof StrategyLabClientError && error.code === "ABORTED") {
+        return;
+      }
+      if (runRequestSequenceRef.current !== requestId) {
+        return;
+      }
       const message = getClientErrorMessage(error, "Failed to execute backtest.");
       setRunError(message);
       toast.error(message);
     } finally {
-      setIsRunSubmitting(false);
+      if (runRequestSequenceRef.current === requestId) {
+        setIsRunSubmitting(false);
+      }
+      if (runPollAbortRef.current === pollAbortController) {
+        runPollAbortRef.current = null;
+      }
     }
   }, [getClientErrorMessage, isRunActive, isRunSubmitting, runPreview]);
 
@@ -359,6 +405,12 @@ export default function StrategyBuilderPage() {
       const run = await cancelStrategyLabRunClient(activeRunId);
       setRunStatus(run.status);
       if (run.status === "cancelled") {
+        runRequestSequenceRef.current += 1;
+        if (runPollAbortRef.current) {
+          runPollAbortRef.current.abort();
+          runPollAbortRef.current = null;
+        }
+        setIsRunSubmitting(false);
         setRunError("Run was cancelled.");
       }
       toast.info("Cancel request submitted.");
@@ -452,275 +504,272 @@ export default function StrategyBuilderPage() {
   }, [strategyName, updateStrategyName]);
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-stone-200 pb-8 dark:border-neutral-800">
-        <div className="mb-4 flex items-center gap-3">
-          <span className="h-px w-8 bg-emerald-700 dark:bg-emerald-500" />
-          <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
-            Strategy Composer
-          </span>
-        </div>
-        <h1 className="font-serif text-4xl font-bold leading-tight text-stone-900 dark:text-white md:text-5xl">
-          Strategy Builder
-        </h1>
-        <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-stone-600 dark:text-neutral-400">
-          Compose data, indicator, and filter blocks into executable strategy templates with live backtest feedback.
-        </p>
-      </header>
+    <div className="flex flex-col h-[calc(100vh-64px)]">
+      {/* Emerald accent line */}
+      <div className="h-0.5 bg-emerald-700 dark:bg-emerald-600 flex-shrink-0" />
 
-      <div className="overflow-hidden border border-stone-200 bg-stone-50 dark:border-neutral-800 dark:bg-neutral-950">
-        <div className="h-1 bg-emerald-700 dark:bg-emerald-600" />
-        <div className="flex min-h-[65vh] flex-col bg-stone-100 dark:bg-neutral-950/80 lg:flex-row">
-          {/* Left Panel - Node Palette */}
-          <div
-            className={cn(
-              "w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-stone-200 dark:border-neutral-800 bg-stone-50 dark:bg-neutral-900/90 flex-shrink-0",
-              isPaletteOpen ? "block" : "hidden lg:block"
-            )}
-          >
+      {/* 3-panel layout */}
+      <div className="flex flex-row flex-1 min-h-0">
+        {/* Left Panel — Palette */}
+        <div
+          className={cn(
+            "w-64 border-r border-stone-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex-shrink-0 flex flex-col",
+            isPaletteOpen ? "flex" : "hidden lg:flex"
+          )}
+        >
+          {/* Templates — prominent position */}
+          <div className="border-b border-stone-200 dark:border-neutral-700 px-3 py-2">
+            <TemplateGallery onApplyTemplate={handleApplyTemplate} />
+          </div>
+          {/* Components */}
+          <div className="flex-1 overflow-y-auto min-h-0">
             <NodePalette
               onDragStart={handleDragStart}
               onAddNode={handleAddNodeFromPalette}
             />
-            <div className="border-t border-stone-200 dark:border-neutral-700 px-3 py-3">
-              <TemplateGallery onApplyTemplate={handleApplyTemplate} className="mb-2" />
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3 border-b border-stone-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900 flex-shrink-0">
+            {/* Left — Title + Name */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 border-r border-stone-200 dark:border-neutral-700 pr-3">
+                <span className="h-px w-5 bg-emerald-700 dark:bg-emerald-500" />
+                <span className="font-serif text-sm font-bold text-stone-900 dark:text-white whitespace-nowrap">Strategy Builder</span>
+              </div>
+              <Input
+                value={strategyName}
+                onChange={handleNameChange}
+                onBlur={handleNameBlur}
+                className="h-8 w-48 border-stone-300 bg-stone-50 text-sm font-medium dark:border-neutral-700 dark:bg-neutral-950"
+                placeholder="Strategy name..."
+              />
+              <Input
+                type="number"
+                min={1}
+                value={capitalInput}
+                onChange={(event) => setCapitalInput(event.target.value)}
+                className="h-8 w-28 border-stone-300 bg-stone-50 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                placeholder="Capital"
+                aria-label="Initial capital"
+              />
+              {isDirty && (
+                <span className="text-[11px] font-sans uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Unsaved
+                </span>
+              )}
+            </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-stone-300 bg-white text-xs font-sans uppercase tracking-wider text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-900 lg:hidden"
+                onClick={() => setIsPaletteOpen((prev) => !prev)}
+              >
+                <PanelLeft className="w-3.5 h-3.5" />
+                Blocks
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-stone-300 bg-white text-xs font-sans uppercase tracking-wider text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
+                onClick={() => setIsPropertyPanelOpen((prev) => !prev)}
+              >
+                <PanelRight className="w-3.5 h-3.5" />
+                Properties
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewStrategy}
+                className="h-8 gap-1.5 border-stone-300 bg-white text-xs font-sans uppercase tracking-wider text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                className="h-8 gap-1.5 border-stone-300 bg-white text-xs font-sans uppercase tracking-wider text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || !isDirty}
+                className="h-8 gap-1.5 border-stone-300 bg-white text-xs font-sans uppercase tracking-wider text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+
+            {/* Right — AI + Run */}
+            <div className="flex items-center gap-1.5">
+              <AiSuggestDialog onApplyStrategy={handleApplyTemplate} />
+              <Button
+                size="sm"
+                onClick={handleRunBacktest}
+                disabled={isRunSubmitting || isRunActive}
+                className="h-8 gap-1.5 bg-emerald-700 text-xs font-sans uppercase tracking-wider hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isRunSubmitting || isRunActive ? "Running..." : "Run Backtest"}
+              </Button>
+              {isRunActive && activeRunId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCancelRun}
+                  className="h-8 gap-1.5 text-xs font-sans uppercase tracking-wider"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  Cancel
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900/90">
-              {/* Left - Strategy Name */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <Input
-                  value={strategyName}
-                  onChange={handleNameChange}
-                  onBlur={handleNameBlur}
-                  className="h-9 w-64 border-stone-300 bg-white text-sm font-medium dark:border-neutral-700 dark:bg-neutral-950"
-                  placeholder="Strategy name..."
-                />
-                <Input
-                  type="number"
-                  min={1}
-                  value={capitalInput}
-                  onChange={(event) => setCapitalInput(event.target.value)}
-                  className="h-9 w-40 border-stone-300 bg-white text-sm dark:border-neutral-700 dark:bg-neutral-950"
-                  placeholder="Capital"
-                  aria-label="Initial capital"
-                />
-                {isDirty && (
-                  <span className="text-xs text-amber-700 dark:text-amber-300">
-                    Unsaved changes
+          {/* Info Bar — strategy preview */}
+          <div className="flex items-center gap-3 border-b border-stone-200 bg-stone-50 px-4 py-1.5 text-[11px] dark:border-neutral-800 dark:bg-neutral-950/70 flex-shrink-0">
+            {runPreview.payload ? (
+              <div className="flex items-center gap-3 flex-wrap text-stone-600 dark:text-neutral-400">
+                <span className="inline-flex items-center gap-1.5 border border-stone-200 dark:border-neutral-700 px-2 py-0.5 bg-white dark:bg-neutral-900">
+                  <span className="uppercase tracking-wider text-stone-400 dark:text-neutral-500">SYM</span>
+                  <strong className="text-stone-900 dark:text-white">{runPreview.payload.symbol}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 border border-stone-200 dark:border-neutral-700 px-2 py-0.5 bg-white dark:bg-neutral-900">
+                  <span className="uppercase tracking-wider text-stone-400 dark:text-neutral-500">TYPE</span>
+                  <strong className="text-stone-900 dark:text-white">{runPreview.payload.strategyType}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 border border-stone-200 dark:border-neutral-700 px-2 py-0.5 bg-white dark:bg-neutral-900">
+                  <span className="uppercase tracking-wider text-stone-400 dark:text-neutral-500">CAPITAL</span>
+                  <strong className="text-stone-900 dark:text-white">{formatNumber(runPreview.payload.capital ?? 100000)}</strong>
+                </span>
+                {runStatus && (
+                  <span className="inline-flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {runStatus}
                   </span>
                 )}
               </div>
-
-              {/* Center - Actions */}
+            ) : (
+              <p className="text-stone-400 dark:text-neutral-500 italic">{runPreview.error}</p>
+            )}
+            {runError && (
+              <p className="text-rose-600 dark:text-rose-400" role="alert">
+                {runError}
+              </p>
+            )}
+            {previewWarnings.length > 0 && (
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900 lg:hidden"
-                  onClick={() => setIsPaletteOpen((prev) => !prev)}
-                >
-                  <PanelLeft className="w-4 h-4" />
-                  Blocks
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900 lg:hidden"
-                  onClick={() => setIsPropertyPanelOpen((prev) => !prev)}
-                >
-                  <PanelRight className="w-4 h-4" />
-                  Properties
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleNewStrategy}
-                  className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
-                >
-                  <Plus className="w-4 h-4" />
-                  New
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExport}
-                  className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={isSaving || !isDirty}
-                  className="gap-2 border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
-                >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-
-              {/* Right - AI + Run */}
-              <div className="flex items-center gap-2">
-                <AiSuggestDialog onApplyStrategy={handleApplyTemplate} />
-                <Button
-                  size="sm"
-                  onClick={handleRunBacktest}
-                  disabled={isRunSubmitting || isRunActive}
-                  className="gap-2 bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <Play className="w-4 h-4" />
-                  {isRunSubmitting || isRunActive ? "Running..." : "Run Backtest"}
-                </Button>
-                {isRunActive && activeRunId && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCancelRun}
-                    className="gap-2"
-                  >
-                    <Square className="w-4 h-4" />
-                    Cancel Run
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="border-b border-stone-200 bg-stone-100 px-4 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-950/70">
-              {runPreview.payload ? (
-                <div className="flex items-center gap-4 flex-wrap text-stone-600 dark:text-neutral-300">
-                  <span>
-                    Symbol: <strong>{runPreview.payload.symbol}</strong>
+                {previewWarnings.map((warning) => (
+                  <span key={warning} className="text-amber-600 dark:text-amber-400">
+                    ⚠ {warning}
                   </span>
-                  <span>
-                    Strategy: <strong>{runPreview.payload.strategyType}</strong>
-                  </span>
-                  <span>
-                    Capital: <strong>{formatNumber(runPreview.payload.capital ?? 100000)}</strong>
-                  </span>
-                  {runStatus && (
-                    <span>
-                      Run status: <strong>{runStatus}</strong>
-                    </span>
-                  )}
-                  {activeRunId && (
-                    <span>
-                      Run ID: <strong>{activeRunId}</strong>
-                    </span>
-                  )}
-                  {activeJobId && (
-                    <span>
-                      Job ID: <strong>{activeJobId}</strong>
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="text-rose-700 dark:text-rose-400">{runPreview.error}</p>
-              )}
-              {runError && (
-                <p className="mt-1 text-rose-700 dark:text-rose-400" role="alert">
-                  {runError}
-                </p>
-              )}
-              {previewWarnings.length > 0 && (
-                <div className="mt-1 space-y-1 text-amber-700 dark:text-amber-300">
-                  {previewWarnings.map((warning) => (
-                    <p key={warning}>{warning}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Canvas */}
-            <div className="flex-1 relative min-h-[60vh] lg:min-h-0">
-              <StrategyCanvas />
-            </div>
-
-            {runSummary && (
-              <div className="border-t border-stone-200 bg-stone-50 dark:border-neutral-800 dark:bg-neutral-900 px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
-                    Latest Backtest Result
-                  </h3>
-                  <span className="text-xs text-stone-500 dark:text-neutral-400">
-                    {new Date(runSummary.generatedAt).toLocaleString()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                  <div className="border border-stone-200 dark:border-neutral-700 px-2 py-2">
-                    <div className="text-stone-500 dark:text-neutral-400">Total Return</div>
-                    <div className={cn("font-semibold", runSummary.summary.metrics.totalReturn >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
-                      {formatPercent(runSummary.summary.metrics.totalReturn)}
-                    </div>
-                  </div>
-                  <div className="border border-stone-200 dark:border-neutral-700 px-2 py-2">
-                    <div className="text-stone-500 dark:text-neutral-400">Sharpe</div>
-                    <div className="font-semibold text-stone-900 dark:text-white">
-                      {runSummary.summary.metrics.sharpeRatio.toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="border border-stone-200 dark:border-neutral-700 px-2 py-2">
-                    <div className="text-stone-500 dark:text-neutral-400">Max Drawdown</div>
-                    <div className="font-semibold text-rose-700 dark:text-rose-400">
-                      {formatPercent(runSummary.summary.metrics.maxDrawdown)}
-                    </div>
-                  </div>
-                  <div className="border border-stone-200 dark:border-neutral-700 px-2 py-2">
-                    <div className="text-stone-500 dark:text-neutral-400">Total Trades</div>
-                    <div className="font-semibold text-stone-900 dark:text-white">
-                      {runSummary.summary.totalTrades}
-                    </div>
-                  </div>
-                  <div className="border border-stone-200 dark:border-neutral-700 px-2 py-2">
-                    <div className="text-stone-500 dark:text-neutral-400">Coverage</div>
-                    <div className="font-semibold text-stone-900 dark:text-white">
-                      {formatPercent(runSummary.summary.diagnostics.coverageRatio)}
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             )}
+          </div>
 
-            {/* Status Bar */}
-            <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50 px-4 py-1.5 text-xs text-stone-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-              <div className="flex items-center gap-4">
-                <span>
-                  Nodes: {currentStrategy?.nodes.length || 0}
-                </span>
-                <span>
-                  Connections: {currentStrategy?.edges.length || 0}
+          {/* Canvas */}
+          <div className="flex-1 relative min-h-0">
+            <StrategyCanvas />
+          </div>
+
+          {runSummary && (
+            <div className="border-t border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 px-4 py-2.5 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-sans uppercase tracking-wider font-semibold text-stone-900 dark:text-white">
+                  Latest Backtest
+                </h3>
+                <span className="text-[11px] text-stone-500 dark:text-neutral-400">
+                  {new Date(runSummary.generatedAt).toLocaleString()}
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                {currentStrategy?.updatedAt && (
-                  <span>
-                    Last saved: {new Date(currentStrategy.updatedAt).toLocaleString()}
-                  </span>
-                )}
+              <div className="grid grid-cols-5 gap-1.5 text-xs">
+                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Return</div>
+                  <div className={cn("font-semibold", runSummary.summary.metrics.totalReturn >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
+                    {formatPercent(runSummary.summary.metrics.totalReturn)}
+                  </div>
+                </div>
+                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Sharpe</div>
+                  <div className="font-semibold text-stone-900 dark:text-white">
+                    {runSummary.summary.metrics.sharpeRatio.toFixed(2)}
+                  </div>
+                </div>
+                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Drawdown</div>
+                  <div className="font-semibold text-rose-700 dark:text-rose-400">
+                    {formatPercent(runSummary.summary.metrics.maxDrawdown)}
+                  </div>
+                </div>
+                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Trades</div>
+                  <div className="font-semibold text-stone-900 dark:text-white">
+                    {runSummary.summary.totalTrades}
+                  </div>
+                </div>
+                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Coverage</div>
+                  <div className="font-semibold text-stone-900 dark:text-white">
+                    {formatPercent(runSummary.summary.diagnostics.coverageRatio)}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Right Panel - Properties */}
-          <div
-            className={cn(
-              "w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-stone-200 dark:border-neutral-800 bg-stone-50 dark:bg-neutral-900/90 flex-shrink-0 transition-all duration-300",
-              isPropertyPanelOpen ? "block" : "hidden lg:block"
-            )}
-          >
-            <PropertyPanel
-              selectedNode={selectedNode}
-              onUpdateNode={handleUpdateNode}
-              onDeleteNode={handleDeleteNode}
-              onClose={() => setSelectedNode(null)}
-            />
+          {/* Status Bar */}
+          <div className="flex items-center justify-between border-t border-stone-200 bg-white px-4 py-1 text-[11px] text-stone-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 flex-shrink-0">
+            <div className="flex items-center gap-4">
+              <span>
+                Nodes: {currentStrategy?.nodes.length || 0}
+              </span>
+              <span>
+                Connections: {currentStrategy?.edges.length || 0}
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              {currentStrategy?.updatedAt && (
+                <span>
+                  Last saved: {new Date(currentStrategy.updatedAt).toLocaleString()}
+                </span>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* Right Panel - Properties */}
+        <div
+          className={cn(
+            "w-80 border-l border-stone-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex-shrink-0 overflow-y-auto transition-all duration-300",
+            isPropertyPanelOpen ? "block" : "hidden"
+          )}
+        >
+          <PropertyPanel
+            selectedNode={selectedNode}
+            onUpdateNode={handleUpdateNode}
+            onDeleteNode={handleDeleteNode}
+            onClose={() => {
+              setSelectedNode(null);
+              setIsPropertyPanelOpen(false);
+            }}
+          />
         </div>
       </div>
     </div>

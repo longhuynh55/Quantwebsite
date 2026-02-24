@@ -84,73 +84,110 @@ function BacktestingPageContent() {
 
   return (
     <PageTransition variant="slideUp">
-      <div className="max-w-full space-y-8">
+      <div className="max-w-full space-y-6">
         <p className="sr-only" role="status" aria-live="polite">
           {statusMessage}
         </p>
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Strategy Backtesting
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400">
-              Validate trading hypotheses on historical HOSE market data
-            </p>
+        <header className="mb-12 pb-8 border-b border-stone-200 dark:border-neutral-800">
+          {/* Kicker with emerald accent */}
+          <div className="flex items-center gap-3 mb-4">
+            <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+            <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+              Research Workspace
+            </span>
           </div>
-          <BacktestControls onRun={runBacktest} loading={loading} onReset={handleResetAll} />
-        </div>
+
+          {/* Headline - Serif, dramatic */}
+          <h1 className="font-serif text-4xl md:text-5xl font-bold text-stone-900 dark:text-white leading-tight">
+            Strategy Backtesting
+          </h1>
+
+          {/* Subheadline */}
+          <p className="font-sans text-base text-stone-600 dark:text-neutral-400 max-w-2xl leading-relaxed mt-4">
+            Validate trading hypotheses on historical HOSE market data.
+          </p>
+
+          <div className="mt-6 flex justify-end">
+            <BacktestControls onRun={runBacktest} loading={loading} onReset={handleResetAll} />
+          </div>
+        </header>
 
         {/* Configuration Panel */}
-        <Card className="border-none shadow-none bg-transparent">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <StrategySelector
-              symbol={symbol}
-              onSymbolChange={setSymbol}
-              strategy={strategy}
-              onStrategyChange={setStrategy}
-              capital={capital}
-              onCapitalChange={setCapital}
-            />
-          </div>
-
-          {/* Settings Tabs */}
-          <Tabs defaultValue="strategy" className="mt-6">
-            <div className="flex items-center gap-4 mb-4 overflow-x-auto pb-1 no-scrollbar">
-              <TabsList className="bg-gray-100 dark:bg-slate-900 rounded-xl p-1 h-10 border border-gray-200 dark:border-slate-800">
-                <TabsTrigger
-                  value="strategy"
-                  className="rounded-lg px-4 text-xs font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600"
-                >
-                  <Settings2 className="w-3.5 h-3.5 mr-2" />
-                  Strategy Parameters
-                </TabsTrigger>
-                <TabsTrigger
-                  value="execution"
-                  className="rounded-lg px-4 text-xs font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600"
-                >
-                  <Activity className="w-3.5 h-3.5 mr-2" />
-                  Execution & Costs
-                </TabsTrigger>
-              </TabsList>
+        <Card className="overflow-hidden border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+          <div className="h-px bg-emerald-700 dark:bg-emerald-500" />
+          <div className="space-y-6 p-5 sm:p-6">
+            <div className="space-y-2 border-b border-stone-200 pb-4 dark:border-neutral-800">
+              <div className="flex items-center gap-2">
+                <span className="h-px w-8 bg-emerald-700 dark:bg-emerald-500" />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-neutral-500">
+                  Configuration
+                </p>
+              </div>
+              <h2 className="font-serif text-xl font-semibold text-stone-900 dark:text-white">
+                Model and Parameters
+              </h2>
+              <p className="text-sm text-stone-600 dark:text-neutral-400">
+                Set symbols, strategy rules, and execution assumptions before running a backtest.
+              </p>
             </div>
 
-            <TabsContent value="strategy" className="mt-0">
-              <StrategyParams
-                strategyParams={strategyParams}
-                onStrategyParamChange={handleStrategyParamChange}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+              <StrategySelector
+                symbol={symbol}
+                onSymbolChange={setSymbol}
+                strategy={strategy}
+                onStrategyChange={setStrategy}
+                capital={capital}
+                onCapitalChange={setCapital}
               />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="execution" className="mt-0">
-              <ExecutionConfig
-                config={config}
-                onConfigChange={handleConfigChange}
-                onPresetApply={applyAdvancedPreset}
-              />
-            </TabsContent>
-          </Tabs>
+            {/* Settings Tabs */}
+            <Tabs defaultValue="strategy" className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="h-px w-7 bg-stone-300 dark:bg-neutral-700" />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-neutral-500">
+                  Parameter Groups
+                </p>
+              </div>
+
+              <div className="overflow-x-auto pb-1 no-scrollbar">
+                <TabsList className="h-11 border border-stone-200 bg-stone-100/80 p-1 dark:border-neutral-700 dark:bg-neutral-900/80">
+                  <TabsTrigger
+                    value="strategy"
+                    className="px-4 text-xs font-semibold uppercase tracking-wide text-stone-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 dark:text-neutral-300 dark:data-[state=active]:bg-neutral-950 dark:data-[state=active]:text-emerald-400"
+                  >
+                    <Settings2 className="mr-2 h-3.5 w-3.5" />
+                    Strategy Parameters
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="execution"
+                    className="px-4 text-xs font-semibold uppercase tracking-wide text-stone-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 dark:text-neutral-300 dark:data-[state=active]:bg-neutral-950 dark:data-[state=active]:text-emerald-400"
+                  >
+                    <Activity className="mr-2 h-3.5 w-3.5" />
+                    Execution and Costs
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="strategy" className="mt-0">
+                <StrategyParams
+                  strategyParams={strategyParams}
+                  onStrategyParamChange={handleStrategyParamChange}
+                />
+              </TabsContent>
+
+              <TabsContent value="execution" className="mt-0">
+                <ExecutionConfig
+                  config={config}
+                  onConfigChange={handleConfigChange}
+                  onPresetApply={applyAdvancedPreset}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         </Card>
 
         {error && !loading && (
@@ -167,11 +204,11 @@ function BacktestingPageContent() {
         {result && !loading && (
           <ErrorBoundary
             fallback={
-              <div className="p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
-                <p className="text-red-600 dark:text-red-400 font-medium mb-2">
+              <div className="border border-rose-200 bg-rose-50/70 p-6 text-center dark:border-rose-900/40 dark:bg-rose-900/10">
+                <p className="mb-2 font-medium text-rose-700 dark:text-rose-400">
                   Error displaying backtest results
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <p className="mb-4 text-sm text-stone-600 dark:text-neutral-400">
                   The results couldn&apos;t be rendered. Please try running the backtest again.
                 </p>
                 <Button size="sm" onClick={runBacktest}>
@@ -185,33 +222,39 @@ function BacktestingPageContent() {
               <ResultsSummary result={result} />
 
               <Tabs defaultValue="charts" className="w-full">
-                <div className="flex items-center justify-between mb-4 bg-gray-50/50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800">
-                  <TabsList className="bg-transparent border-none">
-                    <TabsTrigger
-                      value="charts"
-                      className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm"
-                    >
-                      Analysis Charts
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="trades"
-                      className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm"
-                    >
-                      Trade Log
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="diagnostics"
-                      className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm"
-                    >
-                      Diagnostics
-                    </TabsTrigger>
-                  </TabsList>
+                <div className="mb-4 overflow-hidden border border-stone-200 bg-stone-50/80 p-2 dark:border-neutral-800 dark:bg-neutral-900/60">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <TabsList className="h-10 border border-stone-200 bg-white/80 p-1 dark:border-neutral-700 dark:bg-neutral-950/80">
+                      <TabsTrigger
+                        value="charts"
+                        className="px-4 text-xs font-semibold uppercase tracking-wide text-stone-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 dark:text-neutral-300 dark:data-[state=active]:bg-neutral-900 dark:data-[state=active]:text-emerald-400"
+                      >
+                        Analysis Charts
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="trades"
+                        className="px-4 text-xs font-semibold uppercase tracking-wide text-stone-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 dark:text-neutral-300 dark:data-[state=active]:bg-neutral-900 dark:data-[state=active]:text-emerald-400"
+                      >
+                        Trade Log
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="diagnostics"
+                        className="px-4 text-xs font-semibold uppercase tracking-wide text-stone-600 data-[state=active]:bg-white data-[state=active]:text-emerald-700 dark:text-neutral-300 dark:data-[state=active]:bg-neutral-900 dark:data-[state=active]:text-emerald-400"
+                      >
+                        Diagnostics
+                      </TabsTrigger>
+                    </TabsList>
 
-                  <div className="flex items-center gap-2 pr-2">
-                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg">
-                      <Download className="w-3.5 h-3.5 mr-2" />
-                      PDF Report
-                    </Button>
+                    <div className="flex items-center gap-2 px-1 sm:px-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-stone-300 bg-white text-xs text-stone-700 hover:border-stone-400 hover:bg-stone-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-600"
+                      >
+                        <Download className="mr-2 h-3.5 w-3.5" />
+                        PDF Report
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -240,7 +283,9 @@ function BacktestingPageContent() {
 
 export default function BacktestingPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500 dark:text-slate-400">Loading backtesting workspace...</div>}>
+    <Suspense
+      fallback={<div className="p-6 text-sm text-stone-500 dark:text-neutral-400">Loading backtesting workspace...</div>}
+    >
       <BacktestingPageContent />
     </Suspense>
   );

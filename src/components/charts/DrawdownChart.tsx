@@ -132,11 +132,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const data = payload[0].payload;
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[180px]">
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{data.date}</p>
+    <div className="bg-white dark:bg-neutral-800 border border-stone-200 dark:border-neutral-700 rounded-lg shadow-lg p-3 min-w-[180px]">
+      <p className="text-xs text-stone-500 dark:text-neutral-400 mb-2">{data.date}</p>
       <div className="space-y-1">
         <div className="flex justify-between items-center gap-4">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Drawdown</span>
+          <span className="text-sm text-stone-600 dark:text-neutral-300">Drawdown</span>
           <span className={cn(
             "text-sm font-semibold",
             data.drawdown < -20 ? "text-red-600 dark:text-red-400" :
@@ -147,14 +147,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
           </span>
         </div>
         <div className="flex justify-between items-center gap-4">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Equity</span>
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
+          <span className="text-sm text-stone-600 dark:text-neutral-300">Equity</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-neutral-100">
             ${data.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between items-center gap-4">
-          <span className="text-sm text-gray-600 dark:text-gray-300">Peak</span>
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
+          <span className="text-sm text-stone-600 dark:text-neutral-300">Peak</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-neutral-100">
             ${data.runningMax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
@@ -208,7 +208,7 @@ function MaxDrawdownAnnotation({ maxDrawdown, maxDrawdownDate }: MaxDrawdownAnno
  */
 function DrawdownLegend() {
   return (
-    <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
+    <div className="flex items-center gap-4 mt-3 text-xs text-stone-500 dark:text-neutral-400">
       <div className="flex items-center gap-1.5">
         <div className="w-3 h-3 rounded-sm bg-red-200 dark:bg-red-900/40" />
         <span>0% to -10%</span>
@@ -285,12 +285,12 @@ export function DrawdownChart({
     return (
       <div
         className={cn(
-          "flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700",
+          "flex items-center justify-center bg-stone-50 dark:bg-neutral-800/50 rounded-lg border border-stone-200 dark:border-neutral-700",
           className
         )}
         style={{ height }}
       >
-        <p className="text-gray-500 dark:text-gray-400">No equity curve data available</p>
+        <p className="text-stone-500 dark:text-neutral-400">No equity curve data available</p>
       </div>
     );
   }
@@ -299,12 +299,12 @@ export function DrawdownChart({
     return (
       <div
         className={cn(
-          "flex items-center justify-center bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700",
+          "flex items-center justify-center bg-stone-50 dark:bg-neutral-800/50 rounded-lg border border-stone-200 dark:border-neutral-700",
           className
         )}
         style={{ height }}
       >
-        <p className="text-gray-500 dark:text-gray-400">Unable to calculate drawdown</p>
+        <p className="text-stone-500 dark:text-neutral-400">Unable to calculate drawdown</p>
       </div>
     );
   }
@@ -473,33 +473,33 @@ export function DrawdownChart({
       <DrawdownLegend />
 
       {/* Summary statistics */}
-      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-stone-200 dark:border-neutral-700">
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
             Max Drawdown
           </p>
           <p className={cn(
             "text-lg font-semibold mt-1",
             maxDrawdown < -20 ? "text-red-600 dark:text-red-400" :
             maxDrawdown < -10 ? "text-orange-500 dark:text-orange-400" :
-            "text-gray-900 dark:text-white"
+            "text-stone-900 dark:text-neutral-100"
           )}>
             {maxDrawdown.toFixed(2)}%
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
             Drawdown Periods
           </p>
-          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
+          <p className="text-lg font-semibold text-stone-900 dark:text-neutral-100 mt-1">
             {drawdownPeriods.length}
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <p className="text-xs text-stone-500 dark:text-neutral-400 uppercase tracking-wider">
             Severe Periods
           </p>
-          <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
+          <p className="text-lg font-semibold text-stone-900 dark:text-neutral-100 mt-1">
             {drawdownPeriods.filter((p) => p.maxDrawdown < -15).length}
           </p>
         </div>
@@ -509,3 +509,4 @@ export function DrawdownChart({
 }
 
 export default DrawdownChart;
+

@@ -36,10 +36,10 @@ export function ResultsTable({ result, symbol }: ResultsTableProps) {
           accessorKey: "prices",
           cell: (t: Trade) => (
             <div className="flex flex-col text-[10px]">
-              <span className="text-gray-900 dark:text-slate-200 font-bold">
+              <span className="font-bold text-stone-900 dark:text-white">
                 {formatCurrency(t.entryPrice)}
               </span>
-              <span className="text-gray-500">{formatCurrency(t.exitPrice)}</span>
+              <span className="text-stone-500 dark:text-neutral-400">{formatCurrency(t.exitPrice)}</span>
             </div>
           ),
           width: "15%",
@@ -50,7 +50,15 @@ export function ResultsTable({ result, symbol }: ResultsTableProps) {
           sortable: true,
           align: "right",
           cell: (t: Trade) => (
-            <Badge variant={t.pnlPercent >= 0 ? "success" : "destructive"} className="font-mono">
+            <Badge
+              variant="outline"
+              className={cn(
+                "font-mono",
+                t.pnlPercent >= 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"
+              )}
+            >
               {t.pnlPercent >= 0 ? "+" : ""}
               {formatPercent(t.pnlPercent)}
             </Badge>
@@ -66,7 +74,7 @@ export function ResultsTable({ result, symbol }: ResultsTableProps) {
             <span
               className={cn(
                 "font-mono text-xs font-bold",
-                t.pnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                t.pnl >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
               )}
             >
               {t.pnl >= 0 ? "+" : ""}
@@ -80,7 +88,7 @@ export function ResultsTable({ result, symbol }: ResultsTableProps) {
           accessorKey: "totalCosts",
           align: "right",
           cell: (t: Trade) => (
-            <span className="text-xs text-gray-400 font-mono">{formatCurrency(t.totalCosts)}</span>
+            <span className="font-mono text-xs text-stone-400 dark:text-neutral-500">{formatCurrency(t.totalCosts)}</span>
           ),
           width: "15%",
         },

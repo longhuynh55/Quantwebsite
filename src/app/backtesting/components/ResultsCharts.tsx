@@ -11,10 +11,11 @@ interface ResultsChartsProps {
 export function ResultsCharts({ result, dailyReturns }: ResultsChartsProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card>
+      <Card className="overflow-hidden border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="h-px bg-emerald-700 dark:bg-emerald-500" />
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-blue-500" />
+          <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-neutral-100">
+            <TrendingUp className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
             Equity Curve
           </CardTitle>
         </CardHeader>
@@ -29,7 +30,7 @@ export function ResultsCharts({ result, dailyReturns }: ResultsChartsProps) {
                 }),
                 value: e.equity,
               }))}
-              color="#3b82f6"
+              color="#047857"
               height={300}
               format="currency"
               showArea
@@ -44,10 +45,11 @@ export function ResultsCharts({ result, dailyReturns }: ResultsChartsProps) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="h-px bg-rose-500 dark:bg-rose-500/70" />
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-500" />
+          <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-neutral-100">
+            <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
             Drawdown Analysis
           </CardTitle>
         </CardHeader>
@@ -57,10 +59,11 @@ export function ResultsCharts({ result, dailyReturns }: ResultsChartsProps) {
       </Card>
 
       {dailyReturns.length > 0 && (
-        <Card className="lg:col-span-2">
+        <Card className="overflow-hidden border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:col-span-2">
+          <div className="h-px bg-stone-400/80 dark:bg-neutral-600/80" />
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-slate-500" />
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900 dark:text-neutral-100">
+              <BarChart3 className="w-4 h-4 text-stone-500 dark:text-neutral-400" />
               Monthly Performance Heatmap
             </CardTitle>
           </CardHeader>

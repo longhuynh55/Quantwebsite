@@ -394,11 +394,11 @@ export function CandlestickChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500 bg-gray-50 rounded-lg">
+      <div className="flex h-64 items-center justify-center rounded-lg bg-stone-50 text-stone-500 dark:bg-neutral-800/50 dark:text-neutral-400">
         <div className="text-center">
-          <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <TrendingUp className="mx-auto mb-3 h-12 w-12 text-stone-300 dark:text-neutral-600" />
           <p className="font-medium">No chart data available</p>
-          <p className="text-sm text-gray-400">Select a stock to view the chart</p>
+          <p className="text-sm text-stone-400 dark:text-neutral-500">Select a stock to view the chart</p>
         </div>
       </div>
     );
@@ -406,12 +406,12 @@ export function CandlestickChart({
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="pb-2 border-b bg-gray-50/50">
+      <CardHeader className="border-b border-stone-200 bg-stone-50/70 pb-2 dark:border-neutral-700 dark:bg-neutral-900/60">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-3">
               <span className="text-xl font-bold">{symbol}</span>
-              <span className="text-2xl font-bold text-gray-900">
+              <span className="text-2xl font-bold text-stone-900 dark:text-neutral-100">
                 {lastCandle?.close.toFixed(2)}
               </span>
               <span
@@ -423,7 +423,7 @@ export function CandlestickChart({
                 {priceChange.toFixed(2)}%
               </span>
             </CardTitle>
-            <div className="flex gap-4 text-xs text-gray-500 mt-1">
+            <div className="mt-1 flex gap-4 text-xs text-stone-500 dark:text-neutral-400">
               <span>O: {lastCandle?.open.toFixed(2)}</span>
               <span>H: {lastCandle?.high.toFixed(2)}</span>
               <span>L: {lastCandle?.low.toFixed(2)}</span>
@@ -454,7 +454,7 @@ export function CandlestickChart({
               </Button>
             ))}
 
-            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <div className="mx-1 h-6 w-px bg-stone-200 dark:bg-neutral-700" />
 
             {/* Zoom controls */}
             <Button size="icon" variant="ghost" onClick={handleZoomIn} aria-label="Zoom in">
@@ -472,8 +472,8 @@ export function CandlestickChart({
 
       <CardContent className="p-0 relative">
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-            <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-neutral-900/80">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-700 border-t-transparent dark:border-emerald-400" />
           </div>
         )}
         <div ref={chartContainerRef} className="w-full" />
@@ -495,15 +495,15 @@ export function TimeRangeSelector({
   onChange,
 }: TimeRangeSelectorProps) {
   return (
-    <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+    <div className="flex gap-1 rounded-lg bg-stone-100 p-1 dark:bg-neutral-800">
       {ranges.map((range) => (
         <button
           key={range.value}
           onClick={() => onChange(range.value)}
           className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
             selected === range.value
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-600 hover:text-gray-900"
+              ? "bg-white text-stone-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100"
+              : "text-stone-600 hover:text-stone-900 dark:text-neutral-300 dark:hover:text-white"
           }`}
         >
           {range.label}

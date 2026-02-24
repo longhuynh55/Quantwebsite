@@ -195,7 +195,7 @@ export const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenu
         aria-labelledby={triggerId}
         tabIndex={-1}
         className={cn(
-          "absolute top-full mt-2 z-50 min-w-[180px] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1.5 shadow-lg",
+          "absolute top-full mt-2 z-50 min-w-[180px] border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-1.5",
           "animate-in fade-in-0 zoom-in-95 duration-150",
           alignmentClasses[align],
           className
@@ -264,8 +264,8 @@ export const DropdownMenuItem = React.forwardRef<HTMLButtonElement, DropdownMenu
         tabIndex={-1}
         onClick={handleClick}
         className={cn(
-          "flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 outline-none",
-          "hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 transition-colors",
+          "flex w-full items-center px-3 py-2 text-sm text-stone-700 dark:text-neutral-200 outline-none",
+          "hover:bg-stone-100 dark:hover:bg-neutral-700 focus:bg-stone-100 dark:focus:bg-neutral-700 transition-colors",
           inset && "pl-8",
           className
         )}
@@ -286,7 +286,7 @@ export function DropdownMenuLabel({
   return (
     <div
       className={cn(
-        "px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide",
+        "px-3 py-2 text-xs font-semibold text-stone-500 dark:text-neutral-400 uppercase tracking-wide",
         inset && "pl-8",
         className
       )}
@@ -296,7 +296,7 @@ export function DropdownMenuLabel({
 }
 
 export function DropdownMenuSeparator({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("my-1 h-px bg-gray-200 dark:bg-gray-700", className)} {...props} />;
+  return <div className={cn("my-1 h-px bg-stone-200 dark:bg-neutral-700", className)} {...props} />;
 }
 
 type DropdownMenuShortcutProps = React.HTMLAttributes<HTMLSpanElement>;
@@ -304,7 +304,7 @@ type DropdownMenuShortcutProps = React.HTMLAttributes<HTMLSpanElement>;
 export function DropdownMenuShortcut({ className, ...props }: DropdownMenuShortcutProps) {
   return (
     <span
-      className={cn("ml-auto text-xs tracking-widest text-gray-400", className)}
+      className={cn("ml-auto text-xs tracking-widest text-stone-400 dark:text-neutral-500", className)}
       {...props}
     />
   );

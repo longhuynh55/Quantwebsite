@@ -27,24 +27,24 @@ export function WidgetWrapper({
   return (
     <div
       className={cn(
-        "h-full rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900",
-        "flex flex-col overflow-hidden shadow-sm",
-        "transition-shadow duration-300",
-        isHovered && "shadow-md",
+        "h-full overflow-hidden border border-stone-200 bg-white shadow-sm",
+        "flex flex-col transition-all duration-300 dark:border-neutral-800 dark:bg-neutral-900",
+        isHovered && "border-stone-300 shadow-md dark:border-neutral-700",
         className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-widget-id={id}
     >
+      <div className="h-px bg-emerald-700/70 dark:bg-emerald-500/70" />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+      <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/80">
         <div className="flex items-center gap-2">
           {/* Drag handle */}
-          <span className="react-grid-dragHandleAddon cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <span className="react-grid-dragHandleAddon cursor-grab text-stone-400 transition-colors hover:text-emerald-700 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-emerald-400">
             <GripVertical className="h-4 w-4" />
           </span>
-          <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+          <h3 className="font-serif text-sm font-semibold text-stone-900 dark:text-white">
             {title}
           </h3>
         </div>
@@ -53,16 +53,16 @@ export function WidgetWrapper({
         <div
           className={cn(
             "flex items-center gap-1 transition-opacity duration-200",
-            isHovered ? "opacity-100" : "opacity-0"
+            isHovered ? "opacity-100" : "pointer-events-none opacity-0"
           )}
         >
           {onSettings && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              className="h-7 w-7 text-stone-500 hover:bg-stone-200/80 hover:text-stone-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
               onClick={onSettings}
-              aria-label="Cài đặt"
+              aria-label="Widget settings"
             >
               <Settings className="h-4 w-4" />
             </Button>
@@ -71,9 +71,9 @@ export function WidgetWrapper({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+              className="h-7 w-7 text-stone-500 hover:bg-rose-50 hover:text-rose-700 dark:text-neutral-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
               onClick={onRemove}
-              aria-label="Xóa widget"
+              aria-label="Remove widget"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -82,7 +82,7 @@ export function WidgetWrapper({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">{children}</div>
+      <div className="flex-1 overflow-auto bg-white p-4 dark:bg-neutral-900">{children}</div>
     </div>
   );
 }

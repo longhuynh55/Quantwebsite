@@ -11,14 +11,13 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, interactive = false, ...props }, ref) => {
     const baseStyles = cn(
-      "rounded-xl border border-gray-200 bg-white text-gray-950 shadow-sm",
-      "dark:border-gray-800 dark:bg-gray-900 dark:text-gray-50",
-      "transition-[transform,box-shadow,border-color] duration-300 ease-out"
+      "border border-stone-200 bg-white text-stone-950",
+      "dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50",
+      "transition-[border-color] duration-300 ease-out"
     );
 
     const interactiveStyles = interactive && cn(
-      "hover:-translate-y-1 hover:shadow-lg",
-      "hover:border-gray-300 dark:hover:border-gray-700",
+      "hover:border-stone-300 dark:hover:border-neutral-700",
       "cursor-pointer"
     );
 
@@ -42,14 +41,14 @@ CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn("font-semibold leading-none tracking-tight text-gray-900 dark:text-gray-100", className)} {...props} />
+    <h3 ref={ref} className={cn("font-semibold leading-none tracking-tight text-stone-900 dark:text-white", className)} {...props} />
   )
 );
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn("text-sm text-gray-500 dark:text-gray-400", className)} {...props} />
+    <p ref={ref} className={cn("text-sm text-stone-600 dark:text-neutral-400", className)} {...props} />
   )
 );
 CardDescription.displayName = "CardDescription";
@@ -106,9 +105,9 @@ const sizeStyles = {
     description: "text-xs",
   },
   lg: {
-    container: "p-6 metric-hero",
+    container: "p-8",
     title: "text-sm",
-    value: "text-3xl metric-value",
+    value: "text-[2.5rem] leading-none",
     description: "text-sm",
   },
 } as const;
@@ -135,97 +134,98 @@ const MetricCard = React.memo(
       const trendColors = {
         up: "text-green-600 dark:text-green-400",
         down: "text-red-600 dark:text-red-400",
-        neutral: "text-gray-600 dark:text-gray-400",
+        neutral: "text-stone-600 dark:text-neutral-400",
       };
 
-    // Determine trend direction from sparkline data
-    const sparklineTrend = React.useMemo(() => {
-      if (!sparklineData || sparklineData.length < 2) return undefined;
-      const validData = sparklineData.filter(
-        (v): v is number => typeof v === "number" && !isNaN(v)
-      );
-      if (validData.length < 2) return undefined;
-      const first = validData[0];
-      const last = validData[validData.length - 1];
-      if (last > first) return "up";
-      if (last < first) return "down";
-      return "neutral";
-    }, [sparklineData]);
+      // Determine trend direction from sparkline data
+      const sparklineTrend = React.useMemo(() => {
+        if (!sparklineData || sparklineData.length < 2) return undefined;
+        const validData = sparklineData.filter(
+          (v): v is number => typeof v === "number" && !isNaN(v)
+        );
+        if (validData.length < 2) return undefined;
+        const first = validData[0];
+        const last = validData[validData.length - 1];
+        if (last > first) return "up";
+        if (last < first) return "down";
+        return "neutral";
+      }, [sparklineData]);
 
-    // Calculate progress percentage
-    const progressPercent = React.useMemo(() => {
-      if (!progress) return 0;
-      const percent = (progress.value / progress.max) * 100;
-      return Math.min(100, Math.max(0, percent));
-    }, [progress]);
+      // Calculate progress percentage
+      const progressPercent = React.useMemo(() => {
+        if (!progress) return 0;
+        const percent = (progress.value / progress.max) * 100;
+        return Math.min(100, Math.max(0, percent));
+      }, [progress]);
 
-    // Progress bar color based on percentage
-    const progressColor = React.useMemo(() => {
-      if (progressPercent >= 80) return "bg-green-500 dark:bg-green-400";
-      if (progressPercent >= 50) return "bg-blue-500 dark:bg-blue-400";
-      if (progressPercent >= 25) return "bg-yellow-500 dark:bg-yellow-400";
-      return "bg-red-500 dark:bg-red-400";
-    }, [progressPercent]);
+      // Progress bar color based on percentage
+      const progressColor = React.useMemo(() => {
+        if (progressPercent >= 80) return "bg-green-500 dark:bg-green-400";
+        if (progressPercent >= 50) return "bg-emerald-500 dark:bg-emerald-400";
+        if (progressPercent >= 25) return "bg-yellow-500 dark:bg-yellow-400";
+        return "bg-red-500 dark:bg-red-400";
+      }, [progressPercent]);
 
-    // Comparison trend direction
-    const comparisonTrend = React.useMemo(() => {
-      if (!comparison) return undefined;
-      if (comparison.value > 0) return "up";
-      if (comparison.value < 0) return "down";
-      return "neutral";
-    }, [comparison]);
+      // Comparison trend direction
+      const comparisonTrend = React.useMemo(() => {
+        if (!comparison) return undefined;
+        if (comparison.value > 0) return "up";
+        if (comparison.value < 0) return "down";
+        return "neutral";
+      }, [comparison]);
 
-    const currentSize = sizeStyles[size];
+      const currentSize = sizeStyles[size];
+      const statusStyles = {
+        live: {
+          badge:
+            "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+          dot: "bg-green-500 animate-pulse",
+          label: "Live",
+        },
+        stale: {
+          badge:
+            "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+          dot: "bg-yellow-500 animate-[pulse_3s_ease-in-out_infinite]",
+          label: "Stale",
+        },
+        error: {
+          badge:
+            "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+          dot: "bg-red-500",
+          label: "Error",
+        },
+      } as const;
+      const currentStatus = status ? statusStyles[status] : null;
 
     return (
       <div
         ref={ref}
         className={cn(
-          "rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm",
-          "transition-[transform,box-shadow,border-color] duration-300 ease-out",
-          "hover:shadow-md hover:border-gray-300 dark:hover:border-gray-700",
+          "border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900",
+          "transition-[border-color] duration-300 ease-out",
+          "hover:border-stone-300 dark:hover:border-neutral-700",
           animated && "animate-in fade-in zoom-in-95 duration-500",
           currentSize.container,
           className
         )}
       >
         {/* Status indicator in top-right corner */}
-        {status && (
+        {currentStatus && (
           <div className="relative float-right ml-2 mb-1">
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium",
-                status === "live" && [
-                  "status-live",
-                  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-                ],
-                status === "stale" && [
-                  "status-stale",
-                  "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-                ],
-                status === "error" && [
-                  "status-error",
-                  "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-                ]
+                "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium",
+                currentStatus.badge
               )}
             >
-              <span
-                className={cn(
-                  "w-2 h-2 rounded-full animate-pulse",
-                  status === "live" && "bg-green-500",
-                  status === "stale" && "bg-yellow-500",
-                  status === "error" && "bg-red-500"
-                )}
-              />
-              {status === "live" && "Live"}
-              {status === "stale" && "Stale"}
-              {status === "error" && "Error"}
+              <span className={cn("w-2 h-2", currentStatus.dot)} />
+              {currentStatus.label}
             </span>
           </div>
         )}
 
         {/* Title */}
-        <p className={cn("font-medium text-gray-500 dark:text-gray-400", currentSize.title)}>
+        <p className={cn("font-medium text-stone-500 dark:text-neutral-400", currentSize.title)}>
           {title}
         </p>
 
@@ -237,7 +237,7 @@ const MetricCard = React.memo(
               currentSize.value,
               trend === "up" && "text-green-600 dark:text-green-400",
               trend === "down" && "text-red-600 dark:text-red-400",
-              (!trend || trend === "neutral") && "text-gray-900 dark:text-white"
+              (!trend || trend === "neutral") && "text-stone-900 dark:text-neutral-50"
             )}
           >
             {value}
@@ -265,14 +265,15 @@ const MetricCard = React.memo(
         {/* Progress bar */}
         {progress && (
           <div className="mt-3">
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-neutral-400 mb-1">
               <span>{progress.value.toLocaleString()}</span>
               <span>{progress.max.toLocaleString()}</span>
             </div>
-            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-stone-100 dark:bg-neutral-800 overflow-hidden">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all duration-500 ease-out progress-bar-animated",
+                  "relative h-full overflow-hidden transition-all duration-500 ease-out",
+                  "after:absolute after:inset-0 after:bg-white/30 after:opacity-50 after:animate-pulse",
                   progressColor
                 )}
                 style={{ width: `${progressPercent}%` }}
@@ -290,7 +291,7 @@ const MetricCard = React.memo(
               size="sm"
               showIcon
             />
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-xs text-stone-500 dark:text-neutral-400">
               {comparison.period}
             </span>
           </div>
@@ -298,7 +299,7 @@ const MetricCard = React.memo(
 
         {/* Description */}
         {description && (
-          <p className={cn("text-gray-500 dark:text-gray-400 mt-1", currentSize.description)}>
+          <p className={cn("text-stone-500 dark:text-neutral-400 mt-1", currentSize.description)}>
             {description}
           </p>
         )}

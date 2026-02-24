@@ -470,6 +470,11 @@ export function collectRequiredSignals(input: {
   const asksFundamentalRatios = hasAnyKeyword(messageLower, FUNDAMENTAL_RATIO_KEYWORDS);
   const asksFundamentalShorthand = hasFundamentalShorthandSignal(messageLower);
   const asksGenericStatementKeyword = /\bstatement\b/i.test(messageLower);
+  const asksValuationSignal =
+    hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
+    || hasAnyKeyword(messageLower, PEER_KEYWORDS)
+    || hasValuationRankingSignal(messageLower)
+    || hasValuationMetricFilter;
   const asksFundamentals =
     hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS)
     || asksFundamentalRatios
@@ -480,11 +485,12 @@ export function collectRequiredSignals(input: {
     || hasStatementFilter
     || asksFundamentalRatios
     || asksFundamentalShorthand;
-  const asksValuationSignal =
-    hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
-    || hasAnyKeyword(messageLower, PEER_KEYWORDS)
-    || hasValuationRankingSignal(messageLower)
-    || hasValuationMetricFilter;
+  const valuationRankingUniverseIntent =
+    asksValuationSignal
+    && (asksRanking || asksIcb || asksHoseUniverse || hasRankingFilter || asksUniverseFilters)
+    && !hasCandidateSymbol
+    && !hasStatementFilter
+    && !asksFundamentalRatios;
   const hasIcbAggregationKeyword = hasAnyKeyword(messageLower, ICB_AGGREGATION_KEYWORDS);
   const hasDateLikeInMessage =
     /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(messageLower)
@@ -574,7 +580,7 @@ export function collectRequiredSignals(input: {
 
   if (
     (input.contextSnapshot?.page === "charts" && hasCandidateSymbol)
-    || hasFundamentalSignal
+    || (hasFundamentalSignal && !valuationRankingUniverseIntent)
   ) {
     pushUnique("fundamentalSnapshot", "/api/fundamentals");
   }
@@ -875,6 +881,10 @@ function extractUppercaseSymbolTokens(message: string): string[] {
 function extractExplicitSymbolHints(message: string): string[] {
   const normalized = normalizeForKeywordMatch(message);
   const hints: string[] = [];
+  const hasFundamentalContext =
+    hasAnyKeyword(normalized, FUNDAMENTALS_KEYWORDS)
+    || hasAnyKeyword(normalized, FUNDAMENTAL_RATIO_KEYWORDS)
+    || hasFundamentalShorthandSignal(normalized);
   const patterns = [
     /\b(?:ma|mck|ticker|symbol|cp|code)\b\s*[:=-]?\s*(?!co\b|chung\b|ck\b)([a-z0-9]{2,4})\b/g,
     /\bma\s+(?:co\s+phieu|chung\s+khoan|ck)\s*[:=-]?\s*([a-z0-9]{2,4})\b/g,
@@ -883,6 +893,10 @@ function extractExplicitSymbolHints(message: string): string[] {
   const contextualBareSymbolPatterns = [
     /\b(?:bctc|bctn|kqkd|lctt|bcdkt|bank)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
     /\b(?:income\s*statement|balance\s*sheet|cash\s*flow)(?:\s+(?:latest|recent|q[1-4]|\d{4}))*\s+(?:of\s+)?([a-z0-9]{2,4})\b/g,
+  ];
+  const leadingFundamentalSymbolPatterns = [
+    /\b([a-z0-9]{2,4})\s+(?:bctc|bctn|kqkd|lctt|bcdkt|income\s*statement|balance\s*sheet|cash\s*flow)\b/g,
+    /\b([a-z0-9]{2,4})\s+(?:20\d{2}\s*q[1-4]|q[1-4][\s/-]*20\d{2}|fy[\s/-]*20\d{2})\b/g,
   ];
   for (const pattern of patterns) {
     let match = pattern.exec(normalized);
@@ -899,6 +913,27 @@ function extractExplicitSymbolHints(message: string): string[] {
         hints.push(candidate);
       }
       match = pattern.exec(normalized);
+    }
+  }
+  if (hasFundamentalContext) {
+    for (const pattern of leadingFundamentalSymbolPatterns) {
+      let match = pattern.exec(normalized);
+      while (match) {
+        const candidate = normalizeSymbol(match[1]);
+        if (candidate && !CONTEXTUAL_SYMBOL_NOISE_TOKENS.has(candidate)) {
+          hints.push(candidate);
+        }
+        match = pattern.exec(normalized);
+      }
+    }
+    if (hints.length === 0) {
+      const leadingToken = /^\s*([a-z0-9]{2,4})\b/.exec(normalized);
+      if (leadingToken) {
+        const candidate = normalizeSymbol(leadingToken[1]);
+        if (candidate && !CONTEXTUAL_SYMBOL_NOISE_TOKENS.has(candidate)) {
+          hints.push(candidate);
+        }
+      }
     }
   }
   return hints;

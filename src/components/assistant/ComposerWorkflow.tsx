@@ -115,34 +115,34 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
   };
 
   return (
-    <div className="mx-4 mt-3 rounded-xl border border-blue-200/80 bg-blue-50/70 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+    <div className="mx-4 mt-3 rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/20">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-300">Composer Agent</p>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <p className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Composer Agent</p>
+          <h3 className="text-sm font-semibold text-stone-900 dark:text-neutral-100">
             Plan and Execute Tool Calling
           </h3>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+          <p className="mt-1 text-xs text-stone-700 dark:text-neutral-300">
             Flow: objective -&gt; plan preview -&gt; approval token -&gt; execute.
           </p>
         </div>
-        <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+        <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
       </div>
 
       <div className="mt-3 space-y-2">
-        <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="composer-objective">
+        <label className="text-xs font-medium text-stone-700 dark:text-neutral-200" htmlFor="composer-objective">
           Objective
         </label>
         <textarea
           id="composer-objective"
           value={objective}
           onChange={(event) => setObjective(event.target.value)}
-          placeholder="Example: Top 10 ngân hàng HOSE theo PE ngày 2025-12-31"
+          placeholder="Example: Top 10 ngan hang HOSE theo PE ngay 2025-12-31"
           rows={2}
           disabled={disabled || isExecuting}
           className={cn(
-            "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900",
-            "dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900",
+            "dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           )}
         />
         <Button
@@ -158,13 +158,13 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
       </div>
 
       {draft && (
-        <div className="mt-3 rounded-lg border border-blue-200 bg-white/80 p-2 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-white/80 p-2 text-xs text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
           Suggested: <span className="font-semibold">{draft.toolName}</span> - {draft.summary}
         </div>
       )}
 
       <div className="mt-3 space-y-2">
-        <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="composer-tool">
+        <label className="text-xs font-medium text-stone-700 dark:text-neutral-200" htmlFor="composer-tool">
           Tool
         </label>
         <select
@@ -173,8 +173,8 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
           onChange={(event) => handleToolChange(event.target.value as ComposerExecuteToolName)}
           disabled={disabled || isExecuting}
           className={cn(
-            "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900",
-            "dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900",
+            "dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           )}
         >
           {TOOL_OPTIONS.map((option) => (
@@ -186,7 +186,7 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
       </div>
 
       <div className="mt-2 space-y-2">
-        <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="composer-args-json">
+        <label className="text-xs font-medium text-stone-700 dark:text-neutral-200" htmlFor="composer-args-json">
           Arguments JSON
         </label>
         <textarea
@@ -196,14 +196,14 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
           rows={7}
           disabled={disabled || isExecuting}
           className={cn(
-            "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-[11px] text-gray-900",
-            "dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono text-[11px] text-stone-900",
+            "dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           )}
         />
       </div>
 
       <div className="mt-2 space-y-2">
-        <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="composer-approval-token">
+        <label className="text-xs font-medium text-stone-700 dark:text-neutral-200" htmlFor="composer-approval-token">
           Approval Token
         </label>
         <div className="flex items-center gap-2">
@@ -215,8 +215,8 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
             placeholder="Required by /api/assistant/execute"
             disabled={disabled || isExecuting}
             className={cn(
-              "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900",
-              "dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900",
+              "dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             )}
           />
           <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
@@ -244,9 +244,9 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
       )}
 
       {result && (
-        <div className="mt-2 rounded-lg border border-gray-200 bg-white/85 p-2 dark:border-gray-700 dark:bg-gray-900/70">
-          <p className="mb-1 text-xs font-medium text-gray-700 dark:text-gray-200">Execution Result</p>
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-700 dark:text-gray-200">
+        <div className="mt-2 rounded-lg border border-stone-200 bg-white/85 p-2 dark:border-neutral-700 dark:bg-neutral-900/70">
+          <p className="mb-1 text-xs font-medium text-stone-700 dark:text-neutral-200">Execution Result</p>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-all text-[11px] text-stone-700 dark:text-neutral-200">
             {JSON.stringify(result, null, 2)}
           </pre>
         </div>
@@ -254,4 +254,5 @@ export function ComposerWorkflow({ contextSnapshot, disabled = false }: Composer
     </div>
   );
 }
+
 

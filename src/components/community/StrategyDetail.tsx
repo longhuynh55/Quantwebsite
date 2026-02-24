@@ -71,15 +71,15 @@ function InteractiveStarRating({
                   "w-6 h-6 transition-colors",
                   isActive
                     ? "text-yellow-500 fill-yellow-500"
-                    : "text-gray-300 dark:text-gray-600"
+                    : "text-stone-300 dark:text-stone-600"
                 )}
               />
             </button>
           );
         })}
       </div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">
-        <span className="font-medium text-gray-700 dark:text-gray-300">
+      <div className="text-sm text-stone-500 dark:text-neutral-400">
+        <span className="font-medium text-stone-700 dark:text-neutral-300">
           {(hoverRating ?? userRating ?? currentRating).toFixed(1)}
         </span>
         {" / 5 "}
@@ -95,14 +95,14 @@ function StrategyTag({ tag }: { tag: string }) {
   const label = tagInfo?.labelVi || tagInfo?.label || tag;
 
   const tagColors: Record<string, string> = {
-    momentum: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
-    "mean-reversion": "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    momentum: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+    "mean-reversion": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800",
     "trend-following": "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800",
     breakout: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800",
     scalping: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 border-pink-200 dark:border-pink-800",
     "swing-trading": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800",
     "long-term": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800",
-    technical: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
+    technical: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border-teal-200 dark:border-teal-800",
     fundamental: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
     rsi: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800",
     macd: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-sky-200 dark:border-sky-800",
@@ -113,7 +113,7 @@ function StrategyTag({ tag }: { tag: string }) {
   return (
     <span className={cn(
       "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border",
-      tagColors[tag] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+      tagColors[tag] || "bg-stone-100 text-stone-700 dark:bg-neutral-800 dark:text-neutral-300 border-stone-200 dark:border-neutral-700"
     )}>
       {label}
     </span>
@@ -137,12 +137,12 @@ function MetricCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-      <div className="p-2 bg-white dark:bg-gray-700 rounded-lg shadow-sm">
-        <Icon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+    <div className="flex items-center gap-3 p-4 bg-stone-100 dark:bg-neutral-800/50 rounded-xl">
+      <div className="p-2 bg-white dark:bg-neutral-700 rounded-lg shadow-sm">
+        <Icon className="w-5 h-5 text-stone-600 dark:text-neutral-300" />
       </div>
       <div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-xs text-stone-500 dark:text-neutral-400">{label}</p>
         <p className={cn("text-lg font-bold", valueClassName)}>
           {prefix}<AnimatedNumber value={value} decimals={2} suffix={suffix} />
         </p>
@@ -158,7 +158,7 @@ function MiniNodeVisualization({ nodes, edges }: { nodes: SharedStrategy["nodes"
   const edgeCount = edges.length || 3;
 
   return (
-    <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-4 h-40 relative overflow-hidden">
+    <div className="bg-stone-100 dark:bg-neutral-800 rounded-xl p-4 h-40 relative overflow-hidden">
       {/* Grid pattern */}
       <div className="absolute inset-0 opacity-20">
         <svg width="100%" height="100%">
@@ -181,7 +181,7 @@ function MiniNodeVisualization({ nodes, edges }: { nodes: SharedStrategy["nodes"
             y1={50}
             x2={80 + i * 50}
             y2={50}
-            stroke="#94a3b8"
+            stroke="#a8a29e"
             strokeWidth="2"
             strokeDasharray="4 2"
           />
@@ -189,7 +189,7 @@ function MiniNodeVisualization({ nodes, edges }: { nodes: SharedStrategy["nodes"
 
         {/* Nodes */}
         {Array.from({ length: Math.min(nodeCount, 4) }).map((_, i) => {
-          const colors = ["#3b82f6", "#a855f7", "#f97316", "#10b981"];
+          const colors = ["#047857", "#0f766e", "#b45309", "#57534e"];
           const x = 25 + i * 50;
           return (
             <g key={`node-${i}`}>
@@ -217,7 +217,7 @@ function MiniNodeVisualization({ nodes, edges }: { nodes: SharedStrategy["nodes"
       </svg>
 
       {/* Node count indicator */}
-      <div className="absolute bottom-2 right-2 text-xs text-gray-500 dark:text-gray-400">
+      <div className="absolute bottom-2 right-2 text-xs text-stone-500 dark:text-neutral-400">
         {nodeCount} nodes, {edgeCount} connections
       </div>
     </div>
@@ -266,7 +266,7 @@ export function StrategyDetail({
               <DialogDescription className="flex items-center gap-2 mt-1">
                 <User className="w-4 h-4" />
                 <span>{strategy.author}</span>
-                <span className="text-gray-400">|</span>
+                <span className="text-stone-400">|</span>
                 <Calendar className="w-4 h-4" />
                 <span>{formatDate(strategy.createdAt)}</span>
               </DialogDescription>
@@ -276,13 +276,13 @@ export function StrategyDetail({
 
         <div className="space-y-6 py-4">
           {/* Rating section */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+          <div className="flex items-center justify-between p-4 bg-stone-100 dark:bg-neutral-800/50 rounded-xl">
             <InteractiveStarRating
               currentRating={strategy.rating}
               userRating={userRating}
               onRate={handleRate}
             />
-            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-4 text-sm text-stone-500 dark:text-neutral-400">
               <span className="flex items-center gap-1">
                 <Download className="w-4 h-4" />
                 {strategy.downloads} luot tai
@@ -292,7 +292,7 @@ export function StrategyDetail({
 
           {/* Tags */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">The loai</h4>
+            <h4 className="text-sm font-medium text-stone-700 dark:text-neutral-300 mb-2">The loai</h4>
             <div className="flex flex-wrap gap-2">
               {strategy.tags.map((tag) => (
                 <StrategyTag key={tag} tag={tag} />
@@ -302,15 +302,15 @@ export function StrategyDetail({
 
           {/* Description */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mo ta</h4>
-            <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+            <h4 className="text-sm font-medium text-stone-700 dark:text-neutral-300 mb-2">Mo ta</h4>
+            <p className="text-stone-600 dark:text-neutral-400 leading-relaxed">
               {strategy.description}
             </p>
           </div>
 
           {/* Performance metrics */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Hieu suat</h4>
+            <h4 className="text-sm font-medium text-stone-700 dark:text-neutral-300 mb-3">Hieu suat</h4>
             <div className="grid grid-cols-2 gap-3">
               <MetricCard
                 icon={isPositiveReturn ? TrendingUp : TrendingDown}
@@ -343,7 +343,7 @@ export function StrategyDetail({
 
           {/* Strategy visualization */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Truc quan chien luoc</h4>
+            <h4 className="text-sm font-medium text-stone-700 dark:text-neutral-300 mb-2">Truc quan chien luoc</h4>
             <MiniNodeVisualization nodes={strategy.nodes} edges={strategy.edges} />
           </div>
         </div>

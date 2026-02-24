@@ -81,7 +81,7 @@ export const LazyTimeRangeSelector = dynamic(
     })),
   {
     loading: () => (
-      <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+      <div className="h-10 bg-stone-100 dark:bg-neutral-800 rounded-lg animate-pulse" />
     ),
     ssr: false,
   }
@@ -143,7 +143,7 @@ export const LazyChartToolbar = dynamic(
     })),
   {
     loading: () => (
-      <div className="h-10 w-64 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse ml-auto" />
+      <div className="h-10 w-64 bg-stone-100 dark:bg-neutral-800 rounded-lg animate-pulse ml-auto" />
     ),
     ssr: false,
   }
@@ -163,3 +163,4 @@ export const LazyChartTooltip = dynamic(
     ssr: false,
   }
 );
+

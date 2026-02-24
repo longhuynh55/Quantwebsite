@@ -32,22 +32,33 @@ export default async function TopicPage({ params }: TopicParams) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <Link href="/learn" className="inline-flex items-center text-blue-600 hover:underline mb-6">
-        <ArrowLeft className="w-4 h-4 mr-1" />Back to Education Intelligence
-      </Link>
+      {/* Header */}
+      <header className="mb-12 pb-8 border-b border-stone-200 dark:border-neutral-800">
+        {/* Kicker */}
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-8 h-px bg-emerald-700 dark:bg-emerald-500" />
+          <span className="text-xs font-sans uppercase tracking-[0.15em] text-stone-500 dark:text-neutral-500">
+            Education Intelligence
+          </span>
+        </div>
 
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-2">
+        <Link href="/learn" className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:underline mb-6">
+          <ArrowLeft className="w-4 h-4 mr-1" />Back to Topics
+        </Link>
+
+        <div className="flex items-center gap-2 mb-4">
           <Badge variant={levelColors[frontmatter.level]}>{frontmatter.level}</Badge>
           <Badge variant="outline" className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {formatLearnDuration(frontmatter.durationMinutes)}
           </Badge>
         </div>
-        <h1 className="text-3xl font-bold">{frontmatter.title}</h1>
-      </div>
+        <h1 className="font-serif text-4xl md:text-5xl font-bold text-stone-900 dark:text-white leading-tight">
+          {frontmatter.title}
+        </h1>
+      </header>
 
-      <Card>
+      <Card className="border border-stone-200 dark:border-neutral-800">
         <CardContent className="p-8">
           <div className="prose prose-sm max-w-none dark:prose-invert">{content}</div>
         </CardContent>
@@ -55,15 +66,16 @@ export default async function TopicPage({ params }: TopicParams) {
 
       <div className="mt-8 flex justify-between">
         <Link href="/learn">
-          <Button variant="outline">
+          <Button variant="outline" className="border-2 border-stone-900 dark:border-white text-stone-900 dark:text-white font-sans font-semibold text-sm uppercase tracking-wider">
             <BookOpen className="w-4 h-4 mr-2" />All Topics
           </Button>
         </Link>
         <Link href="/screener">
-          <Button>Try the Screener</Button>
+          <Button className="bg-emerald-700 dark:bg-emerald-600 text-white font-sans font-semibold text-sm uppercase tracking-wider hover:bg-emerald-800 dark:hover:bg-emerald-500 transition-colors">
+            Try the Screener
+          </Button>
         </Link>
       </div>
     </div>
   );
 }
-

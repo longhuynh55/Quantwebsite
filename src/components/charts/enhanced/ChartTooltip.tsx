@@ -79,8 +79,8 @@ export function ChartTooltip(props: ChartTooltipProps) {
     >
       {/* Label */}
       {label && (
-        <div className="mb-2 pb-2 border-b border-gray-200/50 dark:border-gray-700/50">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+        <div className="mb-2 pb-2 border-b border-stone-200/50 dark:border-neutral-700/50">
+          <p className="text-sm font-semibold text-stone-900 dark:text-neutral-100 truncate">
             {formatLabel(label)}
           </p>
         </div>
@@ -103,10 +103,10 @@ export function ChartTooltip(props: ChartTooltipProps) {
               {/* Name and Value */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  <span className="text-xs text-stone-500 dark:text-neutral-400 truncate">
                     {item.name}
                   </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <span className="text-sm font-medium text-stone-900 dark:text-neutral-100">
                     {formatValue(item.value)}
                   </span>
                 </div>
@@ -151,3 +151,4 @@ export function ChartTooltip(props: ChartTooltipProps) {
     </div>
   );
 }
+

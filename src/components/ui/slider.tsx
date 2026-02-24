@@ -57,20 +57,20 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-2">
             {label && (
-              <label htmlFor={inputId} className="text-sm font-medium text-gray-700">{label}</label>
+              <label htmlFor={inputId} className="text-sm font-medium text-stone-700">{label}</label>
             )}
             {showValue && (
-              <span className="text-sm font-medium text-gray-500">{displayValue}</span>
+              <span className="text-sm font-medium text-stone-500">{displayValue}</span>
             )}
           </div>
         )}
         <div
           className="relative w-full h-2"
         >
-          <div className="absolute w-full h-2 bg-gray-200 rounded-full" />
+          <div className="absolute w-full h-2 bg-stone-200" />
 
           <div
-            className="absolute h-2 bg-blue-600 rounded-full transition-all duration-100"
+            className="absolute h-2 bg-emerald-600 transition-all duration-100"
             style={{
               width: `${getPercentage(isRange ? value[0] : (value as number))}%`,
             }}
@@ -94,24 +94,24 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
               "absolute w-full h-2 appearance-none bg-transparent cursor-pointer",
               "[&::-webkit-slider-thumb]:appearance-none",
               "[&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5",
-              "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white",
-              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-600",
-              "[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab",
+              "[&::-webkit-slider-thumb]:bg-white",
+              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600",
+              "[&::-webkit-slider-thumb]:cursor-grab",
               "[&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-150",
               "[&::-webkit-slider-thumb]:hover:scale-110",
               "[&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:active:scale-95",
               "[&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5",
-              "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white",
-              "[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-blue-600",
-              "[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-grab"
+              "[&::-moz-range-thumb]:bg-white",
+              "[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-emerald-600",
+              "[&::-moz-range-thumb]:cursor-grab"
             )}
             {...props}
           />
         </div>
 
         <div className="flex justify-between mt-1">
-          <span className="text-xs text-gray-400">{formatValue ? formatValue(min) : min}</span>
-          <span className="text-xs text-gray-400">{formatValue ? formatValue(max) : max}</span>
+          <span className="text-xs text-stone-400">{formatValue ? formatValue(min) : min}</span>
+          <span className="text-xs text-stone-400">{formatValue ? formatValue(max) : max}</span>
         </div>
       </div>
     );
@@ -175,20 +175,20 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-2">
             {label && (
-              <div className="text-sm font-medium text-gray-700">{label}</div>
+              <div className="text-sm font-medium text-stone-700">{label}</div>
             )}
             {showValue && (
-              <span className="text-sm font-medium text-gray-500">
+              <span className="text-sm font-medium text-stone-500">
                 {formatValue ? `${formatValue(minVal)} - ${formatValue(maxVal)}` : `${minVal} - ${maxVal}`}
               </span>
             )}
           </div>
         )}
         <div className="relative w-full h-2">
-          <div className="absolute w-full h-2 bg-gray-200 rounded-full" />
+          <div className="absolute w-full h-2 bg-stone-200" />
 
           <div
-            className="absolute h-2 bg-blue-600 rounded-full"
+            className="absolute h-2 bg-emerald-600"
             style={{
               left: `${minPercent}%`,
               width: `${maxPercent - minPercent}%`,
@@ -209,9 +209,9 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
               "absolute w-full h-2 appearance-none bg-transparent pointer-events-none",
               "[&::-webkit-slider-thumb]:appearance-none",
               "[&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5",
-              "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white",
-              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-600",
-              "[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab",
+              "[&::-webkit-slider-thumb]:bg-white",
+              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600",
+              "[&::-webkit-slider-thumb]:cursor-grab",
               "[&::-webkit-slider-thumb]:pointer-events-auto"
             )}
           />
@@ -230,17 +230,17 @@ const RangeSlider = React.forwardRef<HTMLDivElement, RangeSliderProps>(
               "absolute w-full h-2 appearance-none bg-transparent pointer-events-none",
               "[&::-webkit-slider-thumb]:appearance-none",
               "[&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5",
-              "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white",
-              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-600",
-              "[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab",
+              "[&::-webkit-slider-thumb]:bg-white",
+              "[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600",
+              "[&::-webkit-slider-thumb]:cursor-grab",
               "[&::-webkit-slider-thumb]:pointer-events-auto"
             )}
           />
         </div>
 
         <div className="flex justify-between mt-1">
-          <span className="text-xs text-gray-400">{formatValue ? formatValue(min) : min}</span>
-          <span className="text-xs text-gray-400">{formatValue ? formatValue(max) : max}</span>
+          <span className="text-xs text-stone-400">{formatValue ? formatValue(min) : min}</span>
+          <span className="text-xs text-stone-400">{formatValue ? formatValue(max) : max}</span>
         </div>
       </div>
     );
