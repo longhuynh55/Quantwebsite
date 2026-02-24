@@ -4,23 +4,23 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { useWatchlistStore } from "@/lib/stores/watchlistStore";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-
-const MOCK_PRICES: Record<string, { price: number; change: number; volume: number }> = {
-  VNM: { price: 76.5, change: 1.2, volume: 1250000 },
-  FPT: { price: 128.0, change: -0.5, volume: 890000 },
-  VCB: { price: 92.5, change: 0.8, volume: 2100000 },
-  VIC: { price: 68.0, change: 2.1, volume: 1560000 },
-  MWG: { price: 48.5, change: -1.5, volume: 3200000 },
-};
+import { fetchStockSeriesBatch, toNumber } from "./api";
 
 const DEFAULT_SYMBOLS = ["VNM", "FPT", "VCB", "VIC", "MWG"];
+const DEFAULT_ROW_DATA = { price: 0, change: 0, volume: 0 };
+
+type WatchlistQuote = {
+  price: number;
+  change: number;
+  volume: number;
+};
 
 const WatchlistRow = React.memo(function WatchlistRow({
   symbol,
   data,
 }: {
   symbol: string;
-  data: { price: number; change: number; volume: number };
+  data: WatchlistQuote;
 }) {
   const isPositive = data.change > 0;
   const isNegative = data.change < 0;
@@ -71,8 +71,57 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
 function WatchlistWidgetBase() {
   const { symbols } = useWatchlistStore();
+  const [quotes, setQuotes] = React.useState<Record<string, WatchlistQuote>>({});
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const displaySymbols = React.useMemo(() => (symbols.length > 0 ? symbols : DEFAULT_SYMBOLS), [symbols]);
+  const displaySymbols = React.useMemo(
+    () => (symbols.length > 0 ? symbols : DEFAULT_SYMBOLS).map((item) => item.trim().toUpperCase()).filter(Boolean).slice(0, 20),
+    [symbols]
+  );
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadQuotes() {
+      if (displaySymbols.length === 0) {
+        setQuotes({});
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const batch = await fetchStockSeriesBatch(displaySymbols, 2, controller.signal);
+        const nextEntries = displaySymbols.map((symbol) => {
+          const rows = batch[symbol] ?? [];
+          const latest = rows.length > 0 ? rows[rows.length - 1] : null;
+          const previous = rows.length > 1 ? rows[rows.length - 2] : null;
+          const latestClose = toNumber(latest?.close);
+          const previousClose = toNumber(previous?.close, latestClose);
+          const change = previousClose > 0 ? ((latestClose - previousClose) / previousClose) * 100 : 0;
+          const quote: WatchlistQuote = {
+            price: latestClose,
+            change,
+            volume: toNumber(latest?.volume),
+          };
+          return [symbol, quote] as const;
+        });
+        if (controller.signal.aborted) return;
+        setQuotes(Object.fromEntries(nextEntries));
+        setLoading(false);
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+        setLoading(false);
+        setError(loadError instanceof Error ? loadError.message : "Failed to load watchlist quotes");
+      }
+    }
+
+    loadQuotes();
+    return () => controller.abort();
+  }, [displaySymbols]);
 
   const tableHeader = React.useMemo(
     () => (
@@ -95,13 +144,19 @@ function WatchlistWidgetBase() {
           {tableHeader}
           <tbody>
             {displaySymbols.map((symbol) => {
-              const data = MOCK_PRICES[symbol] || { price: 0, change: 0, volume: 0 };
+              const data = quotes[symbol] ?? DEFAULT_ROW_DATA;
               return <WatchlistRow key={symbol} symbol={symbol} data={data} />;
             })}
           </tbody>
         </table>
       </div>
 
+      {loading && (
+        <p className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-500">Updating quotes...</p>
+      )}
+      {error && (
+        <p className="mt-2 text-center text-xs text-rose-700 dark:text-rose-300">{error}</p>
+      )}
       {symbols.length === 0 && (
         <p className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-500">Add symbols to your watchlist to display data.</p>
       )}

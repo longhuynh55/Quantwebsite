@@ -3,29 +3,74 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { fetchJson, fetchStockSeriesBatch, normalizePercent, toNumber, type MarketOverviewResponse } from "./api";
 
-const MOCK_GAINERS = [
-  { symbol: "HQC", price: 12.8, change: 6.9, volume: 5200000 },
-  { symbol: "ROS", price: 45.5, change: 6.5, volume: 3100000 },
-  { symbol: "VND", price: 28.2, change: 5.8, volume: 8900000 },
-  { symbol: "PVS", price: 18.5, change: 5.2, volume: 4500000 },
-  { symbol: "PVD", price: 42.3, change: 4.8, volume: 2100000 },
-];
+interface MoverItem {
+  symbol: string;
+  price: number;
+  change: number;
+  volume: number;
+}
 
-const MOCK_LOSERS = [
-  { symbol: "REE", price: 85.5, change: -5.2, volume: 1200000 },
-  { symbol: "DHG", price: 92.0, change: -4.8, volume: 890000 },
-  { symbol: "HT1", price: 28.5, change: -4.2, volume: 2300000 },
-  { symbol: "NT2", price: 35.0, change: -3.8, volume: 1500000 },
-  { symbol: "PGC", price: 22.5, change: -3.5, volume: 3400000 },
-];
+interface MoversState {
+  gainers: MoverItem[];
+  losers: MoverItem[];
+  degradedMode: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+const EMPTY_MOVERS_STATE: MoversState = {
+  gainers: [],
+  losers: [],
+  degradedMode: null,
+  loading: true,
+  error: null,
+};
+
+async function enrichMovers(
+  movers: Array<{ symbol?: string; change?: number }> | undefined,
+  signal: AbortSignal
+): Promise<MoverItem[]> {
+  const normalized = (movers ?? [])
+    .map((item) => ({
+      symbol: String(item.symbol ?? "").trim().toUpperCase(),
+      change: toNumber(item.change),
+    }))
+    .filter((item) => item.symbol.length > 0)
+    .slice(0, 5);
+
+  if (normalized.length === 0) return [];
+
+  try {
+    const symbols = normalized.map((item) => item.symbol);
+    const batch = await fetchStockSeriesBatch(symbols, 1, signal);
+    return normalized.map((item) => {
+      const rows = batch[item.symbol] ?? [];
+      const latest = rows.length > 0 ? rows[rows.length - 1] : null;
+      return {
+        symbol: item.symbol,
+        price: toNumber(latest?.close),
+        volume: toNumber(latest?.volume),
+        change: normalizePercent(item.change),
+      };
+    });
+  } catch {
+    return normalized.map((item) => ({
+      symbol: item.symbol,
+      price: 0,
+      volume: 0,
+      change: normalizePercent(item.change),
+    }));
+  }
+}
 
 const MoverRow = React.memo(function MoverRow({
   item,
   index,
   isGainer,
 }: {
-  item: (typeof MOCK_GAINERS)[0];
+  item: MoverItem;
   index: number;
   isGainer: boolean;
 }) {
@@ -69,8 +114,45 @@ const MoverRow = React.memo(function MoverRow({
 
 function TopMoversWidgetBase() {
   const [activeTab, setActiveTab] = React.useState<"gainers" | "losers">("gainers");
+  const [state, setState] = React.useState<MoversState>(EMPTY_MOVERS_STATE);
 
-  const data = React.useMemo(() => (activeTab === "gainers" ? MOCK_GAINERS : MOCK_LOSERS), [activeTab]);
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadMovers() {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+      try {
+        const overview = await fetchJson<MarketOverviewResponse>("/api/market-overview", controller.signal);
+        const [gainers, losers] = await Promise.all([
+          enrichMovers(overview.topGainers, controller.signal),
+          enrichMovers(overview.topLosers, controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
+        setState({
+          gainers,
+          losers,
+          degradedMode: typeof overview.degradedMode === "string" ? overview.degradedMode : null,
+          loading: false,
+          error: null,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: error instanceof Error ? error.message : "Failed to load movers",
+        }));
+      }
+    }
+
+    loadMovers();
+    return () => controller.abort();
+  }, []);
+
+  const data = React.useMemo(
+    () => (activeTab === "gainers" ? state.gainers : state.losers),
+    [activeTab, state.gainers, state.losers]
+  );
 
   const handleGainersClick = React.useCallback(() => setActiveTab("gainers"), []);
   const handleLosersClick = React.useCallback(() => setActiveTab("losers"), []);
@@ -105,12 +187,27 @@ function TopMoversWidgetBase() {
       </div>
 
       <div className="flex-1 space-y-2 overflow-auto">
-        {data.map((item, index) => (
-          <MoverRow key={item.symbol} item={item} index={index} isGainer={activeTab === "gainers"} />
-        ))}
+        {data.length > 0 &&
+          data.map((item, index) => (
+            <MoverRow key={`${activeTab}-${item.symbol}`} item={item} index={index} isGainer={activeTab === "gainers"} />
+          ))}
+        {!state.loading && data.length === 0 && (
+          <div className="rounded-lg border border-dashed border-stone-300 p-3 text-xs text-stone-500 dark:border-neutral-700 dark:text-neutral-400">
+            {state.degradedMode === "low_memory"
+              ? "Top movers are unavailable in low-memory mode."
+              : "No mover data available."}
+          </div>
+        )}
+        {state.error && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+            {state.error}
+          </div>
+        )}
       </div>
 
-      <p className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-500">HOSE update at 14:30</p>
+      <p className="mt-2 text-center text-xs text-stone-500 dark:text-neutral-500">
+        {state.loading ? "Updating movers..." : "Source: /api/market-overview + /api/stocks"}
+      </p>
     </div>
   );
 }

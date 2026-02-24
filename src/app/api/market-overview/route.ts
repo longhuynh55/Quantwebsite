@@ -15,6 +15,15 @@ import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 const RATE_LIMIT_MAX = 100;
 const MIN_DATA_QUALITY_RATIO = 0.95;
 const marketOverviewApiLogger = createLogger("api.market_overview");
+const MARKET_OVERVIEW_CACHE_TTL_MS = 15_000;
+
+type MarketOverviewCacheEntry = {
+  key: "full" | "low_memory";
+  expiresAt: number;
+  payload: Record<string, unknown>;
+};
+
+let marketOverviewCache: MarketOverviewCacheEntry | null = null;
 
 interface StockReturn {
   symbol: string;
@@ -127,6 +136,17 @@ export async function GET(request: Request) {
 
   try {
     const lowMemoryMode = isLowMemoryModeEnabled();
+    const cacheKey: MarketOverviewCacheEntry["key"] = lowMemoryMode ? "low_memory" : "full";
+    const now = Date.now();
+
+    if (marketOverviewCache && marketOverviewCache.key === cacheKey && marketOverviewCache.expiresAt > now) {
+      logger.info("cache.hit", { key: cacheKey, ttlMs: marketOverviewCache.expiresAt - now });
+      return NextResponse.json(marketOverviewCache.payload, {
+        headers: {
+          "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+        },
+      });
+    }
 
     if (lowMemoryMode) {
       const [metadata, indexData] = await Promise.all([
@@ -170,7 +190,7 @@ export async function GET(request: Request) {
       const mtdReturn = calculateMTDReturn(benchmarkSeries);
       const currentIndex = benchmarkSeries[benchmarkSeries.length - 1].close;
 
-      return NextResponse.json({
+      const payload = {
         totalStocks,
         avgVolume,
         benchmark: benchmarkSymbol,
@@ -185,6 +205,18 @@ export async function GET(request: Request) {
         excludedMissingAsOfCount: 0,
         excludedMissingPrevCount: 0,
         degradedMode: "low_memory",
+      } satisfies Record<string, unknown>;
+
+      marketOverviewCache = {
+        key: cacheKey,
+        expiresAt: now + MARKET_OVERVIEW_CACHE_TTL_MS,
+        payload,
+      };
+
+      return NextResponse.json(payload, {
+        headers: {
+          "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+        },
       });
     }
 
@@ -313,7 +345,7 @@ export async function GET(request: Request) {
     // Get current index value
     const currentIndex = benchmarkSeries[benchmarkSeries.length - 1].close;
 
-    return NextResponse.json({
+    const payload = {
       totalStocks,
       avgVolume,
       benchmark: benchmarkSymbol,
@@ -327,6 +359,18 @@ export async function GET(request: Request) {
       excludedInactiveCount,
       excludedMissingAsOfCount,
       excludedMissingPrevCount,
+    } satisfies Record<string, unknown>;
+
+    marketOverviewCache = {
+      key: cacheKey,
+      expiresAt: now + MARKET_OVERVIEW_CACHE_TTL_MS,
+      payload,
+    };
+
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+      },
     });
   } catch (error) {
     logger.error("request.failed", {

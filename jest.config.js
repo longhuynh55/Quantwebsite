@@ -11,6 +11,7 @@ const config = {
   displayName: 'quant-website',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  modulePathIgnorePatterns: ['<rootDir>/artifacts/', '<rootDir>/.wt-', '<rootDir>/.next-ci', '<rootDir>/.next-audit'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     // Handle CSS modules
@@ -30,7 +31,7 @@ const config = {
     '!src/**/__tests__/**',
     '!src/**/index.{ts,tsx}',
   ],
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/artifacts/', '<rootDir>/.wt-'],
   transformIgnorePatterns: [
     '/node_modules/(?!(@tanstack|lightweight-charts|technicalindicators)/)',
   ],

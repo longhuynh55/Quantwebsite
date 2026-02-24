@@ -72,8 +72,10 @@ export default function PortfolioPage() {
       showError("Limit reached", msg);
       return;
     }
-    if (newSymbol.trim() && !symbols.includes(newSymbol.toUpperCase())) {
-      setSymbols([...symbols, newSymbol.toUpperCase()]);
+    const normalized = newSymbol.trim().toUpperCase();
+    const hasSymbol = symbols.some((sym) => sym.trim().toUpperCase() === normalized);
+    if (normalized && !hasSymbol) {
+      setSymbols([...symbols, normalized]);
       setNewSymbol("");
       setError("");
     }

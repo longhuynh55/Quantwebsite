@@ -1,7 +1,7 @@
 # Composer Agent Weekly Status (Auto)
 
 ## Week Of
-- Date range: 2026-02-21
+- Date range: 2026-02-24
 - Owner: Auto Tracker
 
 ## Milestone Status Snapshot
@@ -14,6 +14,13 @@
 | AGT-04 | done | Backend + QA | P0 | Reliability hardening (rate limit, retries, budgets) |
 | AGT-05 | done | QA + Product | P0 | Eval + release gates (stable and automated) |
 | AGT-06 | done | QA + Product | P0 | Numeric fidelity expansion (beyond backtest) |
+| WEB-00 | done | Frontend + Infra | P0 | Build offline + distDir safe |
+| WEB-01 | done | Frontend | P0 | Lint/Jest ignore worktree artifacts |
+| WEB-02 | done | Frontend | P1 | Frontend functional bugfixes (portfolio/charts/importer) |
+| DATA-00 | done | Backend | P0 | Fix OHLCV data-quality cache flip |
+| PERF-00 | done | Backend + Frontend | P1 | Reduce request fan-out + cache market overview |
+| OPS-00 | done | Infra | P1 | App-prod hardening (non-root + prod parity knobs) |
+| CI-00 | done | Infra | P1 | CI: enforce lint/tsc/build + deterministic distDir |
 
 ## KPI Signals
 - Tool call success rate: n/a

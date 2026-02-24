@@ -9,14 +9,26 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".next-*/**",
     ".next-ci/**",
+    ".next-ci-*/**",
     ".next-ci-webpack/**",
     "out/**",
     "build/**",
+    // Nested worktrees (should never be linted as source)
+    ".wt-*/**",
+    ".wt*/**",
+    "**/.wt-*/**",
+    "**/.wt*/**",
     // Repo-local scratch files/directories (generated during eval/dev runs):
+    ".pw-*/**",
+    ".pw-test-results*/**",
     "_tmp*",
     "**/_tmp*",
     "tmp/**",
+    ".tmp/**",
+    "tmp-type-probe.js",
+    "tmp_qa/**",
     "artifacts/**",
     "playwright-report/**",
     "test-results/**",

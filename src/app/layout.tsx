@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Serif } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import "./landing.css";
 import "katex/dist/katex.min.css";
@@ -7,9 +7,17 @@ import { Toaster } from "@/components/ui/toast";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
 
-const notoSerif = Noto_Serif({
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "700"],
+const notoSerif = localFont({
+  src: [
+    { path: "../assets/fonts/noto-serif/NotoSerif-cyrillic-ext.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-cyrillic.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-greek-ext.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-greek.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-symbols.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-vietnamese.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-latin-ext.woff2", weight: "400 700", style: "normal" },
+    { path: "../assets/fonts/noto-serif/NotoSerif-latin.woff2", weight: "400 700", style: "normal" },
+  ],
   variable: "--font-serif",
   display: "swap",
 });

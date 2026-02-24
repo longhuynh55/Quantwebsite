@@ -934,16 +934,6 @@ async function loadOHLCVForSymbolFromCsv(dataDir: string, symbol: string): Promi
   }
 
   if (totalRows <= 0) {
-    if (dataQualityCache.ohlcv?.totalRows === 0) {
-      dataQualityCache.ohlcv = null;
-    }
-    datasetStatusCache.ohlcv = {
-      dataset: "ohlcv",
-      status: "unknown",
-      backend: "csv",
-      source,
-      updatedAt: new Date(),
-    };
     return [];
   }
 
@@ -1082,16 +1072,6 @@ async function loadOHLCVForSymbolsFromCsv(
   }
 
   if (totalRows <= 0) {
-    if (dataQualityCache.ohlcv?.totalRows === 0) {
-      dataQualityCache.ohlcv = null;
-    }
-    datasetStatusCache.ohlcv = {
-      dataset: "ohlcv",
-      status: "unknown",
-      backend: "csv",
-      source,
-      updatedAt: new Date(),
-    };
     return dataMap;
   }
 

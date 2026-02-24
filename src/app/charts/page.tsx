@@ -192,7 +192,7 @@ function ChartsContent() {
       timeframe: timeRange,
       filters: scopeFilters,
     });
-  }, [assistantWatchlistSymbols, queryWatchlistSymbols.length, setConversationScope, symbol, timeRange]);
+  }, [assistantWatchlistSymbols, queryWatchlistSymbols, setConversationScope, symbol, timeRange]);
 
   const [data, setData] = useState<StockPoint[]>([]);
   const [loading, setLoading] = useState(true);

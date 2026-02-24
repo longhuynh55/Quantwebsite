@@ -83,8 +83,9 @@ export function StrategyImporter({
       onImportSuccess?.(importedStrategy);
     } catch (error) {
       setStep("error");
-      setErrorMessage(error instanceof Error ? error.message : "Da xay ra loi khi sao chep chien luoc");
-      showError("Loi sao chep", errorMessage);
+      const message = error instanceof Error ? error.message : "Da xay ra loi khi sao chep chien luoc";
+      setErrorMessage(message);
+      showError("Loi sao chep", message);
     }
   };
 

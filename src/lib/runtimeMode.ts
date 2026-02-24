@@ -31,6 +31,8 @@ export function isLowMemoryModeEnabled(): boolean {
     return false;
   }
 
-  if (isProduction) return true;
+  // Default: only enable safe mode for production CSV deployments.
+  // Production DuckDB deployments should keep full features (e.g. factors ranking) enabled.
+  if (isProduction && csvBackend) return true;
   return false;
 }

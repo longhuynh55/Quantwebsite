@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "jest",
@@ -60,6 +60,8 @@
     "eval:assistant:ohlcv-stress": "node scripts/eval-assistant-ohlcv-stress.mjs",
     "eval:assistant:ohlcv:combo-noise": "node scripts/eval-assistant-ohlcv-combo-noise.mjs",
     "eval:assistant:fundamentals:hyper-noise": "node scripts/eval-assistant-fundamentals-hyper-noise-matrix.mjs",
+    "eval:assistant:metrics:stress": "node scripts/eval-assistant-metrics-stress-matrix.mjs",
+    "eval:assistant:criteria:v1": "node scripts/eval-assistant-criteria-v1.mjs",
     "eval:assistant:noise-gate": "node scripts/eval-assistant-noise-gate.mjs",
     "eval:ai-strategy:stability": "node scripts/eval-ai-strategy-stability.mjs",
     "eval:ai-strategy:stability:prod": "node scripts/eval-ai-strategy-stability.mjs --base-url http://localhost:3011 --runs 20 --max-failure-rate 0.05 --max-parse-failure-rate 0.02 --report artifacts/ai-strategy-stability-report.json",
@@ -108,6 +110,8 @@
     "docker:eval:assistant:ohlcv-stress": "docker compose run --rm smoke node scripts/eval-assistant-ohlcv-stress.mjs",
     "docker:eval:assistant:ohlcv:combo-noise": "docker compose run --rm smoke node scripts/eval-assistant-ohlcv-combo-noise.mjs",
     "docker:eval:assistant:fundamentals:hyper-noise": "docker compose run --rm smoke node scripts/eval-assistant-fundamentals-hyper-noise-matrix.mjs",
+    "docker:eval:assistant:metrics:stress": "docker compose run --rm smoke node scripts/eval-assistant-metrics-stress-matrix.mjs",
+    "docker:eval:assistant:criteria:v1": "docker compose run --rm smoke node scripts/eval-assistant-criteria-v1.mjs --base-url http://app:3000",
     "docker:eval:assistant:noise-gate": "docker compose run --rm smoke node scripts/eval-assistant-noise-gate.mjs",
     "docker:eval:assistant:backend-query-matrix": "docker compose run --rm smoke node scripts/debug-compare-backends.mjs --matrix true --mode compare --matrix-file scripts/backend-query-matrix.json --report-path artifacts/backend-query-matrix-report.json",
     "docker:eval:ai-strategy:stability:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-ai-strategy-stability.mjs --base-url http://app-prod:3000 --runs 20 --max-failure-rate 0.05 --max-parse-failure-rate 0.02 --report artifacts/ai-strategy-stability-report.json",
@@ -121,6 +125,8 @@
     "docker:eval:assistant:ohlcv-stress:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-ohlcv-stress.mjs",
     "docker:eval:assistant:ohlcv:combo-noise:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-ohlcv-combo-noise.mjs",
     "docker:eval:assistant:fundamentals:hyper-noise:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-fundamentals-hyper-noise-matrix.mjs",
+    "docker:eval:assistant:metrics:stress:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-metrics-stress-matrix.mjs",
+    "docker:eval:assistant:criteria:v1:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-criteria-v1.mjs --base-url http://app-prod:3000",
     "docker:eval:assistant:full:prod": "docker compose --profile prod run --rm smoke-prod node scripts/eval-assistant-comprehensive.mjs",
     "docker:qa:prod": "docker compose --profile prod run --rm qa-prod && pnpm run agent:track",
     "docker:qa:prod:api": "docker compose --profile prod run --rm -e SMOKE_INCLUDE_UI=false qa-prod",
@@ -142,7 +148,7 @@
     "landing:track": "node scripts/agent-progress-track.mjs sync --tracker docs/LANDING_INTEGRATION_TRACKER_V1.json --progress docs/LANDING_PROGRESS.md --report-path artifacts/landing-progress-report.json --board-path artifacts/landing-progress-board.md --weekly-path docs/LANDING_WEEKLY_STATUS_AUTO.md",
     "landing:track:set-status": "node scripts/agent-progress-track.mjs set-status --tracker docs/LANDING_INTEGRATION_TRACKER_V1.json --progress docs/LANDING_PROGRESS.md --report-path artifacts/landing-progress-report.json --board-path artifacts/landing-progress-board.md --weekly-path docs/LANDING_WEEKLY_STATUS_AUTO.md",
     "kb:lint": "node scripts/kb-lint.mjs",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "ANALYZE=true next build --webpack"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
