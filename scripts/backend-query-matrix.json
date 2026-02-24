@@ -1,0 +1,17 @@
+{
+  "version": "backend-query-matrix-v1",
+  "cases": [
+    { "id": "SNP_VNM_2024_05_28", "kind": "snapshot", "symbol": "VNM", "date": "2024-05-28" },
+    { "id": "SNP_FPT_2024_05_28", "kind": "snapshot", "symbol": "FPT", "date": "2024-05-28" },
+    { "id": "SNP_DHA_2024_05_28", "kind": "snapshot", "symbol": "DHA", "date": "2024-05-28" },
+    { "id": "SNP_VCB_2025_12_31", "kind": "snapshot", "symbol": "VCB", "date": "2025-12-31" },
+    { "id": "SNP_VNM_2020_01_02", "kind": "snapshot", "symbol": "VNM", "date": "2020-01-02" },
+    { "id": "RNK_CLOSE_2024_05_28_TOP10", "kind": "ranking", "date": "2024-05-28", "metric": "close", "order": "desc", "limit": 10 },
+    { "id": "RNK_VOLUME_2024_05_28_TOP10", "kind": "ranking", "date": "2024-05-28", "metric": "volume", "order": "desc", "limit": 10 },
+    { "id": "RNK_CLOSE_2024_05_28_TOP5_ASC", "kind": "ranking", "date": "2024-05-28", "metric": "close", "order": "asc", "limit": 5 },
+    { "id": "RNK_VOLUME_2025_12_31_TOP10", "kind": "ranking", "date": "2025-12-31", "metric": "volume", "order": "desc", "limit": 10 },
+    { "id": "RNK_CLOSE_2020_01_02_TOP8", "kind": "ranking", "date": "2020-01-02", "metric": "close", "order": "desc", "limit": 8 },
+    { "id": "RNK_OPEN_2024_05_28_TOP10", "kind": "ranking", "date": "2024-05-28", "metric": "open", "order": "desc", "limit": 10 },
+    { "id": "RNK_LOW_2024_05_28_TOP10_ASC", "kind": "ranking", "date": "2024-05-28", "metric": "low", "order": "asc", "limit": 10 }
+  ]
+}

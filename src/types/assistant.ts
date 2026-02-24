@@ -179,10 +179,13 @@ export interface AssistantResponseMeta {
   toolStatusSummary?: string;
   queryIntent?: string;
   queryPlanSummary?: string;
+  queryPlanConfidence?: "high" | "medium" | "low";
+  queryPlanSource?: "signal" | "filter" | "context" | "fallback";
   plannedToolCount?: number;
   plannedTools?: AssistantToolName[];
   queryPlanFilters?: Record<string, unknown>;
   queryPlanSymbols?: string[];
+  groundingSource?: string;
   featureFlags?: AssistantFeatureFlagSnapshot;
   semantic?: AssistantSemanticMeta;
 }

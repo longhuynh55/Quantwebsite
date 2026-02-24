@@ -44,6 +44,7 @@ export interface GroundingResult {
   citations: AssistantCitation[];
   usedTools: AssistantToolUsage[];
   messageBlocks: AssistantMessageBlock[];
+  groundingSource?: string;
 }
 
 interface ToolRunOutput {
@@ -143,6 +144,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
           requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
         }),
       ],
+      groundingSource: "none",
     };
   }
 
@@ -308,6 +310,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     skippedTools,
     factsCount: facts.length,
     citationCount: citations.length,
+    groundingSource: deriveGroundingSource(citations, usedTools),
     durationMs: Date.now() - startedAt,
   });
 
@@ -316,6 +319,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     citations: dedupeCitations(citations),
     usedTools,
     messageBlocks: messageBlocks.slice(0, MAX_MESSAGE_BLOCKS),
+    groundingSource: deriveGroundingSource(citations, usedTools),
   };
 }
 
@@ -832,7 +836,11 @@ async function fetchStockUniverseSnapshot(
     ? Math.min(50, Math.max(1, Number(queryPlanFilters?.limit)))
     : null;
   const limit = limitFromPlan ?? (extractTopLimit(message, contextSnapshot, 10) ?? 10);
-  const requestedExchange = extractStockUniverseExchange(message, contextSnapshot);
+  const plannedExchange = queryPlanFilters?.exchange;
+  const requestedExchange =
+    plannedExchange === "HOSE" || plannedExchange === "HNX" || plannedExchange === "UPCOM"
+      ? plannedExchange
+      : extractStockUniverseExchange(message, contextSnapshot);
   const exchange = "HOSE";
   const icbFilter = extractIcbFilter(message, contextSnapshot);
 
@@ -1016,29 +1024,167 @@ async function fetchFundamentalSnapshot(
     };
   }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 45_000));
 
-  const incomeFields = extractStatementFields(payload.incomeStatement);
-  const balanceFields = extractStatementFields(payload.balanceSheet);
-  const cashFlowFields = extractStatementFields(payload.cashFlow);
+  const incomeSnapshot = extractStatementSnapshot(payload.incomeStatement);
+  const balanceSnapshot = extractStatementSnapshot(payload.balanceSheet);
+  const cashFlowSnapshot = extractStatementSnapshot(payload.cashFlow);
 
-  const revenue = getFirstNumericByHints(incomeFields, ['revenue', 'net_sales', 'sales', 'doanh thu']);
-  const netIncome = getFirstNumericByHints(incomeFields, ['net_profit_for_the_year', 'net_income', 'profit_after_tax', 'profit', 'loi nhuan']);
-  const totalAssets = getFirstNumericByHints(balanceFields, ['total_assets', 'assets', 'tong tai san']);
-  const opCashFlow = getFirstNumericByHints(cashFlowFields, ['operating_cash_flow', 'cash_flow_from_operating', 'cash flow', 'luu chuyen tien']);
-  const evidenceCount = countNumericEvidence([revenue, netIncome, totalAssets, opCashFlow]);
+  const revenue = getFirstNumericKeyByHints(incomeSnapshot.fields, [
+    "revenue",
+    "net_sales",
+    "sales",
+    "revenue_bn_vnd",
+    "net_sales_bn_vnd",
+    "sales_bn_vnd",
+    "doanh thu",
+  ]);
+  const netIncome = getFirstNumericKeyByHints(incomeSnapshot.fields, [
+    "net_profit_for_the_year",
+    "attributable_to_parent_company",
+    "profit_after_tax",
+    "net_profit",
+  ]);
+  const profitBeforeTax = getFirstNumericKeyByHints(incomeSnapshot.fields, [
+    "profit_before_tax",
+    "net_profit_loss_before_tax",
+  ]);
+  const eps = getFirstNumericKeyByHints(incomeSnapshot.fields, ["eps_basis", "eps"]);
+
+  const totalAssets = getFirstNumericKeyByHints(balanceSnapshot.fields, ["total_assets", "total_assets_bn_vnd"]);
+  const totalLiabilities = getFirstNumericKeyByHints(balanceSnapshot.fields, [
+    "liabilities",
+    "total_liabilities",
+    "liabilities_bn_vnd",
+    "total_liabilities_bn_vnd",
+  ]);
+  const equity = getFirstNumericKeyByHints(balanceSnapshot.fields, [
+    "owner_s_equity",
+    "equity",
+    "capital_and_reserves",
+    "owner_s_equity_bn_vnd",
+    "equity_bn_vnd",
+  ]);
+
+  const operatingCashFlow = getFirstNumericKeyByHints(cashFlowSnapshot.fields, [
+    "net_cash_inflows_outflows_from_operating_activities",
+    "net_cash_flows_from_operating_activities_before_bit",
+    "operating_cash_flow",
+    "cash_flow_from_operating",
+  ]);
+  const capex = getFirstNumericKeyByHints(cashFlowSnapshot.fields, ["purchase_of_fixed_assets", "capex"]);
+  const dividendsPaid = getFirstNumericKeyByHints(cashFlowSnapshot.fields, ["dividends_paid"]);
+
+  const evidenceCount = countNumericEvidence([
+    revenue?.value ?? null,
+    netIncome?.value ?? null,
+    profitBeforeTax?.value ?? null,
+    totalAssets?.value ?? null,
+    operatingCashFlow?.value ?? null,
+    eps?.value ?? null,
+  ]);
   const warnings = normalizeWarnings(payload.warnings);
   const availablePeriods = Array.isArray(payload.availablePeriods)
     ? payload.availablePeriods.filter((period): period is string => typeof period === "string")
     : [];
   const recentPeriods = availablePeriods.slice(-4);
 
+  const metricIntent = extractFundamentalMetricIntent(message);
+  const intentNote =
+    metricIntent === null
+      ? "Metric intent is ambiguous; returning a standard fundamentals snapshot."
+      : `Metric intent=${metricIntent}.`;
+
   const facts = [
-    `Fundamentals ${symbol}: statement=${statement}, requested_period=${requestedPeriod}, resolved_period=${payload.period ?? 'latest'}, available_periods=${availablePeriods.length}, latest_4_periods=${recentPeriods.join(",") || "n/a"}, confidence=${payload.confidence ?? 'n/a'}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}, revenue=${formatMaybeNumber(revenue)}, net_income=${formatMaybeNumber(netIncome)}, total_assets=${formatMaybeNumber(totalAssets)}, operating_cash_flow=${formatMaybeNumber(opCashFlow)}.`,
+    `Fundamentals ${symbol}: statement=${statement}, requested_period=${requestedPeriod}, resolved_period=${payload.period ?? "latest"}, available_periods=${availablePeriods.length}, latest_4_periods=${recentPeriods.join(",") || "n/a"}, confidence=${payload.confidence ?? "n/a"}, coverage_ratio=${formatMaybePercent(toNumber(payload.coverage?.coverageRatio))}.`,
+    `Fundamentals intent: ${intentNote}`,
   ];
+
+  const highlightRows: Array<{ metric: string; source: "is" | "bs" | "cf"; key: string; value: number }> = [];
+  const tryPush = (metric: string, source: "is" | "bs" | "cf", entry: { key: string; value: number } | null) => {
+    if (!entry) return;
+    highlightRows.push({ metric, source, key: entry.key, value: entry.value });
+  };
+
+  // Always include a small baseline set, then add intent-specific metric if missing.
+  tryPush("Revenue", "is", revenue);
+  tryPush("Net Income", "is", netIncome);
+  tryPush("Profit Before Tax", "is", profitBeforeTax);
+  tryPush("Total Assets", "bs", totalAssets);
+  tryPush("Total Liabilities", "bs", totalLiabilities);
+  tryPush("Equity", "bs", equity);
+  tryPush("Operating Cash Flow", "cf", operatingCashFlow);
+  tryPush("Capex", "cf", capex);
+  tryPush("Dividends Paid", "cf", dividendsPaid);
+  tryPush("EPS", "is", eps);
+
+  const pickForIntent = (): { metric: string; source: "is" | "bs" | "cf"; key: string; value: number } | null => {
+    if (!metricIntent) return null;
+    if (metricIntent === "revenue") return revenue ? { metric: "Revenue", source: "is", ...revenue } : null;
+    if (metricIntent === "net_income") return netIncome ? { metric: "Net Income", source: "is", ...netIncome } : null;
+    if (metricIntent === "profit_before_tax") return profitBeforeTax ? { metric: "Profit Before Tax", source: "is", ...profitBeforeTax } : null;
+    if (metricIntent === "total_assets") return totalAssets ? { metric: "Total Assets", source: "bs", ...totalAssets } : null;
+    if (metricIntent === "total_liabilities") return totalLiabilities ? { metric: "Total Liabilities", source: "bs", ...totalLiabilities } : null;
+    if (metricIntent === "equity") return equity ? { metric: "Equity", source: "bs", ...equity } : null;
+    if (metricIntent === "operating_cash_flow") return operatingCashFlow ? { metric: "Operating Cash Flow", source: "cf", ...operatingCashFlow } : null;
+    if (metricIntent === "capex") return capex ? { metric: "Capex", source: "cf", ...capex } : null;
+    if (metricIntent === "dividends_paid") return dividendsPaid ? { metric: "Dividends Paid", source: "cf", ...dividendsPaid } : null;
+    if (metricIntent === "eps") return eps ? { metric: "EPS", source: "is", ...eps } : null;
+    return null;
+  };
+
+  const intentPick = pickForIntent();
+  if (intentPick && !highlightRows.some((row) => row.metric === intentPick.metric)) {
+    highlightRows.unshift(intentPick);
+  }
+
+  const labelsBySource = {
+    is: incomeSnapshot.labels,
+    bs: balanceSnapshot.labels,
+    cf: cashFlowSnapshot.labels,
+  } as const;
+
+  const summarized = highlightRows
+    .slice(0, 6)
+    .map((row) => {
+      const formatted = formatFundamentalNumberForOutput(row.key, labelsBySource[row.source], row.value);
+      return `${row.metric}=${formatted.display}`;
+    })
+    .join(", ");
+  if (summarized) {
+    facts.push(`Fundamentals key metrics ${symbol}: ${summarized}.`);
+  }
+
   if (warnings.length > 0) {
     facts.push(`Fundamentals warnings ${symbol}: ${warnings.join(" | ")}`);
   }
 
   const messageBlocks: AssistantMessageBlock[] = [];
+  if (highlightRows.length > 0) {
+    const rows = highlightRows
+      .slice(0, 10)
+      .map((row) => {
+        const formatted = formatFundamentalNumberForOutput(row.key, labelsBySource[row.source], row.value);
+        const wantsMoney = row.metric !== "EPS";
+        const bnValue =
+          wantsMoney
+            ? (formatted.bnVnd ?? (Math.round((row.value / 1e9) * 1000) / 1000))
+            : null;
+        return [
+          payload.period ?? "latest",
+          row.metric,
+          wantsMoney ? "Bn VND" : formatted.unit,
+          bnValue,
+          formatted.raw !== null ? Math.round(formatted.raw) : null,
+          row.source.toUpperCase(),
+        ] as Array<string | number | null>;
+      });
+
+    messageBlocks.push({
+      type: "table",
+      title: `Fundamentals Snapshot (${symbol})`,
+      columns: ["Period", "Metric", "Unit", "Value (Bn VND)", "Raw", "Statement"],
+      rows,
+    });
+  }
   if (warnings.length > 0) {
     messageBlocks.push({
       type: "text",
@@ -1052,7 +1198,7 @@ async function fetchFundamentalSnapshot(
     citations: [buildCitation(`fundamental-${symbol}`, `Fundamentals snapshot for ${symbol}`, endpoint, symbol, payload.period)],
     messageBlocks,
     evidenceCount,
-    warningCount: warnings.length,
+    warningCount: warnings.length + (metricIntent === null ? 1 : 0),
     requestParams: {
       symbol,
       statement,
@@ -1959,6 +2105,57 @@ function extractStatementFields(value: unknown): Record<string, unknown> {
   return record;
 }
 
+function extractStatementSnapshot(value: unknown): { fields: Record<string, unknown>; labels: Record<string, string> } {
+  if (!value || typeof value !== "object") return { fields: {}, labels: {} };
+  const record = value as Record<string, unknown>;
+  const fields = extractStatementFields(record);
+  const labelsRaw = record.labels;
+  const labels =
+    labelsRaw && typeof labelsRaw === "object" && !Array.isArray(labelsRaw)
+      ? Object.fromEntries(
+          Object.entries(labelsRaw as Record<string, unknown>)
+            .filter(([k, v]) => typeof k === "string" && typeof v === "string")
+            .map(([k, v]) => [k, String(v)])
+        )
+      : {};
+  return { fields, labels };
+}
+
+function isBnVndField(key: string, labels: Record<string, string>): boolean {
+  const normalizedKey = normalizeForKeywordMatch(key);
+  if (normalizedKey.includes("_bn_vnd")) return true;
+  const label = labels[key];
+  if (typeof label === "string" && /bn\.?\s*vnd/i.test(label)) return true;
+  return false;
+}
+
+function formatFundamentalNumberForOutput(
+  key: string,
+  labels: Record<string, string>,
+  value: number | null
+): { display: string; raw: number | null; bnVnd: number | null; unit: "Bn VND" | "VND" } {
+  if (value === null) return { display: "n/a", raw: null, bnVnd: null, unit: "VND" };
+  const shouldBn =
+    isBnVndField(key, labels)
+    || Math.abs(value) >= 1e9;
+  const bnVnd = shouldBn ? value / 1e9 : null;
+  if (bnVnd !== null && Number.isFinite(bnVnd)) {
+    const rounded = Math.round(bnVnd * 1000) / 1000;
+    return {
+      display: `${rounded.toLocaleString("en-US", { maximumFractionDigits: 3 })} Bn VND (raw=${Math.round(value)})`,
+      raw: value,
+      bnVnd: rounded,
+      unit: "Bn VND",
+    };
+  }
+  return {
+    display: `${value.toLocaleString("en-US", { maximumFractionDigits: 3 })} VND`,
+    raw: value,
+    bnVnd: null,
+    unit: "VND",
+  };
+}
+
 function getFirstNumericByHints(fields: Record<string, unknown>, hints: string[]): number | null {
   const entries = Object.entries(fields);
   const normalizedHints = hints.map((hint) => normalizeForKeywordMatch(hint));
@@ -1995,6 +2192,47 @@ function getFirstNumericByHints(fields: Record<string, unknown>, hints: string[]
   }
 
   return bestScore > Number.NEGATIVE_INFINITY ? bestValue : null;
+}
+
+function getFirstNumericKeyByHints(
+  fields: Record<string, unknown>,
+  hints: string[]
+): { key: string; value: number } | null {
+  const entries = Object.entries(fields);
+  const normalizedHints = hints.map((hint) => normalizeForKeywordMatch(hint));
+  const noisyPattern = /(yoy|qoq|margin|ratio|pct|percent|growth|change)/;
+
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let best: { key: string; value: number } | null = null;
+  for (const [key, value] of entries) {
+    const numeric = toNumber(value);
+    if (numeric === null) continue;
+    const normalizedKey = normalizeForKeywordMatch(key);
+
+    let score = Number.NEGATIVE_INFINITY;
+    for (const hint of normalizedHints) {
+      if (!hint) continue;
+      if (normalizedKey === hint) {
+        score = Math.max(score, 120);
+      } else if (normalizedKey.startsWith(`${hint}_`)) {
+        score = Math.max(score, 90);
+      } else if (normalizedKey.includes(hint)) {
+        score = Math.max(score, 60);
+      }
+    }
+
+    if (score === Number.NEGATIVE_INFINITY) continue;
+    if (noisyPattern.test(normalizedKey)) {
+      score -= 80;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = { key, value: numeric };
+    }
+  }
+
+  return bestScore > Number.NEGATIVE_INFINITY ? best : null;
 }
 
 function sanitizeToolErrorMessage(value: string): string {
@@ -2095,6 +2333,82 @@ interface FinancialPeriodIntent {
   asksTrend: boolean;
 }
 
+type FundamentalMetricIntent =
+  | "revenue"
+  | "net_income"
+  | "profit_before_tax"
+  | "total_assets"
+  | "total_liabilities"
+  | "equity"
+  | "operating_cash_flow"
+  | "capex"
+  | "dividends_paid"
+  | "eps";
+
+function extractFundamentalMetricIntent(message: string): FundamentalMetricIntent | null {
+  const normalized = normalizeForKeywordMatch(message);
+  if (!normalized) return null;
+
+  if (/\b(eps|lai_co_phieu)\b/.test(normalized)) return "eps";
+  if (normalized.includes("doanh thu") || normalized.includes("revenue") || normalized.includes("net sales")) {
+    return "revenue";
+  }
+  if (
+    normalized.includes("pbt")
+    || normalized.includes("truoc thue")
+    || normalized.includes("profit_before_tax")
+    || normalized.includes("loi nhuan truoc thue")
+  ) {
+    return "profit_before_tax";
+  }
+  if (
+    normalized.includes("lnst")
+    || normalized.includes("sau thue")
+    || normalized.includes("net income")
+    || normalized.includes("net_profit_for_the_year")
+    || normalized.includes("loi nhuan sau thue")
+  ) {
+    return "net_income";
+  }
+  if (
+    normalized.includes("tong tai san")
+    || normalized.includes("total assets")
+    || normalized.includes("total_assets")
+  ) {
+    return "total_assets";
+  }
+  if (
+    normalized.includes("no phai tra")
+    || normalized.includes("tong no")
+    || normalized.includes("liabilities")
+    || normalized.includes("total_liabilities")
+  ) {
+    return "total_liabilities";
+  }
+  if (
+    normalized.includes("von chu so huu")
+    || normalized.includes("von chu")
+    || normalized.includes("equity")
+    || normalized.includes("owner_s_equity")
+  ) {
+    return "equity";
+  }
+  if (
+    normalized.includes("dong tien hoat dong")
+    || normalized.includes("luu chuyen tien te tu hoat dong")
+    || normalized.includes("operating cash flow")
+    || normalized.includes("operating_cash_flow")
+  ) {
+    return "operating_cash_flow";
+  }
+  if (normalized.includes("capex") || normalized.includes("chi tieu von") || normalized.includes("purchase_of_fixed_assets")) {
+    return "capex";
+  }
+  if (normalized.includes("co tuc") || normalized.includes("dividend")) return "dividends_paid";
+
+  return null;
+}
+
 function extractFinancialPeriodIntent(
   message: string,
   contextSnapshot?: AssistantContextSnapshot
@@ -2152,6 +2466,12 @@ function normalizeQuarterPeriod(value: unknown): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
+  const yearOnly = /^(\d{4})$/.exec(trimmed);
+  if (yearOnly) return `${yearOnly[1]}Q4`;
+
+  const fy = /^FY[\s/-]*(\d{4})$/i.exec(trimmed);
+  if (fy) return `${fy[1]}Q4`;
+
   const matchA = /^(\d{4})\s*Q([1-4])$/i.exec(trimmed);
   if (matchA) return `${matchA[1]}Q${matchA[2]}`;
 
@@ -2166,6 +2486,28 @@ function extractQuarterPeriodFromMessage(message: string): string | null {
 
   const matchB = /\bQ([1-4])[\s/-]*(20\d{2})\b/i.exec(message);
   if (matchB) return `${matchB[2]}Q${matchB[1]}`;
+
+  const fiscalYear = /\b(?:fy|fiscal\s*year)[\s/-]*(20\d{2})\b/i.exec(message);
+  if (fiscalYear) return `${fiscalYear[1]}Q4`;
+
+  // Only treat a bare year as a financial period when the user is clearly asking fundamentals.
+  const normalized = normalizeForKeywordMatch(message);
+  const hasFundamentalsSignal = [
+    "bctc",
+    "bctn",
+    "lctt",
+    "bao cao tai chinh",
+    "income statement",
+    "balance sheet",
+    "cash flow",
+    "doanh thu",
+    "loi nhuan",
+    "eps",
+  ].some((keyword) => normalized.includes(keyword));
+  if (hasFundamentalsSignal) {
+    const yearOnly = /\b(20\d{2})\b/.exec(message);
+    if (yearOnly) return `${yearOnly[1]}Q4`;
+  }
   return null;
 }
 
@@ -2755,6 +3097,14 @@ function dedupeCitations(citations: AssistantCitation[]): AssistantCitation[] {
     unique.push(citation);
   }
   return unique;
+}
+
+function deriveGroundingSource(citations: AssistantCitation[], usedTools: AssistantToolUsage[]): string {
+  const firstEndpoint = citations.find((citation) => typeof citation.endpoint === "string" && citation.endpoint.length > 0)?.endpoint;
+  if (firstEndpoint) return firstEndpoint;
+  const firstSuccessfulTool = usedTools.find((tool) => tool.status === "success")?.name;
+  if (firstSuccessfulTool) return `tool:${firstSuccessfulTool}`;
+  return "none";
 }
 
 function toNumber(value: unknown): number | null {

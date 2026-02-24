@@ -49,6 +49,7 @@ describe("buildAssistantQueryPlan exchange/limit normalization", () => {
     });
 
     expect(plan.intent).toBe("market");
+    expect(plan.source).toBe("signal");
     expect(plan.steps.some((step) => step.tool === "marketSnapshot")).toBe(true);
     expect(plan.steps.some((step) => step.tool === "fundamentalSnapshot")).toBe(false);
   });
@@ -63,5 +64,17 @@ describe("buildAssistantQueryPlan exchange/limit normalization", () => {
     expect(plan.intent).toBe("fundamentals");
     expect(plan.symbols).toContain("VNM");
     expect(plan.symbols).not.toContain("MOI");
+    expect(plan.source).toBe("signal");
+  });
+
+  it("marks ambiguous metric fallback source explicitly", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "PE hien tai la bao nhieu?",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.source).toBe("fallback");
+    expect(plan.summary).toContain("source=fallback");
   });
 });

@@ -103,7 +103,41 @@ const NUMERIC_KEYWORDS = [
   "ti le",
   "phan tram",
 ];
+const RECOMMENDATION_KEYWORDS = [
+  "khuyen nghi",
+  "goi y",
+  "nen mua",
+  "nen ban",
+  "nen giu",
+  "de xuat",
+  "recommend",
+  "recommendation",
+  "actionable",
+  "allocate",
+  "rebalance",
+  "entry",
+  "exit",
+  "stoploss",
+  "take profit",
+];
 const INVALID_TICKER_TOKENS = new Set(["API", "JSON", "HTTP", "HTTPS", "CSV", "OHLC", "OHLCV"]);
+const NON_SYMBOL_POLICY_TOKENS = new Set([
+  "BCTC",
+  "BCTN",
+  "LCTT",
+  "BCDKT",
+  "KQKD",
+  "LNST",
+  "EPS",
+  "PBT",
+  "OCF",
+  "CFO",
+  "FCF",
+  "ROE",
+  "ROA",
+  "PE",
+  "PB",
+]);
 const PRICE_METRIC_HINTS = [
   "close",
   "open",
@@ -171,9 +205,11 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
   }
   const requiredSignals = resolveRequiredSignals(input);
   const numericIntent = isNumericIntent(normalizedMessage, input.contextSnapshot, requiredSignals);
+  const recommendationIntent = isRecommendationIntent(normalizedMessage, input.queryPlan);
+  const strictGroundingIntent = numericIntent || recommendationIntent;
 
-  const enforcementApplies = shouldApplyEnforcement(mode, numericIntent, input.contextSnapshot, requiredSignals);
-  if (!numericIntent) {
+  const enforcementApplies = shouldApplyEnforcement(mode, strictGroundingIntent, input.contextSnapshot, requiredSignals);
+  if (!strictGroundingIntent) {
     return {
       mode,
       status: "ok",
@@ -200,6 +236,22 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
       groundingRequired: true,
       groundingSatisfied: true,
       shouldBypassLlm: false,
+      shadowBlocked: false,
+    };
+  }
+
+  if (recommendationIntent) {
+    const fallbackMessage = buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason);
+    return {
+      mode,
+      status: "fallback",
+      reasonCode: effectiveFailure.reasonCode,
+      reason: effectiveFailure.reason,
+      dataConfidence: "low",
+      groundingRequired: true,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
       shadowBlocked: false,
     };
   }
@@ -336,6 +388,19 @@ function shouldApplyEnforcement(
     return HIGH_RISK_PAGES.has(contextSnapshot?.page ?? "home");
   }
   return false;
+}
+
+function isRecommendationIntent(
+  messageLower: string,
+  queryPlan: AssistantQueryPlan | undefined
+): boolean {
+  if (RECOMMENDATION_KEYWORDS.some((keyword) => messageLower.includes(keyword))) return true;
+  const riskyIntent = queryPlan?.intent;
+  return riskyIntent === "valuation"
+    || riskyIntent === "valuation_ranking"
+    || riskyIntent === "risk"
+    || riskyIntent === "backtesting"
+    || riskyIntent === "factor";
 }
 
 function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: GroundingResult): { reasonCode: PolicyReasonCode; reason: string } | null {
@@ -618,6 +683,9 @@ function normalizeSymbolToken(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,8}$/.test(normalized)) return null;
+  if (NON_SYMBOL_POLICY_TOKENS.has(normalized)) return null;
+  if (/^Q[1-4]?$/.test(normalized)) return null;
+  if (/^FY\d{2,4}$/.test(normalized)) return null;
   return normalized;
 }
 

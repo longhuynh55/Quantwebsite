@@ -24,6 +24,7 @@ export interface AssistantQueryPlanFilters {
   date?: string;
   from?: string;
   to?: string;
+  exchange?: "HOSE" | "HNX" | "UPCOM";
   icb?: string;
   icbLevel?: "2" | "3" | "4";
   statement?: "all" | "bs" | "is" | "cf";
@@ -42,6 +43,7 @@ export interface AssistantQueryPlanStep {
 export interface AssistantQueryPlan {
   intent: AssistantQueryIntent;
   confidence: "high" | "medium" | "low";
+  source: "signal" | "filter" | "context" | "fallback";
   symbols: string[];
   filters: AssistantQueryPlanFilters;
   steps: AssistantQueryPlanStep[];
@@ -225,11 +227,13 @@ export function buildAssistantQueryPlan(input: BuildAssistantQueryPlanInput): As
   );
   const steps = buildSteps(requiredSignals.map((item) => item.tool), intent, symbols);
   const confidence = resolvePlanConfidence(requiredSignals.length, symbols.length, filters, ambiguousMetricFallback);
-  const summary = buildSummary(intent, symbols, filters, steps, ambiguousMetricFallback);
+  const source = resolvePlanSource(requiredSignals.length, filters, input.contextSnapshot, ambiguousMetricFallback);
+  const summary = buildSummary(intent, symbols, filters, steps, ambiguousMetricFallback, source);
 
   return {
     intent,
     confidence,
+    source,
     symbols,
     filters,
     steps,
@@ -453,9 +457,11 @@ function buildSummary(
   symbols: string[],
   filters: AssistantQueryPlanFilters,
   steps: AssistantQueryPlanStep[],
-  ambiguousMetricFallback: boolean
+  ambiguousMetricFallback: boolean,
+  source: "signal" | "filter" | "context" | "fallback"
 ): string {
   const parts: string[] = [`intent=${intent}`];
+  parts.push(`source=${source}`);
   if (ambiguousMetricFallback) {
     parts.push("fallback=ambiguous_metric");
   }
@@ -481,6 +487,29 @@ function buildSummary(
     parts.push(`tools=${steps.map((step) => step.tool).join(">")}`);
   }
   return parts.join(" | ");
+}
+
+function resolvePlanSource(
+  requiredSignalCount: number,
+  filters: AssistantQueryPlanFilters,
+  contextSnapshot: AssistantContextSnapshot | undefined,
+  ambiguousMetricFallback: boolean
+): "signal" | "filter" | "context" | "fallback" {
+  if (ambiguousMetricFallback) return "fallback";
+  if (requiredSignalCount > 0) return "signal";
+  const hasFilterSignal = [
+    filters.date,
+    filters.from,
+    filters.to,
+    filters.exchange,
+    filters.icb,
+    filters.metric,
+    filters.statement,
+    filters.limit,
+  ].some((value) => value !== undefined && value !== null);
+  if (hasFilterSignal) return "filter";
+  if (contextSnapshot?.page && contextSnapshot.page !== "home") return "context";
+  return "fallback";
 }
 
 function shouldApplyAmbiguousMetricFallback(
@@ -587,6 +616,7 @@ function extractFilters(
   const icbRaw = String(filters?.icb ?? filters?.industry ?? filters?.sector ?? "").trim();
   const icb = icbRaw.length > 0 ? icbRaw.slice(0, 80) : inferIcbHint(normalizedMessage);
   const icbLevel = extractIcbLevel(filters, normalizedMessage);
+  const exchange = extractExchange(filters, normalizedMessage);
   const statement = extractStatement(filters, normalizedMessage);
   const metric = extractMetric(filters, normalizedMessage);
   const order = extractOrder(filters, normalizedMessage);
@@ -596,6 +626,7 @@ function extractFilters(
     date: date || undefined,
     from: from || undefined,
     to: to || undefined,
+    exchange,
     icb: icb || undefined,
     icbLevel,
     statement,
@@ -603,6 +634,24 @@ function extractFilters(
     order,
     limit: limit ?? undefined,
   };
+}
+
+function extractExchange(
+  filters: Record<string, unknown> | undefined,
+  normalizedMessage: string
+): "HOSE" | "HNX" | "UPCOM" | undefined {
+  const fromFilter = normalizeForKeywordMatch(String(filters?.exchange ?? filters?.market ?? filters?.san ?? ""));
+  const combined = `${fromFilter} ${normalizedMessage}`.trim();
+  const mentionsHose = combined.includes("hose") || combined.includes("hsx") || combined.includes("ho chi minh");
+  const mentionsHnx = combined.includes("hnx") || combined.includes("ha noi");
+  const mentionsUpcom = combined.includes("upcom") || combined.includes("up com");
+  const negatesHnx = /\b(khong|ko|not)\s+(?:phai\s+)?hnx\b/.test(combined);
+  const negatesUpcom = /\b(khong|ko|not)\s+(?:phai\s+)?up\s*com\b/.test(combined);
+
+  if (mentionsHnx && !negatesHnx) return "HNX";
+  if (mentionsUpcom && !negatesUpcom) return "UPCOM";
+  if (mentionsHose) return "HOSE";
+  return undefined;
 }
 
 function extractDateInMessage(message: string): string | null {

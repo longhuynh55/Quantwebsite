@@ -156,12 +156,22 @@ export async function POST(request: NextRequest) {
     logger.debug('query_plan.generated', {
       intent: queryPlan.intent,
       confidence: queryPlan.confidence,
+      source: queryPlan.source,
+      summary: queryPlan.summary,
       plannedToolCount: queryPlan.steps.length,
       plannedTools: queryPlan.steps.map((step) => step.tool),
+    });
+    logger.info("query_plan.summary", {
+      intent: queryPlan.intent,
+      confidence: queryPlan.confidence,
+      source: queryPlan.source,
+      summary: queryPlan.summary,
     });
     const planContextMeta = {
       queryPlanFilters: queryPlan.filters as Record<string, string | number | undefined>,
       queryPlanSymbols: queryPlan.symbols.length > 0 ? queryPlan.symbols : undefined,
+      queryPlanConfidence: queryPlan.confidence,
+      queryPlanSource: queryPlan.source,
     };
 
     if (!message) {
@@ -223,6 +233,7 @@ export async function POST(request: NextRequest) {
         policyReasonCode: "non_hose_scope_guard",
         groundedFactsCount: grounding.facts.length,
         citationCount: responseCitations.length,
+        groundingSource: grounding.groundingSource ?? "none",
         toolStatusSummary,
         queryIntent: queryPlan.intent,
         queryPlanSummary: queryPlan.summary,
@@ -249,6 +260,7 @@ export async function POST(request: NextRequest) {
       policyReasonCode: policy.reasonCode,
       groundedFactsCount: grounding.facts.length,
       citationCount: responseCitations.length,
+      groundingSource: grounding.groundingSource ?? "none",
       toolStatusSummary,
       queryIntent: queryPlan.intent,
       queryPlanSummary: queryPlan.summary,
