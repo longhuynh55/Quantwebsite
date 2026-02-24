@@ -44,6 +44,13 @@ pnpm run dev
 
 Open: `http://localhost:3000`
 
+## Deploy and share
+
+- `Railway` (recommended): uses `railway.toml` + `Dockerfile`
+- `Render` (backup): uses `render.yaml` + `Dockerfile`
+- Full runbook: `docs/DEPLOY_SHARE_RUNBOOK.md`
+- For DuckDB-first cloud deploy, use `Dockerfile.duckdb`
+
 ## Essential commands
 
 - `pnpm run dev`: start local dev server

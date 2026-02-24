@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: quantvn-strategy-forge
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /api/health/data?probe=true&includeFundamentals=false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: DATA_DIR
+        value: /app/public/data
+      - key: DATA_BACKEND
+        value: csv
+      - key: DATA_BACKEND_STRICT
+        value: "false"
+      - key: DATA_DUCKDB_PATH
+        value: /app/public/data/quant_data.duckdb
+      - key: ASSISTANT_PROVIDER_PRIORITY
+        value: openrouter,glm,fallback
+      - key: ASSISTANT_OPENROUTER_ONLY
+        value: "true"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GLM_API_KEY
+        sync: false
+
