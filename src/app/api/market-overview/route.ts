@@ -10,6 +10,7 @@ import {
 import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } from "@/lib/dataPolicy";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
+import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 const RATE_LIMIT_MAX = 100;
 const MIN_DATA_QUALITY_RATIO = 0.95;
@@ -125,6 +126,68 @@ export async function GET(request: Request) {
   }
 
   try {
+    const lowMemoryMode = isLowMemoryModeEnabled();
+
+    if (lowMemoryMode) {
+      const [metadata, indexData] = await Promise.all([
+        loadStockMetadata(),
+        loadIndexData(),
+      ]);
+
+      const metadataQualityError = getDataQualityError("stockMetadata");
+      if (metadataQualityError) {
+        return NextResponse.json({ error: metadataQualityError }, { status: 503 });
+      }
+
+      const indexQualityError = getDataQualityError("index");
+      if (indexQualityError) {
+        return NextResponse.json({ error: indexQualityError }, { status: 503 });
+      }
+
+      const totalStocks = metadata.length;
+      const avgVolume = totalStocks > 0
+        ? metadata.reduce((sum, s) => sum + (s.avgVolume || 0), 0) / totalStocks
+        : 0;
+      const excludedInactiveCount = metadata.reduce(
+        (count, stock) => count + (stock.status.toUpperCase() !== "ACTIVE" ? 1 : 0),
+        0
+      );
+
+      const preferredBenchmarks = [DEFAULT_BENCHMARK_SYMBOL, "VN100", "VN30"];
+      const benchmarkSymbol =
+        preferredBenchmarks.find((symbol) => indexData.some((d) => d.symbol === symbol)) ??
+        indexData[0]?.symbol ??
+        DEFAULT_BENCHMARK_SYMBOL;
+      const benchmarkSeries = indexData
+        .filter((d) => d.symbol === benchmarkSymbol)
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      if (benchmarkSeries.length === 0) {
+        return NextResponse.json({ error: "No benchmark series available" }, { status: 503 });
+      }
+
+      const marketTrend = getRecentMarketTrend(benchmarkSeries, 30);
+      const mtdReturn = calculateMTDReturn(benchmarkSeries);
+      const currentIndex = benchmarkSeries[benchmarkSeries.length - 1].close;
+
+      return NextResponse.json({
+        totalStocks,
+        avgVolume,
+        benchmark: benchmarkSymbol,
+        topGainers: [],
+        topLosers: [],
+        marketTrend,
+        mtdReturn,
+        currentIndex,
+        eligibleStocks: 0,
+        excludedStaleCount: 0,
+        excludedInactiveCount,
+        excludedMissingAsOfCount: 0,
+        excludedMissingPrevCount: 0,
+        degradedMode: "low_memory",
+      });
+    }
+
     // Load all data in parallel
     const [metadata, ohlcvData, indexData] = await Promise.all([
       loadStockMetadata(),

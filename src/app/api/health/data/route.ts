@@ -18,6 +18,7 @@ import { loadRuntimeDataManifest } from "@/lib/dataManifest";
 import { getFundamentalsSourceFiles } from "@/lib/fundamentals";
 import { queryDuckDbRows } from "@/lib/duckdbClient";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 const MIN_DATA_QUALITY_RATIO = 0.95;
 const RATE_LIMIT_WINDOW_MS = 60000;
@@ -362,6 +363,47 @@ export async function GET(request: Request) {
         dataDir,
         manifest: buildManifestSnapshot(manifest),
         checks,
+      },
+      { status: ok ? 200 : 503 }
+    );
+  }
+
+  const lowMemoryMode = isLowMemoryModeEnabled();
+  if (lowMemoryMode) {
+    const [stockMetadata, indexData] = await Promise.all([
+      loadStockMetadata(),
+      loadIndexData(),
+    ]);
+    const checks = await runProbeChecks(resolvedBackendStatus, includeFundamentals);
+    const checksOk = checks.every((check) => check.ok);
+    const datasets = {
+      stockMetadata: buildDatasetHealth("stockMetadata", stockMetadata.length),
+      ohlcv: buildDatasetHealth("ohlcv", 0),
+      index: buildDatasetHealth("index", indexData.length),
+    };
+    const ok = checksOk && datasets.stockMetadata.ok && datasets.index.ok;
+
+    return NextResponse.json(
+      {
+        ok,
+        mode: "full",
+        degradedMode: "low_memory",
+        timestamp: new Date().toISOString(),
+        durationMs: Date.now() - startedAt,
+        backend: {
+          ok: true,
+          ...resolvedBackendStatus,
+        },
+        dataDir,
+        manifest: buildManifestSnapshot(manifest),
+        checks,
+        datasets,
+        fundamentals: {
+          checked: includeFundamentals,
+          ok: !includeFundamentals || checks.filter((check) => check.name.startsWith("fundamentals:")).every((check) => check.ok),
+          sourceFiles: null,
+          error: null,
+        },
       },
       { status: ok ? 200 : 503 }
     );

@@ -11,6 +11,7 @@ import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/r
 import { toDateKey } from "@/lib/dataPolicy";
 import { buildIcbSnapshot, parseFlexibleDate, parseIcbLevel } from "@/lib/analytics/universe";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
+import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 // Valid symbol format: 1-10 uppercase letters or digits
 const VALID_SYMBOL_REGEX = /^[A-Z0-9]{1,10}$/;
@@ -424,6 +425,9 @@ export async function GET(request: Request) {
     || statusFilter !== undefined || listingPhaseFilter !== undefined || industryFilter !== undefined
     || minAvgVolume !== undefined || maxAvgVolume !== undefined || minTradingDays !== undefined || maxTradingDays !== undefined
   );
+  const lowMemoryMode = isLowMemoryModeEnabled();
+  const hasSnapshotParams = Boolean(dateRaw) || rankingRequested || Boolean(icb) || groupBy === "icb";
+  const exchangeOnlyRequested = searchParams.has("exchange") && !hasSnapshotParams;
   const requestedDate = dateRaw ? parseFlexibleDate(dateRaw) : null;
   const fromDate = fromRaw ? parseFlexibleDate(fromRaw) : null;
   const toDate = toRaw ? parseFlexibleDate(toRaw) : null;
@@ -659,9 +663,20 @@ export async function GET(request: Request) {
       return jsonResponse(traceId, { stocks: slice, total: refined.length });
     }
 
-    if (dateRaw || searchParams.has("exchange") || searchParams.has("icb")) {
+    if ((dateRaw || searchParams.has("exchange") || searchParams.has("icb")) && !exchangeOnlyRequested) {
       if (csvRequested) {
         return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
+      }
+      if (lowMemoryMode) {
+        return jsonResponse(
+          traceId,
+          {
+            error:
+              "Market-wide OHLCV snapshots are disabled in low-memory mode. " +
+              "Use symbol-level query (`/api/stocks?symbol=...`) or deploy with DuckDB backend.",
+          },
+          { status: 503 }
+        );
       }
       const universe = metadata
         .filter((stock) => stock.exchange.toUpperCase() === exchange)
@@ -767,7 +782,9 @@ export async function GET(request: Request) {
       maxAvgVolume: typeof maxAvgVolume === "number" ? maxAvgVolume : undefined,
       minTradingDays: typeof minTradingDays === "number" ? minTradingDays : undefined,
       maxTradingDays: typeof maxTradingDays === "number" ? maxTradingDays : undefined,
-    }).sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
+    })
+      .filter((stock) => stock.exchange.toUpperCase() === exchange)
+      .sort((a, b) => compareMetadata(a, b, sortBy, sortDir));
 
     if (csvRequested) {
       const slice = hasServerPagination

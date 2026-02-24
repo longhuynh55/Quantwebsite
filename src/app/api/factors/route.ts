@@ -10,6 +10,7 @@ import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } fro
 import { calculateFactorExposures, rankByFactor, FactorExposure } from "@/lib/quant/factors";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
+import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 const VALID_FACTORS = ["momentum", "value", "volatility", "size"] as const;
 type ValidFactor = typeof VALID_FACTORS[number];
@@ -80,6 +81,14 @@ export async function GET(request: Request) {
   }
 
   try {
+    const lowMemoryMode = isLowMemoryModeEnabled();
+    if (lowMemoryMode) {
+      return NextResponse.json(
+        { error: "Factor ranking is disabled in low-memory mode." },
+        { status: 503 }
+      );
+    }
+
     const [metadata, ohlcvData, indexData] = await Promise.all([
       loadStockMetadata(),
       loadOHLCVData(),

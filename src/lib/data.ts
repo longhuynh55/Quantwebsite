@@ -1,6 +1,7 @@
 ﻿import fsPromises from "fs/promises";
-import { constants as fsConstants } from "fs";
+import { constants as fsConstants, createReadStream } from "fs";
 import path from "path";
+import readline from "readline";
 import { parseCsvWithValidation, RawCsvRow, ValidationResult } from "./csvLoader";
 import { parseCSVDate, isValidDate } from "./utils";
 import { resolveDataDir } from "./dataDir";
@@ -75,6 +76,7 @@ export interface DatasetLoadStatus {
 
 let stockMetadataCache: StockMetadata[] | null = null;
 let ohlcvCache: Map<string, OHLCV[]> | null = null;
+let ohlcvSymbolCache: Map<string, OHLCV[]> = new Map();
 let indexCache: IndexData[] | null = null;
 
 const dataQualityCache: Record<DatasetName, DataQualityReport | null> = {
@@ -410,6 +412,76 @@ function normalizeDuckDbRowToRawCsvRow(row: Record<string, unknown>): RawCsvRow 
   return out;
 }
 
+function incrementRejectionReason(reasons: Record<string, number>, reason: string): void {
+  reasons[reason] = (reasons[reason] ?? 0) + 1;
+}
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === "\"") {
+      if (inQuotes && line[index + 1] === "\"") {
+        current += "\"";
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  out.push(current);
+  return out;
+}
+
+function decodeCsvCell(raw: string | undefined): string {
+  if (typeof raw !== "string") return "";
+  return raw.trim();
+}
+
+interface OhlcvCsvHeaderIndexes {
+  symbol: number;
+  date: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+function resolveOhlcvCsvHeaderIndexes(headerLine: string): OhlcvCsvHeaderIndexes | null {
+  const headers = splitCsvLine(headerLine).map((cell) =>
+    decodeCsvCell(cell).replace(/^\uFEFF/, "").trim().toLowerCase()
+  );
+  const findHeaderIndex = (name: string) => headers.indexOf(name);
+
+  const indexes: OhlcvCsvHeaderIndexes = {
+    symbol: findHeaderIndex("symbol"),
+    date: findHeaderIndex("date"),
+    open: findHeaderIndex("open"),
+    high: findHeaderIndex("high"),
+    low: findHeaderIndex("low"),
+    close: findHeaderIndex("close"),
+    volume: findHeaderIndex("volume"),
+  };
+
+  if (Object.values(indexes).some((index) => index < 0)) {
+    return null;
+  }
+
+  return indexes;
+}
+
 function parseDuckDbRowsWithValidation<T>(
   rows: Record<string, unknown>[],
   validator: (row: RawCsvRow) => ValidationResult<T>
@@ -712,6 +784,137 @@ async function loadOHLCVForSymbolFromDuckDb(duckdbPath: string, symbol: string):
   return parseResult.rows;
 }
 
+async function loadOHLCVForSymbolFromCsv(dataDir: string, symbol: string): Promise<OHLCV[]> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const filePath = await resolveFirstExistingFile(dataDir, OHLCV_FILE_CANDIDATES);
+  const source = filePath ? `csv:${filePath}` : `csv:${dataDir}`;
+
+  if (!filePath) {
+    emitLoadFailureReport("ohlcv", "missing_file", {
+      backend: "csv",
+      source,
+      message: "OHLCV file not found",
+    });
+    return [];
+  }
+
+  const rows: OHLCV[] = [];
+  const rejectionReasons: Record<string, number> = {};
+  let parseErrorCount = 0;
+  let totalRows = 0;
+  let headerParsed = false;
+  let headerIndexes: OhlcvCsvHeaderIndexes | null = null;
+
+  const stream = createReadStream(filePath, { encoding: "utf-8" });
+  const lineReader = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+  try {
+    for await (const rawLine of lineReader) {
+      const line = String(rawLine ?? "");
+      if (!headerParsed) {
+        headerParsed = true;
+        headerIndexes = resolveOhlcvCsvHeaderIndexes(line);
+        if (!headerIndexes) {
+          emitLoadFailureReport("ohlcv", "invalid_header", {
+            backend: "csv",
+            source,
+            message: "OHLCV CSV header is invalid",
+          });
+          return [];
+        }
+        continue;
+      }
+
+      if (!line.trim()) continue;
+      if (!headerIndexes) continue;
+
+      const cells = splitCsvLine(line);
+      if (cells.length <= headerIndexes.symbol) {
+        parseErrorCount += 1;
+        incrementRejectionReason(rejectionReasons, "parse_missing_symbol_column");
+        continue;
+      }
+
+      const symbolCell = decodeCsvCell(cells[headerIndexes.symbol]);
+      if (symbolCell.toUpperCase() !== normalizedSymbol) {
+        continue;
+      }
+
+      totalRows += 1;
+      const missingRequiredColumn =
+        cells.length <= headerIndexes.date
+        || cells.length <= headerIndexes.open
+        || cells.length <= headerIndexes.high
+        || cells.length <= headerIndexes.low
+        || cells.length <= headerIndexes.close
+        || cells.length <= headerIndexes.volume;
+      if (missingRequiredColumn) {
+        parseErrorCount += 1;
+        incrementRejectionReason(rejectionReasons, "parse_missing_required_column");
+        continue;
+      }
+
+      const row: RawCsvRow = {
+        symbol: symbolCell,
+        date: decodeCsvCell(cells[headerIndexes.date]),
+        open: decodeCsvCell(cells[headerIndexes.open]),
+        high: decodeCsvCell(cells[headerIndexes.high]),
+        low: decodeCsvCell(cells[headerIndexes.low]),
+        close: decodeCsvCell(cells[headerIndexes.close]),
+        volume: decodeCsvCell(cells[headerIndexes.volume]),
+      };
+
+      const validation = validateOHLCVRow(row);
+      if (!validation.ok) {
+        incrementRejectionReason(rejectionReasons, validation.reason || "invalid_row");
+        continue;
+      }
+      rows.push(validation.value);
+    }
+  } catch (error) {
+    emitLoadFailureReport("ohlcv", getFailureReason(error), {
+      backend: "csv",
+      source,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  } finally {
+    lineReader.close();
+    stream.destroy();
+  }
+
+  if (totalRows <= 0) {
+    if (dataQualityCache.ohlcv?.totalRows === 0) {
+      dataQualityCache.ohlcv = null;
+    }
+    datasetStatusCache.ohlcv = {
+      dataset: "ohlcv",
+      status: "unknown",
+      backend: "csv",
+      source,
+      updatedAt: new Date(),
+    };
+    return [];
+  }
+
+  rows.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const parseResult = {
+    rows,
+    totalRows,
+    acceptedRows: rows.length,
+    rejectedRows: Math.max(0, totalRows - rows.length),
+    rejectionReasons,
+    parseErrorCount,
+  };
+
+  const report = buildQualityReport("ohlcv", parseResult);
+  if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
+    logQualityReport(report);
+  }
+  setDatasetStatusSuccess("ohlcv", "csv", source);
+  return rows;
+}
+
 async function resolveDuckDbDateColumn(duckdbPath: string, tableName: string): Promise<"date" | "time"> {
   const escapedTable = tableName.replace(/'/g, "''");
   const schemaRows = await queryDuckDbRows(duckdbPath, `PRAGMA table_info('${escapedTable}')`);
@@ -873,10 +1076,11 @@ export async function loadOHLCVForSymbol(symbol: string): Promise<OHLCV[]> {
     return [];
   }
   await ensureRuntimeDataFreshness();
+  const normalizedSymbol = symbol.trim().toUpperCase();
   const backend = await ensureDataBackendReady("loadOHLCVForSymbol");
   if (backend.active === "duckdb") {
     try {
-      return await loadOHLCVForSymbolFromDuckDb(backend.duckdbPath, symbol);
+      return await loadOHLCVForSymbolFromDuckDb(backend.duckdbPath, normalizedSymbol);
     } catch (error) {
       console.error("Failed to load OHLCV symbol from DuckDB:", error instanceof Error ? error.message : "Unknown error");
       emitLoadFailureReport("ohlcv", getFailureReason(error), {
@@ -887,8 +1091,19 @@ export async function loadOHLCVForSymbol(symbol: string): Promise<OHLCV[]> {
       return [];
     }
   }
-  const allData = await loadOHLCVData();
-  return allData.get(symbol.trim().toUpperCase()) || [];
+  if (ohlcvCache) {
+    return ohlcvCache.get(normalizedSymbol) || [];
+  }
+  const cachedSeries = ohlcvSymbolCache.get(normalizedSymbol);
+  if (cachedSeries) {
+    return cachedSeries;
+  }
+
+  const series = await loadOHLCVForSymbolFromCsv(getDataDir(), normalizedSymbol);
+  if (series.length > 0) {
+    ohlcvSymbolCache.set(normalizedSymbol, series);
+  }
+  return series;
 }
 
 export async function loadIndexData(): Promise<IndexData[]> {
@@ -982,6 +1197,7 @@ export async function getDataSourceFingerprint(): Promise<string> {
 export function clearCache(): void {
   stockMetadataCache = null;
   ohlcvCache = null;
+  ohlcvSymbolCache = new Map();
   indexCache = null;
   dataQualityCache.stockMetadata = null;
   dataQualityCache.ohlcv = null;
