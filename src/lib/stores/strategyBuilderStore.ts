@@ -42,12 +42,29 @@ export interface OutputNodeData {
   metrics: string[];
 }
 
+export type AdvancedNodeType = 'weighting' | 'conditional' | 'sort' | 'math';
+
+export type AdvancedNodeConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | AdvancedNodeConfig
+  | AdvancedNodeConfigValue[];
+
+export interface AdvancedNodeConfig {
+  label?: string;
+  [key: string]: AdvancedNodeConfigValue;
+}
+
 export type StrategyNodeData =
   | { type: 'dataSource'; config: DataSourceNodeData; label: string }
   | { type: 'indicator'; config: IndicatorNodeData; label: string }
   | { type: 'filter'; config: FilterNodeData; label: string }
   | { type: 'signal'; config: SignalNodeData; label: string }
-  | { type: 'output'; config: OutputNodeData; label: string };
+  | { type: 'output'; config: OutputNodeData; label: string }
+  | { type: AdvancedNodeType; config: AdvancedNodeConfig; label: string };
 
 export interface StrategyNode extends Node {
   type: string;
@@ -81,6 +98,7 @@ interface StrategyBuilderState {
   // Actions
   createNewStrategy: (name: string, description?: string) => void;
   loadStrategy: (strategy: Strategy) => void;
+  updateStrategyName: (name: string) => void;
   saveStrategy: () => Promise<void>;
 
   // Node actions
@@ -118,6 +136,23 @@ const createDefaultStrategy = (name: string, description?: string): Strategy => 
   updatedAt: new Date(),
 });
 
+const edgeSignature = (edge: Pick<StrategyEdge, 'source' | 'target' | 'sourceHandle' | 'targetHandle'>): string =>
+  `${edge.source}::${edge.sourceHandle ?? ''}=>${edge.target}::${edge.targetHandle ?? ''}`;
+
+const dedupeEdges = (edges: StrategyEdge[]): StrategyEdge[] => {
+  const seen = new Set<string>();
+  const uniqueEdges: StrategyEdge[] = [];
+  for (const edge of edges) {
+    const key = edgeSignature(edge);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueEdges.push(edge);
+  }
+  return uniqueEdges;
+};
+
 export const useStrategyBuilderStore = create<StrategyBuilderState>()(
   persist(
     (set, get) => ({
@@ -141,6 +176,24 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           currentStrategy: strategy,
           selectedNodeId: null,
           isDirty: false,
+        });
+      },
+
+      updateStrategyName: (name) => {
+        const { currentStrategy } = get();
+        if (!currentStrategy) return;
+
+        const nextName = name;
+        if (currentStrategy.name === nextName) {
+          return;
+        }
+
+        set({
+          currentStrategy: {
+            ...currentStrategy,
+            name: nextName,
+          },
+          isDirty: true,
         });
       },
 
@@ -224,21 +277,13 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
-        // Check for duplicate edges
-        const exists = currentStrategy.edges.some(
-          (e) =>
-            e.source === edge.source &&
-            e.target === edge.target &&
-            e.sourceHandle === edge.sourceHandle &&
-            e.targetHandle === edge.targetHandle
-        );
-
-        if (exists) return;
+        const nextEdges = dedupeEdges([...currentStrategy.edges, edge]);
+        if (nextEdges.length === currentStrategy.edges.length) return;
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            edges: [...currentStrategy.edges, edge],
+            edges: nextEdges,
           },
           isDirty: true,
         });
@@ -275,10 +320,12 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
+        const nextEdges = dedupeEdges(edges);
+
         set({
           currentStrategy: {
             ...currentStrategy,
-            edges,
+            edges: nextEdges,
           },
           isDirty: true,
         });
