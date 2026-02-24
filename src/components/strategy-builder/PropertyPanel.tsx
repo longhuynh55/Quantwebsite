@@ -38,7 +38,7 @@ type FilterNode = Extract<StrategyNodeData, { type: "filter" }>;
 type SignalNode = Extract<StrategyNodeData, { type: "signal" }>;
 type OutputNode = Extract<StrategyNodeData, { type: "output" }>;
 
-const nodeIcons: Record<StrategyNodeData["type"], ElementType> = {
+const nodeIcons: Partial<Record<StrategyNodeData["type"], ElementType>> = {
   dataSource: Database,
   indicator: Activity,
   filter: Filter,
