@@ -31,6 +31,10 @@ const TRUSTED_TOOL_BASE_URL_ENV_KEYS = [
 const EVAL_MODE_HEADER = 'x-assistant-eval';
 const EVAL_TOKEN_HEADER = 'x-assistant-eval-token';
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
+const EVAL_FORCE_GROUNDED_RESPONSE = parseFeatureFlag(
+  process.env.ASSISTANT_EVAL_FORCE_GROUNDED_RESPONSE,
+  true
+);
 
 // Rate limit: 30 requests per minute per client
 const RATE_LIMIT = 30;
@@ -311,6 +315,35 @@ export async function POST(request: NextRequest) {
         messageBlocks: grounding.messageBlocks,
         meta: {
           providerUsed: "grounded-deterministic",
+          fallbackUsed: false,
+          latencyMs: 0,
+          ...policyMeta,
+        },
+      });
+    }
+
+    if (isEvalRequest && EVAL_FORCE_GROUNDED_RESPONSE) {
+      const deterministicEvalMessage = buildDeterministicEvalGroundedMessage(queryPlan, grounding);
+      logger.info("response.eval_deterministic", {
+        policyStatus: policy.status,
+        groundedFactsCount: grounding.facts.length,
+        citationCount: responseCitations.length,
+        responseChars: deterministicEvalMessage.length,
+        responseDigest: hashText(deterministicEvalMessage),
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json<AssistantResponse>({
+        message: deterministicEvalMessage,
+        success: true,
+        grounded: responseCitations.length > 0,
+        policyStatus: policy.status,
+        policyReason: policy.reason,
+        dataConfidence: policy.dataConfidence,
+        citations: responseCitations,
+        usedTools: grounding.usedTools,
+        messageBlocks: grounding.messageBlocks,
+        meta: {
+          providerUsed: "eval-deterministic",
           fallbackUsed: false,
           latencyMs: 0,
           ...policyMeta,
@@ -692,6 +725,31 @@ function buildGroundedFallbackMessage(facts: string[], usedTools: AssistantToolU
   const guidance =
     'Ask a narrower follow-up with metric + timeframe for a more precise answer (example: VCB net interest income 2025Q4).';
   return [header, toolLine, ...factLines, guidance].join('\n');
+}
+
+function buildDeterministicEvalGroundedMessage(
+  queryPlan: AssistantQueryPlan,
+  grounding: GroundingResult
+): string {
+  const successTools = grounding.usedTools
+    .filter((tool) => tool.status === "success")
+    .map((tool) => tool.name);
+  const toolSummary = successTools.length > 0 ? successTools.join(", ") : "none";
+  const facts = grounding.facts.slice(0, 8).map((fact) => `- ${fact}`);
+  if (facts.length === 0) {
+    return [
+      `Grounded eval response: no sufficient grounded facts for intent=${queryPlan.intent}.`,
+      `Successful tools: ${toolSummary}.`,
+      "INSUFFICIENT_DATA",
+    ].join("\n");
+  }
+
+  return [
+    `Grounded eval response for intent=${queryPlan.intent}.`,
+    `Successful tools: ${toolSummary}.`,
+    "Facts:",
+    ...facts,
+  ].join("\n");
 }
 
 function detectNonHoseScopeGuard(

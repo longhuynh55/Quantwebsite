@@ -63,6 +63,7 @@ const BANNED_SYMBOLS = new Set([
   "BCTC",
   "BCTN",
   "LCTT",
+  "LNST",
   "BCDKT",
   "KQKD",
 ]);
@@ -102,6 +103,7 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "HANG",
   "BANK",
   "BDS",
+  "ALL",
   "DO",
   "VA",
   "LA",
@@ -127,6 +129,25 @@ const COMPARE_NON_SYMBOL_TOKENS = new Set([
   "VS",
   "VERSUS",
   "AND",
+]);
+const CONTEXTUAL_SYMBOL_NOISE_TOKENS = new Set([
+  "MOI",
+  "NHAT",
+  "GAN",
+  "DAY",
+  "HOM",
+  "NAY",
+  "HIEN",
+  "TAI",
+  "CHO",
+  "TOI",
+  "BAN",
+  "GIUP",
+  "QUY",
+  "NAM",
+  "THANG",
+  "TUAN",
+  "CUA",
 ]);
 const SYMBOL_TOKEN_PATTERN = /^[A-Z][A-Z0-9]{1,3}$/;
 const UPPERCASE_SYMBOL_TOKEN_REGEX = /\b[A-Z][A-Z0-9]{1,3}\b/g;
@@ -183,7 +204,6 @@ const FUNDAMENTAL_RATIO_KEYWORDS = [
   "lnst",
   "net margin",
   "profit margin",
-  "de",
   "d/e",
   "debt/equity",
   "debt to equity",
@@ -455,6 +475,11 @@ export function collectRequiredSignals(input: {
     || asksFundamentalRatios
     || asksFundamentalShorthand
     || (asksGenericStatementKeyword && hasCandidateSymbol);
+  const hasFundamentalSignal =
+    asksFundamentals
+    || hasStatementFilter
+    || asksFundamentalRatios
+    || asksFundamentalShorthand;
   const asksValuationSignal =
     hasAnyKeyword(messageLower, VALUATION_KEYWORDS)
     || hasAnyKeyword(messageLower, PEER_KEYWORDS)
@@ -549,7 +574,7 @@ export function collectRequiredSignals(input: {
 
   if (
     (input.contextSnapshot?.page === "charts" && hasCandidateSymbol)
-    || ((asksFundamentals || hasStatementFilter || asksFundamentalRatios || asksFundamentalShorthand) && hasCandidateSymbol)
+    || hasFundamentalSignal
   ) {
     pushUnique("fundamentalSnapshot", "/api/fundamentals");
   }
@@ -589,6 +614,7 @@ export function collectRequiredSignals(input: {
   if (!asksStockUniverseRanking && (
     !ambiguousMetricFallback
     && !prefersSymbolScopedStockSnapshot
+    && !hasFundamentalSignal
     && (
       input.contextSnapshot?.page === "home"
       || asksMarket
@@ -854,10 +880,24 @@ function extractExplicitSymbolHints(message: string): string[] {
     /\bma\s+(?:co\s+phieu|chung\s+khoan|ck)\s*[:=-]?\s*([a-z0-9]{2,4})\b/g,
     /\$([a-z0-9]{2,4})\b/g,
   ];
+  const contextualBareSymbolPatterns = [
+    /\b(?:bctc|bctn|kqkd|lctt|bcdkt|bank)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
+    /\b(?:income\s*statement|balance\s*sheet|cash\s*flow)(?:\s+(?:latest|recent|q[1-4]|\d{4}))*\s+(?:of\s+)?([a-z0-9]{2,4})\b/g,
+  ];
   for (const pattern of patterns) {
     let match = pattern.exec(normalized);
     while (match) {
       hints.push(normalizeSymbol(match[1]));
+      match = pattern.exec(normalized);
+    }
+  }
+  for (const pattern of contextualBareSymbolPatterns) {
+    let match = pattern.exec(normalized);
+    while (match) {
+      const candidate = normalizeSymbol(match[1]);
+      if (candidate && !CONTEXTUAL_SYMBOL_NOISE_TOKENS.has(candidate)) {
+        hints.push(candidate);
+      }
       match = pattern.exec(normalized);
     }
   }
