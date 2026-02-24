@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-16T10:49:10.156Z",
+  "source": {
+    "inputOhlcv": "D:\\KLTN\\Quant wwebsite\\data\\HOSE_VERIFIED_OHLCV_INDUSTRY_2018_2025.csv",
+    "baseMetadata": "D:\\KLTN\\Quant wwebsite\\quant-website\\public\\data\\HOSE_VERIFIED_2020_2025.csv",
+    "fundamentalsDir": "D:\\KLTN\\Quant wwebsite\\data"
+  },
+  "datasets": {
+    "stockMetadata": {
+      "fileName": "stock_metadata_2018_2025.csv",
+      "acceptedRows": 412,
+      "uniqueSymbols": 412
+    },
+    "ohlcv": {
+      "fileName": "ohlcv_2018_2025.csv",
+      "totalRows": 770202,
+      "acceptedRows": 768718,
+      "uniqueSymbols": 412
+    },
+    "index": {
+      "fileName": "Market_Indices_Daily_2020_2025.csv",
+      "totalRows": 3884,
+      "acceptedRows": 3882
+    }
+  },
+  "fundamentals": {
+    "copiedFiles": [
+      "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
+      "HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv",
+      "HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv"
+    ],
+    "repairedReports": [
+      "artifacts\\fundamentals_repair_HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv.json",
+      "artifacts\\fundamentals_repair_HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv.json",
+      "artifacts\\fundamentals_repair_HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv.json"
+    ]
+  },
+  "duckdb": {
+    "attempted": false,
+    "success": false,
+    "fileName": null
+  },
+  "quality": {
+    "rejectedRows": 1484,
+    "rejectionReasons": {
+      "invalid_ohlc_bounds": 1484
+    },
+    "industryMismatchRows": 0
+  }
+}

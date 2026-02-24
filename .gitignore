@@ -59,6 +59,16 @@ next-env.d.ts
 /public/data/data_manifest*.json
 /public/data/*duckdb_export*.json
 /public/data/*duckdb_export*.sql
+# runtime dataset allowlist for Vercel (CSV backend)
+!/public/data/stock_metadata_2018_2025.csv
+!/public/data/ohlcv_2018_2025.csv
+!/public/data/Market_Indices_Daily_2020_2025.csv
+!/public/data/industry_by_symbol_2018_2025.csv
+!/public/data/HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv
+!/public/data/HOSE_VERIFIED_IncomeStatement_Quarterly_2018_2025.csv
+!/public/data/HOSE_VERIFIED_CashFlow_Quarterly_2018_2025.csv
+!/public/data/data_manifest.json
+!/public/data/data_manifest_2018_2025.json
 
 # generated reports
 /artifacts/
