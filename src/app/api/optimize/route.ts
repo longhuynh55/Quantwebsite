@@ -3,7 +3,7 @@ import {
   getDataQualityReport,
   hasSufficientDataQuality,
   loadIndexData,
-  loadOHLCVData,
+  loadOHLCVForSymbols,
   loadStockMetadata,
   OHLCV,
 } from "@/lib/data";
@@ -135,8 +135,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [allData, metadata, indexData] = await Promise.all([
-      loadOHLCVData(),
+    const [metadata, indexData] = await Promise.all([
       loadStockMetadata(),
       loadIndexData(),
     ]);
@@ -144,11 +143,6 @@ export async function POST(request: Request) {
     const stockMetadataQualityError = getDataQualityError("stockMetadata");
     if (stockMetadataQualityError) {
       return NextResponse.json({ error: stockMetadataQualityError }, { status: 503 });
-    }
-
-    const ohlcvQualityError = getDataQualityError("ohlcv");
-    if (ohlcvQualityError) {
-      return NextResponse.json({ error: ohlcvQualityError }, { status: 503 });
     }
 
     const indexQualityError = getDataQualityError("index");
@@ -182,9 +176,11 @@ export async function POST(request: Request) {
 
     const preExcludedSymbols: ExcludedSymbol[] = [];
     const prefilteredSymbols: string[] = [];
+    // Load requested symbols in one pass to avoid repeated full-file CSV scans.
+    const symbolSeries = await loadOHLCVForSymbols(normalizedSymbols);
 
     for (const symbol of normalizedSymbols) {
-      const series = allData.get(symbol);
+      const series = symbolSeries.get(symbol);
       if (!series || series.length < 2) {
         preExcludedSymbols.push({ symbol, reason: "insufficient_price_points" });
         continue;
@@ -243,7 +239,7 @@ export async function POST(request: Request) {
     // Convert Map to plain object for the optimizePortfolio function
     const dataRecord: Record<string, OHLCV[]> = {};
     for (const symbol of prefilteredSymbols) {
-      const series = allData.get(symbol);
+      const series = symbolSeries.get(symbol);
       if (series) dataRecord[symbol] = series;
     }
 
