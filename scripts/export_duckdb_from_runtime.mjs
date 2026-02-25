@@ -143,7 +143,7 @@ async function countRowsFast(filePath) {
 
 async function runSql(db, sql) {
   await new Promise((resolve, reject) => {
-    db.all(sql, [], (error) => {
+    db.all(sql, (error) => {
       if (error) {
         reject(error);
         return;
@@ -155,7 +155,7 @@ async function runSql(db, sql) {
 
 async function querySingleValue(db, sql, key) {
   return await new Promise((resolve, reject) => {
-    db.all(sql, [], (error, rows) => {
+    db.all(sql, (error, rows) => {
       if (error) {
         reject(error);
         return;
