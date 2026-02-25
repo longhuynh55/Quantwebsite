@@ -4,7 +4,7 @@ WORKDIR /app
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml ./
-ARG INSTALL_DUCKDB_BINDING=false
+ARG INSTALL_DUCKDB_BINDING=true
 RUN pnpm install --frozen-lockfile \
   && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then pnpm add duckdb && cd node_modules/duckdb && npm run install; fi
 
@@ -13,9 +13,15 @@ FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 RUN corepack enable
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG INSTALL_DUCKDB_BINDING=true
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Build-time fallback: if DuckDB file is not committed, generate it from runtime CSVs.
+RUN if [ "$INSTALL_DUCKDB_BINDING" = "true" ] && [ ! -f ./public/data/quant_data.duckdb ] && [ -f ./public/data/ohlcv_2018_2025.csv ]; then \
+      pnpm run data:export:duckdb; \
+    fi
 
 RUN pnpm run build
 
