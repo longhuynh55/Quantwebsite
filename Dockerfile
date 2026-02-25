@@ -31,7 +31,9 @@ ENV PORT=3000
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml ./
-ARG INSTALL_DUCKDB_BINDING=false
+# Default to enabling DuckDB in production containers (Railway, VPS, etc.)
+# so large CSVs are not loaded into memory.
+ARG INSTALL_DUCKDB_BINDING=true
 RUN pnpm install --prod --frozen-lockfile \
   && if [ "$INSTALL_DUCKDB_BINDING" = "true" ]; then pnpm add --prod duckdb && cd node_modules/duckdb && npm run install; fi
 
