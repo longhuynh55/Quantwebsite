@@ -1,9 +1,5 @@
 interface DuckDbDatabase {
-  all(
-    sql: string,
-    params: unknown[] | ((error: Error | null, rows: Record<string, unknown>[]) => void),
-    callback?: (error: Error | null, rows: Record<string, unknown>[]) => void
-  ): void;
+  all(sql: string, ...args: unknown[]): void;
   close(callback: (error: Error | null) => void): void;
 }
 
@@ -68,7 +64,9 @@ export async function queryDuckDbRows(
       };
 
       if (params.length > 0) {
-        db.all(sql, params, handleQueryResult);
+        // DuckDB Node bindings accept positional parameters as varargs, not a single array,
+        // otherwise only the first parameter may bind (remaining placeholders stay unbound).
+        db.all(sql, ...params, handleQueryResult);
         return;
       }
       db.all(sql, handleQueryResult);

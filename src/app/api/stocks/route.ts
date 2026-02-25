@@ -11,6 +11,8 @@ import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/r
 import { toDateKey } from "@/lib/dataPolicy";
 import { buildIcbSnapshot, parseFlexibleDate, parseIcbLevel } from "@/lib/analytics/universe";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
+import { ensureDataBackendReady } from "@/lib/dataBackend";
+import { queryDuckDbRows } from "@/lib/duckdbClient";
 import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 // Valid symbol format: 1-10 uppercase letters or digits
@@ -53,6 +55,116 @@ type MetadataQueryFilters = {
   minTradingDays?: number;
   maxTradingDays?: number;
 };
+
+function normalizeDuckDbNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeDuckDbDateKey(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return toDateKey(value);
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const candidate = text.length >= 10 ? text.slice(0, 10) : text;
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : null;
+}
+
+async function loadUniverseAsOfRowsFromDuckDb(input: {
+  duckdbPath: string;
+  symbols: string[];
+  asOfDateKey: string;
+}): Promise<Array<{
+  symbol: string;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  exactDateMatch: boolean;
+}>> {
+  const normalizedSymbols = Array.from(
+    new Set(input.symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))
+  );
+  if (normalizedSymbols.length === 0) return [];
+
+  const placeholders = normalizedSymbols.map(() => "?").join(", ");
+  const sql = `
+    WITH filtered AS (
+      SELECT
+        o.symbol AS symbol,
+        o.date AS date,
+        o.open AS open,
+        o.high AS high,
+        o.low AS low,
+        o.close AS close,
+        o.volume AS volume,
+        row_number() OVER (PARTITION BY o.symbol ORDER BY o.date DESC) AS rn
+      FROM ohlcv o
+      WHERE o.symbol IN (${placeholders})
+        AND o.date <= ?
+    )
+    SELECT
+      symbol,
+      date,
+      open,
+      high,
+      low,
+      close,
+      volume,
+      CASE WHEN date = ? THEN TRUE ELSE FALSE END AS exactDateMatch
+    FROM filtered
+    WHERE rn = 1
+  `;
+  const params = [...normalizedSymbols, input.asOfDateKey, input.asOfDateKey];
+  const rows = await queryDuckDbRows(input.duckdbPath, sql, params);
+
+  const results: Array<{
+    symbol: string;
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    exactDateMatch: boolean;
+    icbCode2?: string;
+    icbCode3?: string;
+    icbCode4?: string;
+    icbName2?: string;
+    icbName3?: string;
+    icbName4?: string;
+  }> = [];
+
+  for (const raw of rows) {
+    const symbol = String(raw?.symbol ?? "").trim().toUpperCase();
+    const dateKey = normalizeDuckDbDateKey(raw?.date);
+    const open = normalizeDuckDbNumber(raw?.open);
+    const high = normalizeDuckDbNumber(raw?.high);
+    const low = normalizeDuckDbNumber(raw?.low);
+    const close = normalizeDuckDbNumber(raw?.close);
+    const volume = normalizeDuckDbNumber(raw?.volume);
+    if (!symbol || !dateKey) continue;
+    if (open === null || high === null || low === null || close === null || volume === null) continue;
+    results.push({
+      symbol,
+      date: dateKey,
+      open,
+      high,
+      low,
+      close,
+      volume,
+      exactDateMatch: Boolean(raw?.exactDateMatch),
+    });
+  }
+
+  return results;
+}
 
 function buildSeriesStats(series: OHLCV[]) {
   if (series.length === 0) {
@@ -506,6 +618,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    const backend = await ensureDataBackendReady("api/stocks");
     if (groupBy === "icb") {
       if (csvRequested) {
         return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
@@ -667,7 +780,7 @@ export async function GET(request: Request) {
       if (csvRequested) {
         return jsonResponse(traceId, { error: 'CSV export is only supported for screener stock lists.' }, { status: 400 });
       }
-      if (lowMemoryMode) {
+      if (lowMemoryMode && backend.active === "csv") {
         return jsonResponse(
           traceId,
           {
@@ -682,21 +795,39 @@ export async function GET(request: Request) {
         .filter((stock) => stock.exchange.toUpperCase() === exchange)
         .filter((stock) => stock.status.toUpperCase() === "ACTIVE")
         .filter((stock) => matchesIcbFilter(stock, icb || undefined, icbLevel));
-      const ohlcvMap = await loadOHLCVData();
-      if (ohlcvMap.size === 0) {
-        const ohlcvStatus = getDatasetLoadStatus("ohlcv");
-        if (ohlcvStatus.status === "error") {
-          return jsonResponse(traceId, 
-            {
-              error: "OHLCV dataset unavailable.",
-              dataFailureReason: ohlcvStatus.reason ?? "read_failure",
-              details: ohlcvStatus.message ?? undefined,
-            },
-            { status: 503 }
-          );
+
+      const universeSymbols = universe.map((stock) => stock.symbol);
+      let asOfDateKey: string | null = requestedDate ? toDateKey(requestedDate) : null;
+
+      if (backend.active === "duckdb") {
+        if (!asOfDateKey) {
+          if (universeSymbols.length > 0) {
+            const placeholders = universeSymbols.map(() => "?").join(", ");
+            const maxRows = await queryDuckDbRows(
+              backend.duckdbPath,
+              `SELECT MAX(date) AS max_date FROM ohlcv WHERE symbol IN (${placeholders})`,
+              universeSymbols
+            );
+            asOfDateKey = normalizeDuckDbDateKey(maxRows?.[0]?.max_date);
+          }
         }
+      } else {
+        const ohlcvMap = await loadOHLCVData();
+        if (ohlcvMap.size === 0) {
+          const ohlcvStatus = getDatasetLoadStatus("ohlcv");
+          if (ohlcvStatus.status === "error") {
+            return jsonResponse(traceId, 
+              {
+                error: "OHLCV dataset unavailable.",
+                dataFailureReason: ohlcvStatus.reason ?? "read_failure",
+                details: ohlcvStatus.message ?? undefined,
+              },
+              { status: 503 }
+            );
+          }
+        }
+        asOfDateKey = resolveLatestAsOfDateKey(universe, ohlcvMap);
       }
-      const asOfDateKey = requestedDate ? toDateKey(requestedDate) : resolveLatestAsOfDateKey(universe, ohlcvMap);
       if (!asOfDateKey) {
         return jsonResponse(traceId, { error: "Unable to determine as-of date for market snapshot." }, { status: 503 });
       }
@@ -719,30 +850,61 @@ export async function GET(request: Request) {
       }> = [];
       let exactDateMatchCount = 0;
 
-      for (const stock of universe) {
-        const series = ohlcvMap.get(stock.symbol);
-        if (!series || series.length === 0) continue;
-
-        const point = findSeriesPointAsOf(series, asOfDateKey);
-        if (!point) continue;
-        if (point.exactDateMatch) exactDateMatchCount += 1;
-
-        stockRows.push({
-          symbol: stock.symbol,
-          date: toDateKey(point.row.date),
-          open: point.row.open,
-          high: point.row.high,
-          low: point.row.low,
-          close: point.row.close,
-          volume: point.row.volume,
-          exactDateMatch: point.exactDateMatch,
-          icbCode2: stock.icbCode2,
-          icbCode3: stock.icbCode3,
-          icbCode4: stock.icbCode4,
-          icbName2: stock.icbName2,
-          icbName3: stock.icbName3,
-          icbName4: stock.icbName4,
+      if (backend.active === "duckdb") {
+        const bySymbol = new Map(universe.map((stock) => [stock.symbol, stock] as const));
+        const rows = await loadUniverseAsOfRowsFromDuckDb({
+          duckdbPath: backend.duckdbPath,
+          symbols: universeSymbols,
+          asOfDateKey,
         });
+        for (const row of rows) {
+          const stock = bySymbol.get(row.symbol);
+          if (!stock) continue;
+          if (row.exactDateMatch) exactDateMatchCount += 1;
+          stockRows.push({
+            symbol: row.symbol,
+            date: row.date,
+            open: row.open,
+            high: row.high,
+            low: row.low,
+            close: row.close,
+            volume: row.volume,
+            exactDateMatch: row.exactDateMatch,
+            icbCode2: stock.icbCode2,
+            icbCode3: stock.icbCode3,
+            icbCode4: stock.icbCode4,
+            icbName2: stock.icbName2,
+            icbName3: stock.icbName3,
+            icbName4: stock.icbName4,
+          });
+        }
+      } else {
+        const ohlcvMap = await loadOHLCVData();
+        for (const stock of universe) {
+          const series = ohlcvMap.get(stock.symbol);
+          if (!series || series.length === 0) continue;
+
+          const point = findSeriesPointAsOf(series, asOfDateKey);
+          if (!point) continue;
+          if (point.exactDateMatch) exactDateMatchCount += 1;
+
+          stockRows.push({
+            symbol: stock.symbol,
+            date: toDateKey(point.row.date),
+            open: point.row.open,
+            high: point.row.high,
+            low: point.row.low,
+            close: point.row.close,
+            volume: point.row.volume,
+            exactDateMatch: point.exactDateMatch,
+            icbCode2: stock.icbCode2,
+            icbCode3: stock.icbCode3,
+            icbCode4: stock.icbCode4,
+            icbName2: stock.icbName2,
+            icbName3: stock.icbName3,
+            icbName4: stock.icbName4,
+          });
+        }
       }
 
       const effectiveMetric: UniverseRankingMetric = rankingMetric ?? "close";

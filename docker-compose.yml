@@ -1,4 +1,5 @@
-﻿services:
+name: quant-website
+services:
   app:
     build:
       context: .
