@@ -2,7 +2,7 @@
   "version": "composer-agent-function-calling-tracker-v1",
   "scope": "HOSE-only",
   "status": "active",
-  "updatedAt": "2026-02-25",
+  "updatedAt": "2026-02-26",
   "milestones": [
     {
       "id": "AGT-00",
@@ -524,7 +524,7 @@
       "title": "DuckDB prod OOM hardening (avoid OHLCV materialization)",
       "owner": "Backend + Infra",
       "priority": "P0",
-      "status": "in_progress",
+      "status": "done",
       "definitionOfDone": [
         "DuckDB deployments do not load full OHLCV into memory for health checks or other summary endpoints.",
         "Railway production stays stable under small RAM (no recurring OOM restarts during normal navigation).",
@@ -558,6 +558,13 @@
           "to": "in_progress",
           "changedAt": "2026-02-25T08:16:52.140Z",
           "note": "Started Step 2: refactor DuckDB endpoints to avoid full OHLCV materialization.",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-26T06:01:13.679Z",
+          "note": "Step 2 completed: DuckDB routes refactored to avoid full OHLCV materialization; production checks stable with duckdb_enabled.",
           "actor": "codex"
         }
       ]
