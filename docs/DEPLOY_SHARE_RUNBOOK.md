@@ -15,12 +15,15 @@ Recommended order: `Railway` first, `Render` as backup.
    - `DATA_BACKEND=csv`
    - `DATA_BACKEND_STRICT=false`
    - `DATA_DUCKDB_PATH=/app/public/data/quant_data.duckdb`
+   - `ASSISTANT_TOOL_BASE_URL=https://<your-railway-domain>`
    - `ASSISTANT_PROVIDER_PRIORITY=openrouter,glm,fallback`
    - `ASSISTANT_OPENROUTER_ONLY=true`
    - `OPENROUTER_API_KEY=<secret>`
    - `GLM_API_KEY=<secret>`
+   - `ASSISTANT_EXECUTE_APPROVAL_TOKEN=<long-random-secret>` (required if you use `/api/assistant/execute`)
 5. Deploy and open:
    - `/api/health/data?probe=true&includeFundamentals=false`
+   - `/api/health/assistant`
 
 If `ok=true`, share the Railway URL.
 
@@ -50,8 +53,9 @@ If `ok=true`, share the Railway URL.
 Run these endpoints once:
 
 1. `/api/health/data?probe=true`
-2. `/api/market-overview`
-3. `/api/fundamentals?symbol=HPG&statement=bs&period=latest`
+2. `/api/health/assistant`
+3. `/api/market-overview`
+4. `/api/fundamentals?symbol=HPG&statement=bs&period=latest`
+5. `POST /api/assistant` with body `{"message":"Top 3 VN30 stocks by close today","contextSnapshot":{"page":"assistant"}}`
 
 If all return `200`, share link for team testing.
-

@@ -285,7 +285,7 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 ### 7.4 Assistant grounding / eval fail
 
 - Mac dinh trong `docker-compose.yml`: `ASSISTANT_BASELINE_ONLY=false` de bat valuation/peer/health/sensitivity tools.
-- App uu tien `ASSISTANT_TOOL_BASE_URL`; neu khong co se fallback theo request origin (vi du `http://localhost:3010`) roi moi toi dev fallback.
+- App uu tien `ASSISTANT_TOOL_BASE_URL`; neu khong co thi thu tiep `INTERNAL_API_BASE_URL`, `APP_BASE_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_APP_URL`; chi trong non-production moi fallback ve `http://127.0.0.1:3000`.
 - Cau hinh model OpenRouter mac dinh:
   - `OPENROUTER_MODEL=openai/gpt-oss-120b:free` (primary)
   - `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-120b` (secondary)
