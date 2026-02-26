@@ -11,6 +11,8 @@ import { DEFAULT_BENCHMARK_SYMBOL, MAX_RECENCY_GAP_TRADING_DAYS, toDateKey } fro
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
+import { ensureDataBackendReady } from "@/lib/dataBackend";
+import { queryDuckDbRows } from "@/lib/duckdbClient";
 
 const RATE_LIMIT_MAX = 100;
 const MIN_DATA_QUALITY_RATIO = 0.95;
@@ -28,6 +30,24 @@ let marketOverviewCache: MarketOverviewCacheEntry | null = null;
 interface StockReturn {
   symbol: string;
   change: number;
+}
+
+function normalizeDuckDbNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeDuckDbDateKey(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return toDateKey(value);
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const candidate = text.length >= 10 ? text.slice(0, 10) : text;
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : null;
 }
 
 function getDataQualityError(dataset: "stockMetadata" | "ohlcv" | "index"): string | null {
@@ -205,6 +225,137 @@ export async function GET(request: Request) {
         excludedMissingAsOfCount: 0,
         excludedMissingPrevCount: 0,
         degradedMode: "low_memory",
+      } satisfies Record<string, unknown>;
+
+      marketOverviewCache = {
+        key: cacheKey,
+        expiresAt: now + MARKET_OVERVIEW_CACHE_TTL_MS,
+        payload,
+      };
+
+      return NextResponse.json(payload, {
+        headers: {
+          "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+        },
+      });
+    }
+
+    const backend = await ensureDataBackendReady("api/market-overview");
+    if (backend.active === "duckdb") {
+      // DuckDB path: avoid materializing the full OHLCV map (can OOM small containers).
+      const [metadata, indexData] = await Promise.all([
+        loadStockMetadata(),
+        loadIndexData(),
+      ]);
+
+      const metadataQualityError = getDataQualityError("stockMetadata");
+      if (metadataQualityError) {
+        return NextResponse.json({ error: metadataQualityError }, { status: 503 });
+      }
+
+      const indexQualityError = getDataQualityError("index");
+      if (indexQualityError) {
+        return NextResponse.json({ error: indexQualityError }, { status: 503 });
+      }
+
+      const totalStocks = metadata.length;
+      const avgVolume = totalStocks > 0
+        ? metadata.reduce((sum, s) => sum + (s.avgVolume || 0), 0) / totalStocks
+        : 0;
+
+      const preferredBenchmarks = [DEFAULT_BENCHMARK_SYMBOL, "VN100", "VN30"];
+      const benchmarkSymbol =
+        preferredBenchmarks.find((symbol) => indexData.some((d) => d.symbol === symbol)) ??
+        indexData[0]?.symbol ??
+        DEFAULT_BENCHMARK_SYMBOL;
+      const benchmarkSeries = indexData
+        .filter((d) => d.symbol === benchmarkSymbol)
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      if (benchmarkSeries.length < 2) {
+        return NextResponse.json({ error: "Benchmark series must contain at least 2 trading days" }, { status: 503 });
+      }
+
+      const asOfIndex = benchmarkSeries.length - 1;
+      const asOfKey = toDateKey(benchmarkSeries[asOfIndex].date);
+      const prevKey = toDateKey(benchmarkSeries[asOfIndex - 1].date);
+
+      const probe = await queryDuckDbRows(backend.duckdbPath, "SELECT 1 AS ok FROM ohlcv LIMIT 1");
+      if (probe.length === 0) {
+        return NextResponse.json({ error: "OHLCV dataset unavailable (duckdb table ohlcv is empty)." }, { status: 503 });
+      }
+
+      const rows = await queryDuckDbRows(
+        backend.duckdbPath,
+        `
+          SELECT
+            symbol AS symbol,
+            try_cast(date AS DATE) AS date,
+            try_cast(close AS DOUBLE) AS close
+          FROM ohlcv
+          WHERE try_cast(date AS DATE) IN (try_cast(? AS DATE), try_cast(? AS DATE))
+        `,
+        [asOfKey, prevKey]
+      );
+
+      const bySymbol = new Map<string, { asOfClose?: number; prevClose?: number }>();
+      for (const raw of rows) {
+        const symbol = String(raw?.symbol ?? "").trim().toUpperCase();
+        const dateKey = normalizeDuckDbDateKey(raw?.date);
+        const close = normalizeDuckDbNumber(raw?.close);
+        if (!symbol || !dateKey || close === null) continue;
+        const entry = bySymbol.get(symbol) ?? {};
+        if (dateKey === asOfKey) {
+          entry.asOfClose = close;
+        } else if (dateKey === prevKey) {
+          entry.prevClose = close;
+        }
+        bySymbol.set(symbol, entry);
+      }
+
+      const stockReturns: StockReturn[] = [];
+      let excludedInactiveCount = 0;
+      let excludedMissingAsOfCount = 0;
+      let excludedMissingPrevCount = 0;
+
+      for (const stock of metadata) {
+        if (stock.status.toUpperCase() !== "ACTIVE") {
+          excludedInactiveCount += 1;
+          continue;
+        }
+
+        const point = bySymbol.get(stock.symbol);
+        if (!point || point.asOfClose === undefined) {
+          excludedMissingAsOfCount += 1;
+          continue;
+        }
+        if (point.prevClose === undefined) {
+          excludedMissingPrevCount += 1;
+          continue;
+        }
+
+        const dailyReturn = calculateReturn(point.asOfClose, point.prevClose);
+        stockReturns.push({ symbol: stock.symbol, change: dailyReturn });
+      }
+
+      stockReturns.sort((a, b) => b.change - a.change);
+      const topGainers = stockReturns.slice(0, 5);
+      const topLosers = stockReturns.slice(-5).reverse();
+
+      const payload = {
+        totalStocks,
+        avgVolume,
+        benchmark: benchmarkSymbol,
+        topGainers,
+        topLosers,
+        marketTrend: getRecentMarketTrend(benchmarkSeries, 30),
+        mtdReturn: calculateMTDReturn(benchmarkSeries),
+        currentIndex: benchmarkSeries[benchmarkSeries.length - 1].close,
+        eligibleStocks: stockReturns.length,
+        excludedStaleCount: 0,
+        excludedInactiveCount,
+        excludedMissingAsOfCount,
+        excludedMissingPrevCount,
       } satisfies Record<string, unknown>;
 
       marketOverviewCache = {

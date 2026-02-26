@@ -241,7 +241,11 @@ async function runProbeChecks(
   return checks;
 }
 
-function buildDatasetHealth(dataset: DatasetName, loadedRows: number): DatasetHealth {
+function buildDatasetHealth(
+  dataset: DatasetName,
+  loadedRows: number,
+  fallback?: Omit<DatasetHealth, "loadedRows"> & { loadedRows?: number }
+): DatasetHealth {
   const report = getDataQualityReport(dataset);
   const loadStatus = getDatasetLoadStatus(dataset);
   const serializedLoadStatus = {
@@ -256,6 +260,19 @@ function buildDatasetHealth(dataset: DatasetName, loadedRows: number): DatasetHe
         : null,
   };
   if (!report) {
+    if (fallback) {
+      return {
+        ok: fallback.ok,
+        loadedRows: Number.isFinite(fallback.loadedRows) ? Number(fallback.loadedRows) : loadedRows,
+        totalRows: fallback.totalRows,
+        acceptedRows: fallback.acceptedRows,
+        acceptedRatio: fallback.acceptedRatio,
+        parseErrorCount: fallback.parseErrorCount,
+        rejectionReasons: { ...fallback.rejectionReasons },
+        generatedAt: fallback.generatedAt,
+        loadStatus: fallback.loadStatus,
+      };
+    }
     return {
       ok: false,
       loadedRows,
@@ -409,15 +426,45 @@ export async function GET(request: Request) {
     );
   }
 
-  const [stockMetadata, ohlcvMap, indexData] = await Promise.all([
+  const [stockMetadata, indexData] = await Promise.all([
     loadStockMetadata(),
-    loadOHLCVData(),
     loadIndexData(),
   ]);
 
+  // Avoid materializing the entire OHLCV map in DuckDB mode (can OOM small containers).
+  // Use the runtime manifest row count as a lightweight proxy and rely on DuckDB probe checks
+  // for existence/non-empty validation.
+  const manifestOhlcvRows = manifest?.datasets?.ohlcv?.acceptedRows;
+  const fallbackOhlcvTotalRows = Number.isFinite(manifestOhlcvRows) ? Number(manifestOhlcvRows) : 0;
+  let ohlcvLoadedRows = 0;
+  let ohlcvFallback: DatasetHealth | null = null;
+
+  if (resolvedBackendStatus.active === "duckdb") {
+    ohlcvLoadedRows = fallbackOhlcvTotalRows;
+    ohlcvFallback = {
+      ok: true,
+      loadedRows: ohlcvLoadedRows,
+      totalRows: fallbackOhlcvTotalRows,
+      acceptedRows: fallbackOhlcvTotalRows,
+      acceptedRatio: fallbackOhlcvTotalRows > 0 ? 1 : 0,
+      parseErrorCount: 0,
+      rejectionReasons: {},
+      generatedAt: new Date().toISOString(),
+      loadStatus: {
+        status: "ok",
+        backend: "duckdb",
+        source: `duckdb:${resolvedBackendStatus.duckdbPath}:ohlcv`,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  } else {
+    const ohlcvMap = await loadOHLCVData();
+    ohlcvLoadedRows = Array.from(ohlcvMap.values()).reduce((sum, series) => sum + series.length, 0);
+  }
+
   const datasets = {
     stockMetadata: buildDatasetHealth("stockMetadata", stockMetadata.length),
-    ohlcv: buildDatasetHealth("ohlcv", Array.from(ohlcvMap.values()).reduce((sum, series) => sum + series.length, 0)),
+    ohlcv: buildDatasetHealth("ohlcv", ohlcvLoadedRows, ohlcvFallback ?? undefined),
     index: buildDatasetHealth("index", indexData.length),
   };
 

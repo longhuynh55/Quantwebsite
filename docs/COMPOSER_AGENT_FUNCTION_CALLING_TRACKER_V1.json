@@ -2,7 +2,7 @@
   "version": "composer-agent-function-calling-tracker-v1",
   "scope": "HOSE-only",
   "status": "active",
-  "updatedAt": "2026-02-24",
+  "updatedAt": "2026-02-25",
   "milestones": [
     {
       "id": "AGT-00",
@@ -514,6 +514,50 @@
           "to": "done",
           "changedAt": "2026-02-24T16:49:56.187Z",
           "note": "CI build job now uses NEXT_DIST_DIR for deterministic output; build script uses webpack for stability; gates remain lint + tsc + build + verify:agent:advanced.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "PERF-01",
+      "phase": "Website Quality",
+      "title": "DuckDB prod OOM hardening (avoid OHLCV materialization)",
+      "owner": "Backend + Infra",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "DuckDB deployments do not load full OHLCV into memory for health checks or other summary endpoints.",
+        "Railway production stays stable under small RAM (no recurring OOM restarts during normal navigation).",
+        "Market snapshot + factor ranking remain available with DuckDB backend."
+      ],
+      "dependsOn": [
+        "OPS-00"
+      ],
+      "risks": [
+        "Accidentally reintroducing full-map loads via helper functions",
+        "Health endpoint becomes too slow if SQL is not optimized"
+      ],
+      "signals": {
+        "prodOomIncidents": null,
+        "p95HealthFullMs": null
+      },
+      "evidenceCommands": [
+        "pnpm run docker:smoke:prod:api",
+        "pnpm run docker:qa:prod:api"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "todo",
+          "changedAt": "2026-02-25T00:00:00.000Z",
+          "note": "Planned Step 2 after Railway DuckDB bring-up; focus is removing memory-heavy full OHLCV materialization from health/summary paths.",
+          "actor": "codex"
+        },
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "changedAt": "2026-02-25T08:16:52.140Z",
+          "note": "Started Step 2: refactor DuckDB endpoints to avoid full OHLCV materialization.",
           "actor": "codex"
         }
       ]

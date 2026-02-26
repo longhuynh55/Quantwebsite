@@ -1,7 +1,7 @@
 # Composer Agent Weekly Status (Auto)
 
 ## Week Of
-- Date range: 2026-02-24
+- Date range: 2026-02-25
 - Owner: Auto Tracker
 
 ## Milestone Status Snapshot
@@ -21,6 +21,7 @@
 | PERF-00 | done | Backend + Frontend | P1 | Reduce request fan-out + cache market overview |
 | OPS-00 | done | Infra | P1 | App-prod hardening (non-root + prod parity knobs) |
 | CI-00 | done | Infra | P1 | CI: enforce lint/tsc/build + deterministic distDir |
+| PERF-01 | in_progress | Backend + Infra | P0 | DuckDB prod OOM hardening (avoid OHLCV materialization) |
 
 ## KPI Signals
 - Tool call success rate: n/a
@@ -29,5 +30,5 @@
 - Composer completion rate: n/a
 
 ## Next Week Commitments (Auto)
-1. No commitment inferred.
+1. Close PERF-01: DuckDB deployments do not load full OHLCV into memory for health checks or other summary endpoints.
 

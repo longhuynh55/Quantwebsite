@@ -4,6 +4,8 @@ import { loadRuntimeDataManifest } from "@/lib/dataManifest";
 import { toDateKey } from "@/lib/dataPolicy";
 import { resolveDataDir } from "@/lib/dataDir";
 import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
+import { ensureDataBackendReady } from "@/lib/dataBackend";
+import { queryDuckDbRows } from "@/lib/duckdbClient";
 
 type DataAction = "stats" | "stocks" | "latest" | "gainers" | "losers" | "search";
 
@@ -45,6 +47,24 @@ function computeMovers(ohlcvBySymbol: Map<string, OHLCV[]>) {
   return movers;
 }
 
+function normalizeDuckDbNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeDuckDbDateKey(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return toDateKey(value);
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const candidate = text.length >= 10 ? text.slice(0, 10) : text;
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : null;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = normalizeAction(searchParams.get("action"));
@@ -54,6 +74,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    const backend = await ensureDataBackendReady("api/data");
     const lowMemoryMode = isLowMemoryModeEnabled();
 
     switch (action) {
@@ -65,8 +86,10 @@ export async function GET(request: Request) {
         ]);
 
         let ohlcvRecords = 0;
-        if (lowMemoryMode) {
-          const manifestRows = manifest?.datasets?.ohlcv?.acceptedRows;
+        const manifestRows = manifest?.datasets?.ohlcv?.acceptedRows;
+        if (backend.active === "duckdb") {
+          ohlcvRecords = Number.isFinite(manifestRows) ? Number(manifestRows) : 0;
+        } else if (lowMemoryMode) {
           ohlcvRecords = Number.isFinite(manifestRows) ? Number(manifestRows) : 0;
         } else {
           const ohlcv = await loadOHLCVData();
@@ -97,6 +120,46 @@ export async function GET(request: Request) {
           );
         }
 
+        if (backend.active === "duckdb") {
+          const probe = await queryDuckDbRows(backend.duckdbPath, "SELECT 1 AS ok FROM ohlcv LIMIT 1");
+          if (probe.length === 0) {
+            return NextResponse.json({ error: "OHLCV dataset unavailable (duckdb table ohlcv is empty)." }, { status: 503 });
+          }
+
+          const rows = await queryDuckDbRows(
+            backend.duckdbPath,
+            `
+              WITH base AS (
+                SELECT
+                  symbol,
+                  try_cast(date AS DATE) AS date,
+                  try_cast(close AS DOUBLE) AS close,
+                  try_cast(volume AS DOUBLE) AS volume,
+                  row_number() OVER (PARTITION BY symbol ORDER BY try_cast(date AS DATE) DESC) AS rn
+                FROM ohlcv
+              )
+              SELECT symbol, date, close, volume
+              FROM base
+              WHERE rn = 1
+            `,
+            []
+          );
+
+          const prices = rows
+            .map((raw) => {
+              const symbol = String(raw?.symbol ?? "").trim().toUpperCase();
+              const date = normalizeDuckDbDateKey(raw?.date);
+              const close = normalizeDuckDbNumber(raw?.close);
+              const volume = normalizeDuckDbNumber(raw?.volume);
+              if (!symbol || !date || close === null || volume === null) return null;
+              return { symbol, close, volume, date };
+            })
+            .filter(Boolean)
+            .sort((a, b) => (a?.symbol ?? "").localeCompare(b?.symbol ?? ""));
+
+          return NextResponse.json({ prices, count: prices.length });
+        }
+
         const ohlcv = await loadOHLCVData();
         const prices = Array.from(ohlcv.entries())
           .filter(([, rows]) => rows.length > 0)
@@ -114,6 +177,47 @@ export async function GET(request: Request) {
           );
         }
 
+        if (backend.active === "duckdb") {
+          const probe = await queryDuckDbRows(backend.duckdbPath, "SELECT 1 AS ok FROM ohlcv LIMIT 1");
+          if (probe.length === 0) {
+            return NextResponse.json({ error: "OHLCV dataset unavailable (duckdb table ohlcv is empty)." }, { status: 503 });
+          }
+
+          const rows = await queryDuckDbRows(
+            backend.duckdbPath,
+            `
+              WITH base AS (
+                SELECT
+                  symbol,
+                  try_cast(date AS DATE) AS date,
+                  try_cast(close AS DOUBLE) AS close,
+                  lag(try_cast(close AS DOUBLE)) OVER (PARTITION BY symbol ORDER BY try_cast(date AS DATE)) AS prev_close,
+                  row_number() OVER (PARTITION BY symbol ORDER BY try_cast(date AS DATE) DESC) AS rn
+                FROM ohlcv
+              )
+              SELECT symbol, date, close, prev_close
+              FROM base
+              WHERE rn = 1
+            `,
+            []
+          );
+
+          const movers = rows
+            .map((raw) => {
+              const symbol = String(raw?.symbol ?? "").trim().toUpperCase();
+              const date = normalizeDuckDbDateKey(raw?.date);
+              const close = normalizeDuckDbNumber(raw?.close);
+              const prevClose = normalizeDuckDbNumber(raw?.prev_close);
+              if (!symbol || !date || close === null || prevClose === null || prevClose === 0) return null;
+              return { symbol, close, volume: 0, date, change_percent: ((close - prevClose) / prevClose) * 100 };
+            })
+            .filter(Boolean)
+            .sort((a, b) => (b?.change_percent ?? 0) - (a?.change_percent ?? 0))
+            .slice(0, 20);
+
+          return NextResponse.json({ gainers: movers, count: movers.length });
+        }
+
         const movers = computeMovers(await loadOHLCVData())
           .sort((a, b) => b.change_percent - a.change_percent)
           .slice(0, 20);
@@ -126,6 +230,47 @@ export async function GET(request: Request) {
             { error: "losers action is disabled in low-memory mode" },
             { status: 503 }
           );
+        }
+
+        if (backend.active === "duckdb") {
+          const probe = await queryDuckDbRows(backend.duckdbPath, "SELECT 1 AS ok FROM ohlcv LIMIT 1");
+          if (probe.length === 0) {
+            return NextResponse.json({ error: "OHLCV dataset unavailable (duckdb table ohlcv is empty)." }, { status: 503 });
+          }
+
+          const rows = await queryDuckDbRows(
+            backend.duckdbPath,
+            `
+              WITH base AS (
+                SELECT
+                  symbol,
+                  try_cast(date AS DATE) AS date,
+                  try_cast(close AS DOUBLE) AS close,
+                  lag(try_cast(close AS DOUBLE)) OVER (PARTITION BY symbol ORDER BY try_cast(date AS DATE)) AS prev_close,
+                  row_number() OVER (PARTITION BY symbol ORDER BY try_cast(date AS DATE) DESC) AS rn
+                FROM ohlcv
+              )
+              SELECT symbol, date, close, prev_close
+              FROM base
+              WHERE rn = 1
+            `,
+            []
+          );
+
+          const movers = rows
+            .map((raw) => {
+              const symbol = String(raw?.symbol ?? "").trim().toUpperCase();
+              const date = normalizeDuckDbDateKey(raw?.date);
+              const close = normalizeDuckDbNumber(raw?.close);
+              const prevClose = normalizeDuckDbNumber(raw?.prev_close);
+              if (!symbol || !date || close === null || prevClose === null || prevClose === 0) return null;
+              return { symbol, close, volume: 0, date, change_percent: ((close - prevClose) / prevClose) * 100 };
+            })
+            .filter(Boolean)
+            .sort((a, b) => (a?.change_percent ?? 0) - (b?.change_percent ?? 0))
+            .slice(0, 20);
+
+          return NextResponse.json({ losers: movers, count: movers.length });
         }
 
         const movers = computeMovers(await loadOHLCVData())
