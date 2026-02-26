@@ -77,4 +77,18 @@ describe("buildAssistantQueryPlan exchange/limit normalization", () => {
     expect(plan.source).toBe("fallback");
     expect(plan.summary).toContain("source=fallback");
   });
+
+  it("classifies mixed-case symbol date close query as stock snapshot", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Gia dong cua co phieu VCb ngay 31/12/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.intent).toBe("stock_snapshot");
+    expect(plan.symbols).toContain("VCB");
+    expect(plan.filters.date).toBe("2025-12-31");
+    expect(plan.steps.some((step) => step.tool === "stockSnapshot")).toBe(true);
+    expect(plan.steps.some((step) => step.tool === "marketSnapshot")).toBe(false);
+  });
 });

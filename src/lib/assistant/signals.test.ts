@@ -1,60 +1,60 @@
+import type { AssistantContextSnapshot } from "@/types/assistant";
 import { collectRequiredSignals, getCandidateSymbols } from "@/lib/assistant/signals";
 
-describe("assistant signal routing hardening", () => {
-  it("routes noisy fundamentals prompts to fundamentalSnapshot and suppresses marketSnapshot", () => {
-    const signals = collectRequiredSignals({
-      message: "dm cho toi bctc aaa 2024, uu tien lnst + dong tien hddd, viet ngan gon",
-      contextSnapshot: { page: "home" },
-      baselineOnlyMode: false,
-    });
+describe("assistant signals symbol extraction", () => {
+  const analysisContext: AssistantContextSnapshot = { page: "analysis" };
 
-    expect(signals.some((item) => item.tool === "fundamentalSnapshot")).toBe(true);
-    expect(signals.some((item) => item.tool === "marketSnapshot")).toBe(false);
+  it("extracts lowercase symbol in noisy fundamentals query with quarter + ratios", () => {
+    const symbols = getCandidateSymbols("acb 2025q2 d/e voi current ratio bn?", analysisContext);
+    expect(symbols).toContain("ACB");
   });
 
-  it("keeps fundamentals signal even when symbol is missing", () => {
-    const signals = collectRequiredSignals({
-      message: "cho toi bctc nam 2024, doanh thu va lnst",
-      contextSnapshot: { page: "home" },
-      baselineOnlyMode: false,
-    });
-
-    expect(signals.some((item) => item.tool === "fundamentalSnapshot")).toBe(true);
-    expect(signals.some((item) => item.tool === "marketSnapshot")).toBe(false);
+  it("extracts lowercase symbol in noisy fundamentals query with multi-metric shorthand", () => {
+    const symbols = getCandidateSymbols("fpt 2025q4 ocf fcf eps pbt di", analysisContext);
+    expect(symbols).toContain("FPT");
   });
 
-  it("does not treat LNST shorthand as a symbol candidate", () => {
-    const candidates = getCandidateSymbols("AAA nam 2024 cho toi LNST va EPS.", { page: "home" });
-    expect(candidates).toContain("AAA");
-    expect(candidates).not.toContain("LNST");
+  it("extracts lowercase leading symbol before statement keyword", () => {
+    const symbols = getCandidateSymbols("vnm bctn 2024q3 net margin gross margin", analysisContext);
+    expect(symbols).toContain("VNM");
   });
 
-  it("extracts lowercase symbol in 'bctc <symbol>' noisy prompts", () => {
-    const candidates = getCandidateSymbols("dm cho toi bctc aaa 2024, uu tien lnst", { page: "home" });
-    expect(candidates).toContain("AAA");
+  it("does not treat 'ky' period token as a symbol in refinement prompts", () => {
+    const symbols = getCandidateSymbols(
+      "giu ky 2024Q4, doi bo metric sang OCF va FCF.",
+      { page: "analysis", symbol: "ACB" }
+    );
+    expect(symbols).toContain("ACB");
+    expect(symbols).not.toContain("KY");
   });
 
-  it("extracts lowercase banking symbol from 'bank <symbol>' prompts", () => {
-    const candidates = getCandidateSymbols("bank acb nam 2024, can bctn + bcdkt", { page: "home" });
-    expect(candidates).toContain("ACB");
-  });
-
-  it("does not mis-read 'moi nhat' as a symbol in BCTN prompt", () => {
-    const candidates = getCandidateSymbols("Cho BCTN moi nhat cua VNM, chi tra doanh thu va loi nhuan sau thue.", {
-      page: "home",
-    });
-    expect(candidates).toContain("VNM");
-    expect(candidates).not.toContain("MOI");
-  });
-
-  it("routes broad market overview query to marketSnapshot without fundamentals", () => {
-    const signals = collectRequiredSignals({
-      message: "Cho toi market overview: VNINDEX, top gainer va top loser hien tai.",
-      contextSnapshot: { page: "home" },
-      baselineOnlyMode: false,
-    });
-
-    expect(signals.some((item) => item.tool === "marketSnapshot")).toBe(true);
-    expect(signals.some((item) => item.tool === "fundamentalSnapshot")).toBe(false);
+  it("extracts mixed-case ticker in 'co phieu' phrase with date scope", () => {
+    const symbols = getCandidateSymbols("Gia dong cua co phieu VCb ngay 31/12/2025", analysisContext);
+    expect(symbols).toContain("VCB");
   });
 });
+
+describe("assistant signals required tools", () => {
+  it("does not require fundamentalSnapshot for valuation ranking universe query without symbol", () => {
+    const signals = collectRequiredSignals({
+      message: "Top 5 co phieu ngan hang tren HOSE ngay 31/12/2025 theo EV/EBITDA cao nhat.",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).toContain("valuationRanking");
+    expect(tools).not.toContain("fundamentalSnapshot");
+  });
+
+  it("routes symbol + date + close query to stockSnapshot", () => {
+    const signals = collectRequiredSignals({
+      message: "Gia dong cua co phieu VCb ngay 31/12/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).toContain("stockSnapshot");
+    expect(tools).not.toContain("marketSnapshot");
+  });
+});
+

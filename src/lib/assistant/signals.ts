@@ -110,6 +110,7 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "BAO",
   "NHIU",
   "NHIEU",
+  "KY",
   "CN",
   "T2",
   "T3",
@@ -145,6 +146,7 @@ const CONTEXTUAL_SYMBOL_NOISE_TOKENS = new Set([
   "GIUP",
   "QUY",
   "NAM",
+  "KY",
   "THANG",
   "TUAN",
   "CUA",
@@ -580,7 +582,7 @@ export function collectRequiredSignals(input: {
 
   if (
     (input.contextSnapshot?.page === "charts" && hasCandidateSymbol)
-    || (hasFundamentalSignal && !valuationRankingUniverseIntent)
+    || (hasFundamentalSignal && !valuationRankingUniverseIntent && hasCandidateSymbol)
   ) {
     pushUnique("fundamentalSnapshot", "/api/fundamentals");
   }
@@ -888,6 +890,7 @@ function extractExplicitSymbolHints(message: string): string[] {
   const patterns = [
     /\b(?:ma|mck|ticker|symbol|cp|code)\b\s*[:=-]?\s*(?!co\b|chung\b|ck\b)([a-z0-9]{2,4})\b/g,
     /\bma\s+(?:co\s+phieu|chung\s+khoan|ck)\s*[:=-]?\s*([a-z0-9]{2,4})\b/g,
+    /\b(?:co\s+phieu|chung\s+khoan)\s*(?:ma|mck|ticker|symbol|cp|code)?\s*[:=-]?\s*([a-z0-9]{2,4})\b/g,
     /\$([a-z0-9]{2,4})\b/g,
   ];
   const contextualBareSymbolPatterns = [
