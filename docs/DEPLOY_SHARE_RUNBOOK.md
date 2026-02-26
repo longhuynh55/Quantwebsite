@@ -24,6 +24,7 @@ Recommended order: `Railway` first, `Render` as backup.
 5. Deploy and open:
    - `/api/health/data?probe=true&includeFundamentals=false`
    - `/api/health/assistant`
+   - `/api/health/assistant?strict=true`
 
 If `ok=true`, share the Railway URL.
 
@@ -53,7 +54,7 @@ If `ok=true`, share the Railway URL.
 Run these endpoints once:
 
 1. `/api/health/data?probe=true`
-2. `/api/health/assistant`
+2. `/api/health/assistant?strict=true`
 3. `/api/market-overview`
 4. `/api/fundamentals?symbol=HPG&statement=bs&period=latest`
 5. `POST /api/assistant` with body `{"message":"Top 3 VN30 stocks by close today","contextSnapshot":{"page":"assistant"}}`

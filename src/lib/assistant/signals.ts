@@ -896,6 +896,7 @@ function extractExplicitSymbolHints(message: string): string[] {
   const contextualBareSymbolPatterns = [
     /\b(?:bctc|bctn|kqkd|lctt|bcdkt|bank)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
     /\b(?:income\s*statement|balance\s*sheet|cash\s*flow)(?:\s+(?:latest|recent|q[1-4]|\d{4}))*\s+(?:of\s+)?([a-z0-9]{2,4})\b/g,
+    /\b(?:gia\s+(?:dong\s+cua|mo\s+cua)|close|open|high|low|volume)\s+(?:co\s+phieu\s+)?([a-z0-9]{2,4})\s+(?:ngay|date|as\s+of)\b/g,
   ];
   const leadingFundamentalSymbolPatterns = [
     /\b([a-z0-9]{2,4})\s+(?:bctc|bctn|kqkd|lctt|bcdkt|income\s*statement|balance\s*sheet|cash\s*flow)\b/g,

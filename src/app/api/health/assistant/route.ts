@@ -18,6 +18,7 @@ interface AssistantHealthResponse {
     forcedProvider: ProviderSource | null;
     openRouterOnly: boolean;
     toolBaseUrlSource: string;
+    strictMode: boolean;
   };
   warnings: string[];
 }
@@ -127,7 +128,19 @@ function evaluateStatus(options: {
   return "healthy";
 }
 
-export async function GET(): Promise<NextResponse<AssistantHealthResponse>> {
+function evaluateStrictStatus(options: {
+  providerConfigured: boolean;
+  groundingConfigured: boolean;
+  executeConfigured: boolean;
+}): AssistantHealthStatus {
+  if (!options.providerConfigured || !options.groundingConfigured || !options.executeConfigured) {
+    return "unhealthy";
+  }
+  return "healthy";
+}
+
+export async function GET(request: Request): Promise<NextResponse<AssistantHealthResponse>> {
+  const strictMode = parseBoolean(new URL(request.url).searchParams.get("strict") ?? undefined, false);
   const { chain, forcedProvider, openRouterOnly } = buildProviderChain();
   const toolBase = resolveTrustedToolBaseUrl();
   const executeConfigured = Boolean(process.env.ASSISTANT_EXECUTE_APPROVAL_TOKEN?.trim());
@@ -151,10 +164,16 @@ export async function GET(): Promise<NextResponse<AssistantHealthResponse>> {
     warnings.push("ASSISTANT_EXECUTE_APPROVAL_TOKEN is not configured (execute endpoint will return 503).");
   }
 
-  const status = evaluateStatus({
-    providerConfigured,
-    groundingConfigured,
-  });
+  const status = strictMode
+    ? evaluateStrictStatus({
+        providerConfigured,
+        groundingConfigured,
+        executeConfigured,
+      })
+    : evaluateStatus({
+        providerConfigured,
+        groundingConfigured,
+      });
   const response: AssistantHealthResponse = {
     status,
     timestamp: new Date().toISOString(),
@@ -169,11 +188,13 @@ export async function GET(): Promise<NextResponse<AssistantHealthResponse>> {
       forcedProvider,
       openRouterOnly,
       toolBaseUrlSource: toolBase.source,
+      strictMode,
     },
     warnings,
   };
 
-  const httpStatus = status === "unhealthy" ? 503 : 200;
+  const httpStatus = strictMode
+    ? (status === "healthy" ? 200 : 503)
+    : (status === "unhealthy" ? 503 : 200);
   return NextResponse.json(response, { status: httpStatus });
 }
-

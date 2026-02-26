@@ -32,6 +32,11 @@ describe("assistant signals symbol extraction", () => {
     const symbols = getCandidateSymbols("Gia dong cua co phieu VCb ngay 31/12/2025", analysisContext);
     expect(symbols).toContain("VCB");
   });
+
+  it("extracts bare lowercase ticker in price-date query", () => {
+    const symbols = getCandidateSymbols("gia dong cua vcb ngay 31/12/2025", analysisContext);
+    expect(symbols).toContain("VCB");
+  });
 });
 
 describe("assistant signals required tools", () => {

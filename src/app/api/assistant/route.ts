@@ -200,7 +200,12 @@ export async function POST(request: NextRequest) {
     const toolStatusSummary = grounding.usedTools
       .map((tool) => `${tool.name}:${tool.status}`)
       .join(', ');
-    const nonHoseScopeGuard = detectNonHoseScopeGuard(grounding.usedTools, message, contextSnapshot);
+    const nonHoseScopeGuard = detectNonHoseScopeGuard(
+      grounding.usedTools,
+      message,
+      contextSnapshot,
+      queryPlan
+    );
     if (nonHoseScopeGuard) {
       const scopeGuardMessage = buildNonHoseScopeGuardMessage(nonHoseScopeGuard.requestedExchange);
       logger.info("response.scope_guard_bypass", {
@@ -220,26 +225,26 @@ export async function POST(request: NextRequest) {
         dataConfidence: "high",
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: [],
-      meta: {
-        providerUsed: "policy",
-        fallbackUsed: false,
-        latencyMs: 0,
-        ...metaBase,
-        ...planContextMeta,
-        policyMode: "shadow",
-        groundingRequired: true,
-        groundingSatisfied: true,
-        policyReasonCode: "non_hose_scope_guard",
-        groundedFactsCount: grounding.facts.length,
-        citationCount: responseCitations.length,
-        groundingSource: grounding.groundingSource ?? "none",
-        toolStatusSummary,
-        queryIntent: queryPlan.intent,
-        queryPlanSummary: queryPlan.summary,
-        plannedToolCount: queryPlan.steps.length,
-        plannedTools: queryPlan.steps.map((step) => step.tool),
-      },
+        messageBlocks: grounding.messageBlocks,
+        meta: {
+          providerUsed: "policy",
+          fallbackUsed: false,
+          latencyMs: 0,
+          ...metaBase,
+          ...planContextMeta,
+          policyMode: "shadow",
+          groundingRequired: true,
+          groundingSatisfied: true,
+          policyReasonCode: "non_hose_scope_guard",
+          groundedFactsCount: grounding.facts.length,
+          citationCount: responseCitations.length,
+          groundingSource: grounding.groundingSource ?? "none",
+          toolStatusSummary,
+          queryIntent: queryPlan.intent,
+          queryPlanSummary: queryPlan.summary,
+          plannedToolCount: queryPlan.steps.length,
+          plannedTools: queryPlan.steps.map((step) => step.tool),
+        },
       });
     }
 
@@ -295,7 +300,7 @@ export async function POST(request: NextRequest) {
         dataConfidence: policy.dataConfidence,
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: [],
+        messageBlocks: grounding.messageBlocks,
         meta: {
           providerUsed: 'policy',
           fallbackUsed: false,
@@ -767,22 +772,47 @@ function buildDeterministicEvalGroundedMessage(
 function detectNonHoseScopeGuard(
   usedTools: AssistantToolUsage[],
   message: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlan?: AssistantQueryPlan
 ): { requestedExchange: string; tool: AssistantToolUsage["name"] } | null {
   for (const tool of usedTools) {
     if (tool.status !== "success") continue;
     if (tool.name !== "stockSnapshot" && tool.name !== "valuationRanking" && tool.name !== "icbSnapshot") continue;
+    if (tool.name === "stockSnapshot") {
+      const symbol = String(tool.requestParams?.symbol ?? "")
+        .trim()
+        .toUpperCase();
+      if (symbol) continue;
+    }
     const requestedExchange = String(tool.requestParams?.requestedExchange ?? "")
       .trim()
       .toUpperCase();
     if (!requestedExchange || requestedExchange === "HOSE") continue;
     return { requestedExchange, tool: tool.name };
   }
+  if (!shouldApplyExchangeHintScopeGuard(queryPlan, message)) return null;
   const hintedExchange = detectRequestedExchangeHint(message, contextSnapshot);
   if (hintedExchange && hintedExchange !== "HOSE") {
     return { requestedExchange: hintedExchange, tool: "stockSnapshot" };
   }
   return null;
+}
+
+function shouldApplyExchangeHintScopeGuard(
+  queryPlan: AssistantQueryPlan | undefined,
+  message: string
+): boolean {
+  if (!queryPlan) return false;
+  if (Array.isArray(queryPlan.symbols) && queryPlan.symbols.length > 0) return false;
+  if (queryPlan.intent === "valuation_ranking" || queryPlan.intent === "icb_snapshot") return true;
+  if (queryPlan.intent !== "stock_snapshot") return false;
+
+  const normalized = normalizeKeywordToken(message);
+  if (/\btop\s*\d{1,2}\b/.test(normalized)) return true;
+  if (normalized.includes("xep hang") || normalized.includes("ranking")) return true;
+  if (normalized.includes("gainer") || normalized.includes("loser")) return true;
+  if (normalized.includes("cao nhat") || normalized.includes("thap nhat")) return true;
+  return false;
 }
 
 function buildNonHoseScopeGuardMessage(requestedExchange: string): string {
@@ -1020,6 +1050,7 @@ function createRequestId(): string {
 function isAllowedPage(value: string): value is AssistantContextSnapshot['page'] {
   return (
     value === 'home' ||
+    value === 'analysis' ||
     value === 'screener' ||
     value === 'charts' ||
     value === 'backtesting' ||

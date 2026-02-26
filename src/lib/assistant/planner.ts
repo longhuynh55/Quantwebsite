@@ -596,12 +596,18 @@ function extractFilters(
 ): AssistantQueryPlanFilters {
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
   const normalizedMessage = normalizeForKeywordMatch(message);
+  const allowHistoryDateCarryover = hasExplicitDateCarryoverCue(normalizedMessage);
   const inferredRangeCurrent = extractDateRangeInMessage(message);
-  const inferredRangeHistory = conversationHistory ? extractDateRangeInMessage(conversationHistory) : null;
+  const inferredRangeHistory =
+    allowHistoryDateCarryover && conversationHistory
+      ? extractDateRangeInMessage(conversationHistory)
+      : null;
   const inferredRange = inferredRangeCurrent ?? inferredRangeHistory;
   const inferredDateCurrent = inferredRangeCurrent ? null : extractDateInMessage(message);
   const inferredDateHistory =
-    inferredRange || !conversationHistory ? null : extractDateInMessage(conversationHistory);
+    inferredRange || !allowHistoryDateCarryover || !conversationHistory
+      ? null
+      : extractDateInMessage(conversationHistory);
 
   const date = normalizeDateLike(
     filters?.date
@@ -655,18 +661,50 @@ function extractExchange(
 }
 
 function extractDateInMessage(message: string): string | null {
-  const match = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/);
-  if (!match) return null;
-  return normalizeDateLike(match[1]);
+  const numericMatch = extractNumericDateTokens(message, 1)[0];
+  if (numericMatch) {
+    return normalizeDateLike(numericMatch);
+  }
+  return extractNaturalDateInMessage(message);
 }
 
 function extractDateRangeInMessage(message: string): { from: string; to: string } | null {
-  const matches = message.match(/\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/g) ?? [];
+  const matches = extractNumericDateTokens(message);
   if (matches.length < 2) return null;
   const from = normalizeDateLike(matches[0]);
   const to = normalizeDateLike(matches[1]);
   if (!from || !to) return null;
   return { from, to };
+}
+
+function extractNumericDateTokens(message: string, limit?: number): string[] {
+  const regex = /\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/g;
+  const matches: string[] = [];
+  let match = regex.exec(message);
+  while (match) {
+    matches.push(match[1]);
+    if (limit && matches.length >= limit) break;
+    match = regex.exec(message);
+  }
+  return matches;
+}
+
+function extractNaturalDateInMessage(message: string): string | null {
+  const normalized = normalizeForKeywordMatch(message);
+  const patterns = [
+    /\bngay\s*(\d{1,2})\s*thang\s*(\d{1,2})\s*(?:nam\s*)?(\d{4})\b/,
+    /\b(\d{1,2})\s*thang\s*(\d{1,2})\s*(?:nam\s*)?(\d{4})\b/,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(normalized);
+    if (!match) continue;
+    const day = Number.parseInt(match[1], 10);
+    const month = Number.parseInt(match[2], 10);
+    const year = Number.parseInt(match[3], 10);
+    const normalizedDate = normalizeDateLike(`${year}-${month}-${day}`);
+    if (normalizedDate) return normalizedDate;
+  }
+  return null;
 }
 
 function normalizeDateLike(value: unknown): string | null {
@@ -698,7 +736,23 @@ function isValidDateParts(year: number, month: number, day: number): boolean {
   if (year < 1900 || year > 2100) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
-  return true;
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year
+    && probe.getUTCMonth() + 1 === month
+    && probe.getUTCDate() === day
+  );
+}
+
+function hasExplicitDateCarryoverCue(normalizedMessage: string): boolean {
+  if (!normalizedMessage) return false;
+  const carryoverPatterns: RegExp[] = [
+    /\b(nhu|giong)\s+(?:ky|ngay|khoang)\s*(?:truoc|cu|do)\b/,
+    /\bgiu\s+nguyen\s+(?:ky|ngay|khoang)\b/,
+    /\bvan\s+(?:ngay|ky|khoang)\s+(?:do|cu)\b/,
+    /\b(as before|same date|same range|same period)\b/,
+  ];
+  return carryoverPatterns.some((pattern) => pattern.test(normalizedMessage));
 }
 
 function inferIcbHint(normalizedMessage: string): string | null {

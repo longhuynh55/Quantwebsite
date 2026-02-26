@@ -103,7 +103,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <ResponseTrace
             meta={message.meta}
             usedTools={message.usedTools}
-            policyReason={message.meta?.policyReasonCode ?? message.policyReason}
+            policyReason={message.policyReason}
+            policyReasonCode={message.meta?.policyReasonCode}
             policyStatus={message.policyStatus}
           />
         )}
@@ -174,11 +175,13 @@ function ResponseTrace({
   meta,
   usedTools,
   policyReason,
+  policyReasonCode,
   policyStatus,
 }: {
   meta?: Message['meta'];
   usedTools?: AssistantToolUsage[];
   policyReason?: string;
+  policyReasonCode?: string;
   policyStatus?: Message['policyStatus'];
 }) {
   if (!meta && (!usedTools || usedTools.length === 0)) return null;
@@ -259,9 +262,9 @@ function ResponseTrace({
             Recovery: {recoveryHint}
           </p>
         )}
-        {policyReason && (
+        {formatPolicyReason(policyReasonCode, policyReason) && (
           <p className="text-[11px] text-stone-600 dark:text-neutral-300">
-            Reason: {formatPolicyReason(policyReason)}
+            Reason: {formatPolicyReason(policyReasonCode, policyReason)}
           </p>
         )}
         {meta?.toolStatusSummary && (
@@ -280,6 +283,11 @@ function ResponseTrace({
                 <span className="font-medium">{tool.name}</span>
                 <span className="uppercase tracking-wide">{tool.status}</span>
                 {tool.errorCode && <span className="text-stone-500 dark:text-neutral-400">({tool.errorCode})</span>}
+                {tool.error && (
+                  <span className="text-stone-500 dark:text-neutral-400 break-words">
+                    {tool.error}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -344,18 +352,34 @@ function formatSemanticPercent(primary?: number, fallback?: number | null): stri
   return `${(raw * 100).toFixed(1)}%`;
 }
 
-function formatPolicyReason(reason: string): string {
-  const normalized = String(reason).trim();
+function formatPolicyReason(reasonCode?: string, reason?: string): string | null {
+  const normalizedCode = String(reasonCode ?? "").trim();
+  const normalizedReason = String(reason ?? "").trim();
   const labels: Record<string, string> = {
     insufficient_grounding: 'Insufficient grounding evidence',
     required_tool_failed: 'Required tool failed',
+    required_tool_skipped: 'Required tool skipped',
     missing_citation: 'Citation missing for required metric',
     empty_grounded_payload: 'Grounded payload is empty',
     malformed_grounded_payload: 'Grounded payload is malformed',
     grounding_mismatch: 'Grounding mismatch with requested metric',
     no_required_signals: 'No required grounding signal',
+    missing_symbol_grounding: 'Grounded symbol coverage is incomplete',
+    future_date_not_supported: 'Future date is outside grounded dataset scope',
+    fabrication_directive_blocked: 'Fabricated numeric request was blocked by policy',
+    ambiguous_symbol_not_supported: 'Ticker is ambiguous or unsupported',
+    non_hose_scope_guard: 'Only HOSE exchange is supported for grounded ranking',
   };
-  return labels[normalized] ?? normalized;
+  const codeLabel = normalizedCode ? (labels[normalizedCode] ?? normalizedCode) : "";
+  if (codeLabel && normalizedReason) {
+    if (normalizedReason === normalizedCode || normalizedReason === codeLabel) {
+      return codeLabel;
+    }
+    return `${codeLabel}. ${normalizedReason}`;
+  }
+  if (normalizedReason) return normalizedReason;
+  if (codeLabel) return codeLabel;
+  return null;
 }
 
 function buildTraceRecoveryHint(

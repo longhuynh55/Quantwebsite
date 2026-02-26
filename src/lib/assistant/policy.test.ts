@@ -72,4 +72,47 @@ describe("evaluateAssistantPolicy recommendation grounding", () => {
     expect(result.shouldBypassLlm).toBe(false);
     expect(result.groundingSatisfied).toBe(true);
   });
+
+  it("returns skipped-required-tool reason when a required tool is skipped", () => {
+    const queryPlan: AssistantQueryPlan = {
+      intent: "valuation",
+      confidence: "high",
+      source: "signal",
+      symbols: ["VNM"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          reason: "grounded",
+          required: true,
+        },
+      ],
+      summary: "intent=valuation | source=signal | symbols=VNM | tools=stockSnapshot",
+    };
+    const result = evaluateAssistantPolicy({
+      message: "Khuyen nghi mua VNM",
+      contextSnapshot: { page: "home" },
+      queryPlan,
+      grounding: {
+        facts: [],
+        citations: [],
+        usedTools: [
+          {
+            name: "stockSnapshot",
+            status: "skipped",
+            evidenceCount: 0,
+            warningCount: 0,
+          },
+        ],
+        messageBlocks: [],
+        groundingSource: "none",
+      },
+    });
+
+    expect(result.status).toBe("fallback");
+    expect(result.reasonCode).toBe("required_tool_skipped");
+    expect(result.shouldBypassLlm).toBe(true);
+    expect(result.groundingSatisfied).toBe(false);
+  });
 });

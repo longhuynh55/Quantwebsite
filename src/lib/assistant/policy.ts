@@ -9,6 +9,7 @@ export type AssistantConfidence = "high" | "medium" | "low";
 export type PolicyReasonCode =
   | "insufficient_grounding"
   | "required_tool_failed"
+  | "required_tool_skipped"
   | "missing_citation"
   | "no_numeric_evidence"
   | "missing_symbol_grounding"
@@ -417,6 +418,12 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
       errorByTool.set(tool.name, tool);
     }
   }
+  const skippedByTool = new Map<AssistantToolName, AssistantToolUsage>();
+  for (const tool of grounding.usedTools) {
+    if (tool.status === "skipped") {
+      skippedByTool.set(tool.name, tool);
+    }
+  }
 
   const citationEndpoints = new Set(
     grounding.citations.map((citation) => String(citation.endpoint ?? "")).filter(Boolean)
@@ -445,6 +452,15 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
     const successTool = successByTool.get(signal.tool);
     if (!successTool) {
       const toolError = errorByTool.get(signal.tool);
+      const skippedTool = skippedByTool.get(signal.tool);
+      if (skippedTool) {
+        return {
+          reasonCode: "required_tool_skipped",
+          reason: skippedTool.error
+            ? `Required tool ${signal.tool} was skipped: ${skippedTool.error}`
+            : `Required tool ${signal.tool} was skipped.`,
+        };
+      }
       return {
         reasonCode: "required_tool_failed",
         reason: toolError?.error
@@ -800,6 +816,8 @@ function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): str
 
   if (reasonCode === "required_tool_failed") {
     guidance.unshift("A required financial data tool is temporarily unavailable.");
+  } else if (reasonCode === "required_tool_skipped") {
+    guidance.unshift("A required grounding tool was skipped and did not execute.");
   } else if (reasonCode === "missing_citation") {
     guidance.unshift("The response is blocked because required source citations are missing.");
   } else if (reasonCode === "no_numeric_evidence") {

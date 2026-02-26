@@ -91,4 +91,48 @@ describe("buildAssistantQueryPlan exchange/limit normalization", () => {
     expect(plan.steps.some((step) => step.tool === "stockSnapshot")).toBe(true);
     expect(plan.steps.some((step) => step.tool === "marketSnapshot")).toBe(false);
   });
+
+  it("rejects invalid calendar date in filters", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Gia dong cua VCB ngay 31/02/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.intent).toBe("stock_snapshot");
+    expect(plan.symbols).toContain("VCB");
+    expect(plan.filters.date).toBeUndefined();
+  });
+
+  it("extracts natural Vietnamese date phrase", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Gia dong cua VCB ngay 31 thang 12 nam 2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.filters.date).toBe("2025-12-31");
+  });
+
+  it("does not carry over history date without explicit cue", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Gia dong cua VCB",
+      conversationHistory: "Gia dong cua VCB ngay 31/12/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.filters.date).toBeUndefined();
+  });
+
+  it("allows history date carryover with explicit cue", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Giu nguyen ngay truoc, gia dong cua VCB",
+      conversationHistory: "Gia dong cua VCB ngay 31/12/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.filters.date).toBe("2025-12-31");
+  });
 });
