@@ -61,5 +61,16 @@ describe("assistant signals required tools", () => {
     expect(tools).toContain("stockSnapshot");
     expect(tools).not.toContain("marketSnapshot");
   });
+
+  it("routes recommendation with symbol to stockSnapshot instead of marketSnapshot", () => {
+    const signals = collectRequiredSignals({
+      message: "Khuyen nghi mua VNM ngan han",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).toContain("stockSnapshot");
+    expect(tools).not.toContain("marketSnapshot");
+  });
 });
 

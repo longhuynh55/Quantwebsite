@@ -13,6 +13,7 @@ export type PolicyReasonCode =
   | "missing_citation"
   | "no_numeric_evidence"
   | "missing_symbol_grounding"
+  | "invalid_date_not_supported"
   | "future_date_not_supported"
   | "fabrication_directive_blocked"
   | "ambiguous_symbol_not_supported";
@@ -195,6 +196,24 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
       mode,
       status: shadowBlocked ? "shadow_blocked" : "fallback",
       reasonCode: "future_date_not_supported",
+      reason,
+      dataConfidence: "low",
+      groundingRequired: false,
+      groundingSatisfied: false,
+      shouldBypassLlm: true,
+      responseMessage: fallbackMessage,
+      shadowBlocked,
+    };
+  }
+  const invalidDateViolation = detectInvalidDateViolation(input.message, input.contextSnapshot);
+  if (invalidDateViolation) {
+    const reason = `Requested date ${invalidDateViolation.invalidDate} is invalid and unsupported for grounded market data.`;
+    const fallbackMessage = buildFallbackMessage("invalid_date_not_supported", reason);
+    const shadowBlocked = mode === "shadow";
+    return {
+      mode,
+      status: shadowBlocked ? "shadow_blocked" : "fallback",
+      reasonCode: "invalid_date_not_supported",
       reason,
       dataConfidence: "low",
       groundingRequired: false,
@@ -619,26 +638,7 @@ function detectFutureDateViolation(
     tomorrow.setDate(today.getDate() + 1);
     return { requestedDate: formatIsoDate(tomorrow) };
   }
-  const candidates = new Set<string>();
-  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
-  const filterDateValues = [
-    filters?.date,
-    filters?.asOfDate,
-    filters?.as_of_date,
-    filters?.day,
-    filters?.to,
-    filters?.from,
-  ];
-  for (const value of filterDateValues) {
-    if (typeof value === "string" && value.trim().length > 0) {
-      candidates.add(value.trim());
-    }
-  }
-  const textMatches = message.match(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b20\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/g) ?? [];
-  for (const candidate of textMatches) {
-    candidates.add(candidate);
-  }
-
+  const candidates = collectDateLikeCandidates(message, contextSnapshot);
   for (const candidate of candidates) {
     const parsed = parseDateLike(candidate);
     if (!parsed) continue;
@@ -650,8 +650,65 @@ function detectFutureDateViolation(
   return null;
 }
 
+function detectInvalidDateViolation(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): { invalidDate: string } | null {
+  const candidates = collectDateLikeCandidates(message, contextSnapshot);
+  for (const candidate of candidates) {
+    if (!isDateLikeToken(candidate)) continue;
+    const parsed = parseDateLike(candidate);
+    if (!parsed) {
+      return { invalidDate: candidate };
+    }
+  }
+  return null;
+}
+
+function collectDateLikeCandidates(
+  message: string,
+  contextSnapshot?: AssistantContextSnapshot
+): string[] {
+  const candidates = new Set<string>();
+  const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
+  const filterDateValues = [
+    filters?.date,
+    filters?.asOfDate,
+    filters?.as_of_date,
+    filters?.day,
+    filters?.to,
+    filters?.from,
+  ];
+  for (const value of filterDateValues) {
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    const trimmed = value.trim();
+    if (isDateLikeToken(trimmed)) {
+      candidates.add(trimmed);
+    }
+  }
+
+  const numericMatches = message.match(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b20\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/g) ?? [];
+  for (const candidate of numericMatches) {
+    candidates.add(candidate);
+  }
+  const naturalMatches = normalizeForKeywordMatch(message)
+    .match(/\b(?:ngay\s*)?\d{1,2}\s*thang\s*\d{1,2}\s*(?:nam\s*)?\d{4}\b/g) ?? [];
+  for (const candidate of naturalMatches) {
+    candidates.add(candidate);
+  }
+  return Array.from(candidates);
+}
+
+function isDateLikeToken(value: string): boolean {
+  const normalized = normalizeForKeywordMatch(String(value ?? "").trim());
+  if (!normalized) return false;
+  if (/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b20\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/.test(normalized)) return true;
+  if (/\b(?:ngay\s*)?\d{1,2}\s*thang\s*\d{1,2}\s*(?:nam\s*)?\d{4}\b/.test(normalized)) return true;
+  return false;
+}
+
 function parseDateLike(value: string): Date | null {
-  const input = String(value ?? "").trim();
+  const input = normalizeForKeywordMatch(String(value ?? "").trim());
   if (!input) return null;
 
   const isoLike = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(input);
@@ -665,6 +722,14 @@ function parseDateLike(value: string): Date | null {
     const month = Number(dayFirst[2]);
     const yearRaw = Number(dayFirst[3]);
     const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    return buildDate(year, month, day);
+  }
+
+  const natural = /^(?:ngay\s*)?(\d{1,2})\s*thang\s*(\d{1,2})\s*(?:nam\s*)?(\d{4})$/.exec(input);
+  if (natural) {
+    const day = Number(natural[1]);
+    const month = Number(natural[2]);
+    const year = Number(natural[3]);
     return buildDate(year, month, day);
   }
 
@@ -824,6 +889,9 @@ function buildFallbackMessage(reasonCode: PolicyReasonCode, reason: string): str
     guidance.unshift("Grounded data exists, but required numeric values are missing.");
   } else if (reasonCode === "missing_symbol_grounding") {
     guidance.unshift("Grounded symbol coverage is incomplete for the requested multi-symbol comparison.");
+  } else if (reasonCode === "invalid_date_not_supported") {
+    guidance.unshift("Requested date is not a valid calendar date in grounded HOSE datasets.");
+    guidance.unshift("Ngay yeu cau khong hop le theo lich du lieu.");
   } else if (reasonCode === "future_date_not_supported") {
     guidance.unshift("Future-date market data is not available in grounded HOSE datasets.");
     guidance.unshift("Khong the cung cap so lieu dinh luong cho ngay trong tuong lai.");

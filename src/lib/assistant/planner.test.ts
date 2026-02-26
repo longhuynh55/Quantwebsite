@@ -92,6 +92,19 @@ describe("buildAssistantQueryPlan exchange/limit normalization", () => {
     expect(plan.steps.some((step) => step.tool === "marketSnapshot")).toBe(false);
   });
 
+  it("classifies recommendation with symbol as stock_snapshot intent", () => {
+    const plan = buildAssistantQueryPlan({
+      message: "Khuyen nghi mua VNM ngan han",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+
+    expect(plan.intent).toBe("stock_snapshot");
+    expect(plan.symbols).toContain("VNM");
+    expect(plan.steps.some((step) => step.tool === "stockSnapshot")).toBe(true);
+    expect(plan.steps.some((step) => step.tool === "marketSnapshot")).toBe(false);
+  });
+
   it("rejects invalid calendar date in filters", () => {
     const plan = buildAssistantQueryPlan({
       message: "Gia dong cua VCB ngay 31/02/2025",

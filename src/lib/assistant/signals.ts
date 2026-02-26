@@ -417,6 +417,21 @@ const SENSITIVITY_KEYWORDS = [
   "terminal growth tang",
   "terminal growth giam",
 ];
+const RECOMMENDATION_KEYWORDS = [
+  "khuyen nghi",
+  "goi y",
+  "nen mua",
+  "nen ban",
+  "nen giu",
+  "de xuat",
+  "recommend",
+  "recommendation",
+  "actionable",
+  "entry",
+  "exit",
+  "stoploss",
+  "take profit",
+];
 const HEALTH_KEYWORDS = ["health score", "financial health", "red flag", "quality of earnings"];
 const PEER_KEYWORDS = ["peer", "comparable", "multiple", "p/e", "p/b"];
 const VALUATION_RANKING_KEYWORDS = [
@@ -477,6 +492,7 @@ export function collectRequiredSignals(input: {
     || hasAnyKeyword(messageLower, PEER_KEYWORDS)
     || hasValuationRankingSignal(messageLower)
     || hasValuationMetricFilter;
+  const asksRecommendation = hasAnyKeyword(messageLower, RECOMMENDATION_KEYWORDS);
   const asksFundamentals =
     hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS)
     || asksFundamentalRatios
@@ -523,6 +539,7 @@ export function collectRequiredSignals(input: {
     || asksFundamentals
     || asksDataDebug
     || asksMarket
+    || asksRecommendation
     || hasAnyKeyword(messageLower, BACKTEST_KEYWORDS)
     || hasAnyKeyword(messageLower, RISK_KEYWORDS)
     || hasAnyKeyword(messageLower, FACTOR_KEYWORDS);
@@ -563,6 +580,9 @@ export function collectRequiredSignals(input: {
   }
 
   if (prefersSymbolScopedStockSnapshot || asksStockUniverseRanking || sectorScopedStockRanking) {
+    pushUnique("stockSnapshot", "/api/stocks");
+  }
+  if (asksRecommendation && hasCandidateSymbol) {
     pushUnique("stockSnapshot", "/api/stocks");
   }
 
@@ -623,9 +643,10 @@ export function collectRequiredSignals(input: {
     !ambiguousMetricFallback
     && !prefersSymbolScopedStockSnapshot
     && !hasFundamentalSignal
+    && !asksRecommendation
     && (
-      input.contextSnapshot?.page === "home"
-      || asksMarket
+      asksMarket
+      || (input.contextSnapshot?.page === "home" && !hasCandidateSymbol)
     )
   )) {
     pushUnique("marketSnapshot", "/api/market-overview");

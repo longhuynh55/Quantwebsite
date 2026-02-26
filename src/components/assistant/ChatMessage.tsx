@@ -365,6 +365,7 @@ function formatPolicyReason(reasonCode?: string, reason?: string): string | null
     grounding_mismatch: 'Grounding mismatch with requested metric',
     no_required_signals: 'No required grounding signal',
     missing_symbol_grounding: 'Grounded symbol coverage is incomplete',
+    invalid_date_not_supported: 'Requested date is invalid',
     future_date_not_supported: 'Future date is outside grounded dataset scope',
     fabrication_directive_blocked: 'Fabricated numeric request was blocked by policy',
     ambiguous_symbol_not_supported: 'Ticker is ambiguous or unsupported',

@@ -115,4 +115,16 @@ describe("evaluateAssistantPolicy recommendation grounding", () => {
     expect(result.shouldBypassLlm).toBe(true);
     expect(result.groundingSatisfied).toBe(false);
   });
+
+  it("blocks invalid calendar date prompts before grounding", () => {
+    const result = evaluateAssistantPolicy({
+      message: "Gia dong VCB ngay 31/04/2025",
+      contextSnapshot: { page: "home" },
+      grounding: emptyGrounding,
+    });
+
+    expect(result.shouldBypassLlm).toBe(true);
+    expect(result.reasonCode).toBe("invalid_date_not_supported");
+    expect(result.status === "shadow_blocked" || result.status === "fallback").toBe(true);
+  });
 });
