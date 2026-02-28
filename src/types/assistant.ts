@@ -6,6 +6,7 @@ export type AssistantExecutionMode = 'chat' | 'agent';
 
 export type PageContext =
   | { page: 'home' }
+  | { page: 'analysis'; symbol?: string; filters?: Record<string, unknown> }
   | { page: 'screener'; filters?: Record<string, unknown> }
   | { page: 'charts'; symbol?: string }
   | { page: 'backtesting'; strategy?: string }
@@ -185,6 +186,14 @@ export interface AssistantResponseMeta {
   plannedTools?: AssistantToolName[];
   queryPlanFilters?: Record<string, unknown>;
   queryPlanSymbols?: string[];
+  requestedSymbols?: string[];
+  resolvedSymbols?: string[];
+  contextSymbols?: string[];
+  memorySymbolsUsed?: string[];
+  droppedRequestedSymbols?: string[];
+  symbolResolutionSource?: "request" | "memory" | "mixed" | "none";
+  symbolConflictDetected?: boolean;
+  clarificationAsked?: boolean;
   groundingSource?: string;
   featureFlags?: AssistantFeatureFlagSnapshot;
   semantic?: AssistantSemanticMeta;

@@ -46,6 +46,13 @@ export interface GroundingResult {
   usedTools: AssistantToolUsage[];
   messageBlocks: AssistantMessageBlock[];
   groundingSource?: string;
+  symbolDiagnostics?: {
+    requestedSymbols: string[];
+    symbolTargets: string[];
+    groundedSymbols: string[];
+    droppedSymbols: string[];
+    requestsUniverseStockRanking: boolean;
+  };
 }
 
 interface ToolRunOutput {
@@ -147,6 +154,13 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         },
       ],
       groundingSource: "none",
+      symbolDiagnostics: {
+        requestedSymbols: symbolScope.requestedSymbols,
+        symbolTargets: symbolScope.symbolTargets,
+        groundedSymbols: [],
+        droppedSymbols: symbolScope.droppedSymbols,
+        requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
+      },
     };
   }
   const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan);
@@ -197,6 +211,13 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         }),
       ],
       groundingSource: "none",
+      symbolDiagnostics: {
+        requestedSymbols: symbolScope.requestedSymbols,
+        symbolTargets: symbolScope.symbolTargets,
+        groundedSymbols: [],
+        droppedSymbols: symbolScope.droppedSymbols,
+        requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
+      },
     };
   }
 
@@ -372,6 +393,13 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     usedTools,
     messageBlocks: messageBlocks.slice(0, MAX_MESSAGE_BLOCKS),
     groundingSource: deriveGroundingSource(citations, usedTools),
+    symbolDiagnostics: {
+      requestedSymbols: symbolScope.requestedSymbols,
+      symbolTargets: symbolScope.symbolTargets,
+      groundedSymbols,
+      droppedSymbols: symbolScope.droppedSymbols,
+      requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
+    },
   };
 }
 

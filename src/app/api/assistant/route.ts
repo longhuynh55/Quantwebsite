@@ -15,6 +15,7 @@ import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/p
 import { runGroundingTools, type GroundingResult } from '@/lib/assistant/tools';
 import { evaluateAssistantPolicy } from '@/lib/assistant/policy';
 import { buildAssistantQueryPlan, type AssistantQueryPlan } from '@/lib/assistant/planner';
+import { getCandidateSymbols, normalizeForKeywordMatch } from '@/lib/assistant/signals';
 import { createLogger, hashText, toErrorMeta } from '@/lib/logger';
 
 const MAX_TEXT_LENGTH = 4_000;
@@ -196,11 +197,24 @@ export async function POST(request: NextRequest) {
       source: queryPlan.source,
       summary: queryPlan.summary,
     });
+    const symbolTelemetry = buildSymbolResolutionTelemetry({
+      message,
+      queryPlanSymbols: queryPlan.symbols,
+      contextSnapshot,
+    });
     const planContextMeta = {
       queryPlanFilters: queryPlan.filters as Record<string, string | number | undefined>,
       queryPlanSymbols: queryPlan.symbols.length > 0 ? queryPlan.symbols : undefined,
       queryPlanConfidence: queryPlan.confidence,
       queryPlanSource: queryPlan.source,
+      requestedSymbols: symbolTelemetry.requestedSymbols.length > 0 ? symbolTelemetry.requestedSymbols : undefined,
+      resolvedSymbols: symbolTelemetry.resolvedSymbols.length > 0 ? symbolTelemetry.resolvedSymbols : undefined,
+      contextSymbols: symbolTelemetry.contextSymbols.length > 0 ? symbolTelemetry.contextSymbols : undefined,
+      memorySymbolsUsed: symbolTelemetry.memorySymbolsUsed.length > 0 ? symbolTelemetry.memorySymbolsUsed : undefined,
+      droppedRequestedSymbols:
+        symbolTelemetry.droppedRequestedSymbols.length > 0 ? symbolTelemetry.droppedRequestedSymbols : undefined,
+      symbolResolutionSource: symbolTelemetry.symbolResolutionSource,
+      symbolConflictDetected: symbolTelemetry.symbolConflictDetected,
     };
 
     if (!message) {
@@ -223,6 +237,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const clarificationMessage = maybeBuildSymbolClarificationMessage({
+      message,
+      queryPlan,
+      symbolTelemetry,
+    });
+    if (clarificationMessage) {
+      logger.info("response.clarification_required", {
+        intent: queryPlan.intent,
+        requestedSymbols: symbolTelemetry.requestedSymbols,
+        resolvedSymbols: symbolTelemetry.resolvedSymbols,
+        contextSymbols: symbolTelemetry.contextSymbols,
+      });
+      return NextResponse.json<AssistantResponse>({
+        message: clarificationMessage,
+        success: true,
+        grounded: false,
+        policyStatus: "fallback",
+        policyReason: "Clarification required before grounded tools can run safely.",
+        dataConfidence: "low",
+        citations: [],
+        usedTools: [],
+        messageBlocks: [
+          {
+            type: "text",
+            title: "Clarification Required",
+            content: clarificationMessage,
+          },
+        ],
+        meta: {
+          providerUsed: "policy",
+          fallbackUsed: false,
+          latencyMs: 0,
+          ...metaBase,
+          ...planContextMeta,
+          policyMode: "shadow",
+          groundingRequired: true,
+          groundingSatisfied: false,
+          policyReasonCode: "clarification_required_symbol_scope",
+          groundedFactsCount: 0,
+          citationCount: 0,
+          groundingSource: "none",
+          toolStatusSummary: "none",
+          queryIntent: queryPlan.intent,
+          queryPlanSummary: queryPlan.summary,
+          plannedToolCount: queryPlan.steps.length,
+          plannedTools: queryPlan.steps.map((step) => step.tool),
+          clarificationAsked: true,
+        },
+      });
+    }
+
     const trustedToolBaseUrl = toolBaseResolution.baseUrl;
     const grounding = await runGroundingTools({
       baseUrl: trustedToolBaseUrl,
@@ -231,6 +296,7 @@ export async function POST(request: NextRequest) {
       queryPlan,
       requestId,
     });
+    const symbolTelemetryWithGrounding = mergeGroundingSymbolTelemetry(symbolTelemetry, grounding);
     const responseCitations = selectResponseCitations(grounding.citations, MAX_RESPONSE_CITATIONS);
     const toolStatusSummary = grounding.usedTools
       .map((tool) => `${tool.name}:${tool.status}`)
@@ -267,6 +333,7 @@ export async function POST(request: NextRequest) {
           latencyMs: 0,
           ...metaBase,
           ...planContextMeta,
+          ...symbolTelemetryWithGrounding,
           policyMode: "shadow",
           groundingRequired: true,
           groundingSatisfied: false,
@@ -306,6 +373,7 @@ export async function POST(request: NextRequest) {
       queryPlanSummary: queryPlan.summary,
       plannedToolCount: queryPlan.steps.length,
       plannedTools: queryPlan.steps.map((step) => step.tool),
+      ...symbolTelemetryWithGrounding,
     };
 
     if (policy.shadowBlocked) {
@@ -1081,6 +1149,164 @@ function normalizeSymbol(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+interface SymbolResolutionTelemetry {
+  requestedSymbols: string[];
+  resolvedSymbols: string[];
+  contextSymbols: string[];
+  memorySymbolsUsed: string[];
+  droppedRequestedSymbols: string[];
+  symbolResolutionSource: "request" | "memory" | "mixed" | "none";
+  symbolConflictDetected: boolean;
+}
+
+function buildSymbolResolutionTelemetry(input: {
+  message: string;
+  queryPlanSymbols: string[];
+  contextSnapshot?: AssistantContextSnapshot;
+}): SymbolResolutionTelemetry {
+  const requestedSymbols = dedupeUpperSymbols(getCandidateSymbols(input.message));
+  const resolvedSymbols = dedupeUpperSymbols(input.queryPlanSymbols);
+  const contextSymbols = dedupeUpperSymbols(extractContextSymbols(input.contextSnapshot));
+  const memorySymbolsUsed = resolvedSymbols.filter((symbol) => !requestedSymbols.includes(symbol));
+  const droppedRequestedSymbols = requestedSymbols.filter((symbol) => !resolvedSymbols.includes(symbol));
+  const symbolResolutionSource = resolveSymbolResolutionSource(requestedSymbols, memorySymbolsUsed, resolvedSymbols);
+  return {
+    requestedSymbols,
+    resolvedSymbols,
+    contextSymbols,
+    memorySymbolsUsed,
+    droppedRequestedSymbols,
+    symbolResolutionSource,
+    symbolConflictDetected: requestedSymbols.length > 0 && memorySymbolsUsed.length > 0,
+  };
+}
+
+function mergeGroundingSymbolTelemetry(
+  base: SymbolResolutionTelemetry,
+  grounding: GroundingResult
+): SymbolResolutionTelemetry {
+  const requestedSymbols = dedupeUpperSymbols(
+    grounding.symbolDiagnostics?.requestedSymbols ?? base.requestedSymbols
+  );
+  const resolvedSymbols = dedupeUpperSymbols(
+    grounding.symbolDiagnostics?.symbolTargets ?? base.resolvedSymbols
+  );
+  const droppedRequestedSymbols = dedupeUpperSymbols(
+    grounding.symbolDiagnostics?.droppedSymbols ?? base.droppedRequestedSymbols
+  );
+  const memorySymbolsUsed = resolvedSymbols.filter((symbol) => !requestedSymbols.includes(symbol));
+  return {
+    requestedSymbols,
+    resolvedSymbols,
+    contextSymbols: base.contextSymbols,
+    memorySymbolsUsed,
+    droppedRequestedSymbols,
+    symbolResolutionSource: resolveSymbolResolutionSource(requestedSymbols, memorySymbolsUsed, resolvedSymbols),
+    symbolConflictDetected: requestedSymbols.length > 0 && memorySymbolsUsed.length > 0,
+  };
+}
+
+function resolveSymbolResolutionSource(
+  requestedSymbols: string[],
+  memorySymbolsUsed: string[],
+  resolvedSymbols: string[]
+): "request" | "memory" | "mixed" | "none" {
+  if (resolvedSymbols.length === 0) return "none";
+  if (requestedSymbols.length === 0 && memorySymbolsUsed.length > 0) return "memory";
+  if (requestedSymbols.length > 0 && memorySymbolsUsed.length > 0) return "mixed";
+  if (requestedSymbols.length > 0) return "request";
+  return "none";
+}
+
+function dedupeUpperSymbols(symbols: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of symbols) {
+    const normalized = normalizeSymbol(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function extractContextSymbols(contextSnapshot?: AssistantContextSnapshot): string[] {
+  if (!contextSnapshot) return [];
+  const candidates: string[] = [];
+  if (typeof contextSnapshot.symbol === "string") candidates.push(contextSnapshot.symbol);
+  if (Array.isArray(contextSnapshot.symbols)) {
+    for (const symbol of contextSnapshot.symbols) candidates.push(String(symbol ?? ""));
+  }
+  if (isRecord(contextSnapshot.filters)) {
+    const filters = contextSnapshot.filters;
+    const directKeys = ["symbol", "ticker", "stock", "code", "ma"];
+    for (const key of directKeys) {
+      const candidate = filters[key];
+      if (typeof candidate === "string") candidates.push(candidate);
+    }
+    const listKeys = ["symbols", "tickers", "codes", "maList"];
+    for (const key of listKeys) {
+      const candidate = filters[key];
+      if (Array.isArray(candidate)) {
+        for (const item of candidate) candidates.push(String(item ?? ""));
+      } else if (typeof candidate === "string") {
+        candidates.push(...candidate.split(/[,\s;|]+/));
+      }
+    }
+  }
+  return candidates;
+}
+
+function maybeBuildSymbolClarificationMessage(input: {
+  message: string;
+  queryPlan: AssistantQueryPlan;
+  symbolTelemetry: SymbolResolutionTelemetry;
+}): string | null {
+  const normalized = normalizeForKeywordMatch(input.message);
+  const asksCompare = /\b(vs|versus)\b/.test(normalized) || normalized.includes("so sanh") || normalized.includes("compare");
+  if (asksCompare && input.symbolTelemetry.requestedSymbols.length < 2) {
+    const contextHint = input.symbolTelemetry.contextSymbols.slice(0, 2).join(", ");
+    return contextHint
+      ? `Bạn đang yêu cầu so sánh nhưng chưa đủ mã cổ phiếu trong câu hỏi hiện tại. Vui lòng nêu rõ 2 mã (ví dụ: VNM vs FPT). Context hiện có: ${contextHint}.`
+      : "Bạn đang yêu cầu so sánh nhưng chưa đủ mã cổ phiếu. Vui lòng nêu rõ 2 mã (ví dụ: VNM vs FPT).";
+  }
+
+  const symbolRequiredIntent = (
+    input.queryPlan.intent === "fundamentals"
+    || input.queryPlan.intent === "valuation"
+    || input.queryPlan.intent === "risk"
+    || input.queryPlan.intent === "backtesting"
+  );
+  const reliesOnlyOnMemorySymbol =
+    input.symbolTelemetry.requestedSymbols.length === 0
+    && input.symbolTelemetry.resolvedSymbols.length > 0
+    && input.symbolTelemetry.symbolResolutionSource === "memory";
+  if (
+    symbolRequiredIntent
+    && reliesOnlyOnMemorySymbol
+    && !looksLikeReferentialFollowUp(normalized)
+  ) {
+    const contextHint = input.symbolTelemetry.resolvedSymbols.slice(0, 2).join(", ");
+    return contextHint
+      ? `Mình cần bạn xác nhận mã cổ phiếu cho yêu cầu hiện tại trước khi truy xuất số liệu. Bạn muốn dùng mã nào? (Context gần nhất: ${contextHint})`
+      : "Mình cần bạn xác nhận mã cổ phiếu cho yêu cầu hiện tại trước khi truy xuất số liệu.";
+  }
+
+  return null;
+}
+
+function looksLikeReferentialFollowUp(normalizedMessage: string): boolean {
+  return (
+    normalizedMessage.includes("ma do")
+    || normalizedMessage.includes("co phieu do")
+    || normalizedMessage.includes("ma nay")
+    || normalizedMessage.includes("symbol do")
+    || normalizedMessage.includes("same symbol")
+    || normalizedMessage.includes("giu nguyen ma")
+    || normalizedMessage.includes("tiep tuc")
+  );
 }
 
 function createRequestId(): string {
