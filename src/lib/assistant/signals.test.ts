@@ -53,6 +53,30 @@ describe("assistant signals symbol extraction", () => {
     );
     expect(symbols).toEqual(["VNM", "FPT"]);
   });
+
+  it("does not use stale context symbol for universe ranking query", () => {
+    const symbols = getCandidateSymbols(
+      "Top 10 co phieu HOSE theo PE thap nhat",
+      { page: "analysis", symbol: "VCB" }
+    );
+    expect(symbols).toEqual([]);
+  });
+
+  it("only carries history symbol when follow-up cue is explicit", () => {
+    const withoutCue = getCandidateSymbols(
+      "Cho toi xem lai du lieu",
+      { page: "analysis" },
+      "Gia dong cua VNM ngay 31/12/2025"
+    );
+    expect(withoutCue).toEqual([]);
+
+    const withCue = getCandidateSymbols(
+      "Tiep tuc ma do va cap nhat them volatility",
+      { page: "analysis" },
+      "Gia dong cua VNM ngay 31/12/2025"
+    );
+    expect(withCue).toContain("VNM");
+  });
 });
 
 describe("assistant signals required tools", () => {

@@ -687,31 +687,15 @@ export function isStockUniverseRankingIntent(
   contextSnapshot?: AssistantContextSnapshot
 ): boolean {
   const normalized = normalizeForKeywordMatch(message);
-  const contextSymbolCandidates: string[] = [];
-  const pushContextSymbol = (candidate: unknown) => {
-    const normalizedSymbol = normalizeSymbol(candidate);
-    if (normalizedSymbol) contextSymbolCandidates.push(normalizedSymbol);
-  };
-  if (contextSnapshot?.symbol) {
-    pushContextSymbol(contextSnapshot.symbol);
-  }
-  if (Array.isArray(contextSnapshot?.symbols)) {
-    for (const symbol of contextSnapshot.symbols) {
-      pushContextSymbol(symbol);
-    }
-  }
   const filters = isRecord(contextSnapshot?.filters) ? contextSnapshot.filters : undefined;
-  if (filters) {
-    const filterCandidates = [filters.symbol, filters.ticker, filters.stock, filters.code, filters.ma];
-    for (const candidate of filterCandidates) {
-      pushContextSymbol(candidate);
-    }
-  }
   const explicitSymbols = [
     ...extractExplicitSymbolHints(message),
     ...extractCompareSymbolHints(message),
   ].map((item) => normalizeSymbol(item));
-  const hasExplicitSymbol = [...contextSymbolCandidates, ...explicitSymbols].some((item) => isLikelySymbolToken(item));
+  const explicitUppercaseTokens = extractUppercaseSymbolTokens(message).map((item) => normalizeSymbol(item));
+  const hasExplicitMessageSymbol = [...explicitSymbols, ...explicitUppercaseTokens].some((item) =>
+    isLikelySymbolToken(item)
+  );
   const hasDateFilter = hasFilterValue(filters, ["date", "asOfDate", "as_of_date", "day", "from", "to"]);
   const hasIcbFilter = hasFilterValue(filters, ["icb", "industry", "sector", "icbLevel", "icb_level"]);
   const hasHoseFilter = hasFilterKeyword(filters, ["exchange", "market", "san"], ["hose", "hsx", "ho chi minh"]);
@@ -779,8 +763,9 @@ export function isStockUniverseRankingIntent(
     return false;
   }
 
-  // Symbol-scoped requests (from message or context) should not be treated as stock-universe ranking.
-  if (hasExplicitSymbol) {
+  // Only explicit symbols in the current prompt should suppress universe-ranking routing.
+  // Context symbols may be stale across turns and must not block ranking intent.
+  if (hasExplicitMessageSymbol) {
     return false;
   }
 
@@ -852,21 +837,14 @@ export function getCandidateSymbols(
   const explicitMessageSymbols = extractExplicitSymbolHints(message);
   const compareMessageSymbols = extractCompareSymbolHints(message);
   const messageUppercaseTokens = extractUppercaseSymbolTokens(message);
+  const allowHistoryCarryover = hasExplicitCarryoverCue(message);
   const historyText = typeof conversationHistory === "string" ? conversationHistory : "";
-  const explicitHistorySymbols = historyText ? extractExplicitSymbolHints(historyText) : [];
-  const compareHistorySymbols = historyText ? extractCompareSymbolHints(historyText) : [];
-  const historyUppercaseTokens = historyText ? extractUppercaseSymbolTokens(historyText) : [];
-  if (
-    looksLikeUniverseStockRanking(message, contextSnapshot)
-    && contextSymbols.length === 0
-    && explicitMessageSymbols.length === 0
-    && compareMessageSymbols.length === 0
-    && explicitHistorySymbols.length === 0
-    && compareHistorySymbols.length === 0
-  ) {
-    return [];
-  }
-
+  const explicitHistorySymbols =
+    allowHistoryCarryover && historyText ? extractExplicitSymbolHints(historyText) : [];
+  const compareHistorySymbols =
+    allowHistoryCarryover && historyText ? extractCompareSymbolHints(historyText) : [];
+  const historyUppercaseTokens =
+    allowHistoryCarryover && historyText ? extractUppercaseSymbolTokens(historyText) : [];
   const explicitCurrentSymbols = Array.from(
     new Set([
       ...explicitMessageSymbols,
@@ -874,6 +852,23 @@ export function getCandidateSymbols(
       ...messageUppercaseTokens,
     ])
   ).filter((symbol) => isLikelySymbolToken(symbol));
+  const normalizedMessage = normalizeForKeywordMatch(message);
+  const hasUniverseRankingLikeMessageScope =
+    (hasAnyKeyword(normalizedMessage, RANKING_KEYWORDS) || /\btop\s*\d{1,2}\b/.test(normalizedMessage))
+    && (
+      hasAnyKeyword(normalizedMessage, STOCK_UNIVERSE_SPECIFIC_HINT_KEYWORDS)
+      || hasAnyKeyword(normalizedMessage, EXCHANGE_UNIVERSE_KEYWORDS)
+      || hasAnyKeyword(normalizedMessage, HOSE_KEYWORDS)
+    );
+  if (
+    (
+      looksLikeUniverseStockRanking(message, contextSnapshot)
+      || hasUniverseRankingLikeMessageScope
+    )
+    && explicitCurrentSymbols.length === 0
+  ) {
+    return [];
+  }
 
   // When the current prompt explicitly names symbols, prefer those symbols and
   // avoid leaking stale context/history symbols into multi-symbol fanout.
@@ -1100,5 +1095,18 @@ function hasFundamentalShorthandSignal(normalized: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExplicitCarryoverCue(message: string): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  return (
+    normalized.includes("ma do")
+    || normalized.includes("co phieu do")
+    || normalized.includes("ma nay")
+    || normalized.includes("symbol do")
+    || normalized.includes("same symbol")
+    || normalized.includes("giu nguyen ma")
+    || normalized.includes("tiep tuc")
+  );
 }
 

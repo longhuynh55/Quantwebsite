@@ -24,6 +24,7 @@ const TOOL_MAX_CALLS_PER_TURN = resolveToolMaxCallsPerTurn();
 const TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD = resolveToolTransientFailureCircuitThreshold();
 const MAX_TOOL_CONCURRENCY = 4;
 const MAX_SYMBOL_TOOL_FANOUT = 2;
+const MAX_SYMBOL_TOOL_FANOUT_COMPARE = 3;
 const MAX_FACTS = 12;
 const MAX_MESSAGE_BLOCKS = 6;
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
@@ -79,6 +80,7 @@ interface SymbolGroundingScope {
   requestedSymbols: string[];
   symbolTargets: string[];
   droppedSymbols: string[];
+  fanoutLimit: number;
 }
 
 interface RequestedDateRange {
@@ -208,6 +210,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
           groundedSymbols: [],
           droppedSymbols: symbolScope.droppedSymbols,
           requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
+          fanoutLimit: symbolScope.fanoutLimit,
         }),
       ],
       groundingSource: "none",
@@ -362,6 +365,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     groundedSymbols,
     droppedSymbols: symbolScope.droppedSymbols,
     requestsUniverseStockRanking: symbolScope.requestsUniverseStockRanking,
+    fanoutLimit: symbolScope.fanoutLimit,
   });
   if (symbolCoverageNotice.length > 0) {
     const firstNoticeText = symbolCoverageNotice.find((block) => block.type === "text")?.content;
@@ -2944,7 +2948,12 @@ function buildSymbolGroundingScope(
 ): SymbolGroundingScope {
   const requestsUniverseStockRanking = isStockUniverseRankingQuery(message, contextSnapshot);
   const requestedSymbols = dedupeSymbolList(symbols);
-  const symbolTargets = requestsUniverseStockRanking ? [] : requestedSymbols.slice(0, MAX_SYMBOL_TOOL_FANOUT);
+  const normalizedMessage = normalizeForKeywordMatch(message);
+  const isCompareIntent = /\b(vs|versus)\b/.test(normalizedMessage)
+    || normalizedMessage.includes("so sanh")
+    || normalizedMessage.includes("compare");
+  const fanoutLimit = isCompareIntent ? MAX_SYMBOL_TOOL_FANOUT_COMPARE : MAX_SYMBOL_TOOL_FANOUT;
+  const symbolTargets = requestsUniverseStockRanking ? [] : requestedSymbols.slice(0, fanoutLimit);
   const droppedSymbols = requestsUniverseStockRanking ? [] : requestedSymbols.slice(symbolTargets.length);
 
   return {
@@ -2952,6 +2961,7 @@ function buildSymbolGroundingScope(
     requestedSymbols,
     symbolTargets,
     droppedSymbols,
+    fanoutLimit,
   };
 }
 
@@ -2987,6 +2997,7 @@ function buildSymbolCoverageNotice(input: {
   groundedSymbols: string[];
   droppedSymbols: string[];
   requestsUniverseStockRanking: boolean;
+  fanoutLimit: number;
 }): AssistantMessageBlock[] {
   if (input.requestsUniverseStockRanking || input.requestedSymbols.length === 0) return [];
   const groundedSet = new Set(input.groundedSymbols.map((symbol) => symbol.toUpperCase()));
@@ -2997,7 +3008,7 @@ function buildSymbolCoverageNotice(input: {
 
   const fanoutReason =
     input.droppedSymbols.length > 0
-      ? `fanout_limit=${MAX_SYMBOL_TOOL_FANOUT}, dropped_symbols=${input.droppedSymbols.join(", ")}`
+      ? `fanout_limit=${input.fanoutLimit}, dropped_symbols=${input.droppedSymbols.join(", ")}`
       : "no_fanout_drop";
   const content = [
     `Symbol grounding coverage notice: requested_symbols=${input.requestedSymbols.join(", ")}, grounded_symbols=${input.groundedSymbols.join(", ") || "none"}, target_symbols=${input.symbolTargets.join(", ") || "none"}, uncovered_symbols=${uncoveredRequestedSymbols.join(", ")}.`,
