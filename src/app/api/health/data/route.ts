@@ -241,6 +241,131 @@ async function runProbeChecks(
   return checks;
 }
 
+async function fileHasLikelyDataRow(filePath: string): Promise<boolean> {
+  let handle: fsPromises.FileHandle | null = null;
+  try {
+    handle = await fsPromises.open(filePath, "r");
+    const buffer = Buffer.alloc(16 * 1024);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (!Number.isFinite(bytesRead) || bytesRead <= 0) return false;
+    const text = buffer.toString("utf8", 0, bytesRead);
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    return lines.length >= 2;
+  } catch {
+    return false;
+  } finally {
+    try {
+      await handle?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function normalizeDuckDbText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+async function runCanaryChecks(
+  backendStatus: DataBackendStatus,
+  includeFundamentals: boolean
+): Promise<ProbeCheck[]> {
+  const checks: ProbeCheck[] = [];
+
+  if (backendStatus.active === "duckdb") {
+    try {
+      const symbolRows = await queryDuckDbRows(
+        backendStatus.duckdbPath,
+        "SELECT symbol FROM stock_metadata ORDER BY symbol ASC LIMIT 1"
+      );
+      const symbol = normalizeDuckDbText(symbolRows[0]?.symbol).toUpperCase();
+      if (!symbol) {
+        checks.push(buildProbeCheck("canary:duckdb:stock_metadata", false, "no symbol row returned"));
+      } else {
+        checks.push(buildProbeCheck("canary:duckdb:stock_metadata", true, `symbol=${symbol}`));
+        const escaped = symbol.replace(/'/g, "''");
+        const priceRows = await queryDuckDbRows(
+          backendStatus.duckdbPath,
+          `SELECT date, close FROM ohlcv WHERE symbol='${escaped}' ORDER BY date DESC LIMIT 1`
+        );
+        const closeValue = Number(priceRows[0]?.close);
+        const dateValue = normalizeDuckDbText(priceRows[0]?.date);
+        checks.push(
+          buildProbeCheck(
+            "canary:duckdb:ohlcv",
+            Boolean(dateValue) && Number.isFinite(closeValue),
+            Boolean(dateValue) && Number.isFinite(closeValue)
+              ? `symbol=${symbol}, latest_date=${dateValue}`
+              : `symbol=${symbol}, latest row missing date/close`
+          )
+        );
+      }
+    } catch (error) {
+      checks.push(
+        buildProbeCheck(
+          "canary:duckdb:query",
+          false,
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+    }
+  } else {
+    const metadataName = await resolveReadableCandidate(backendStatus.dataDir, [
+      "stock_metadata_2018_2025.csv",
+      "HOSE_VERIFIED_2020_2025.csv",
+    ]);
+    if (!metadataName) {
+      checks.push(buildProbeCheck("canary:csv:stock_metadata", false, "metadata file missing"));
+    } else {
+      const metadataPath = path.join(backendStatus.dataDir, metadataName);
+      const hasRows = await fileHasLikelyDataRow(metadataPath);
+      checks.push(buildProbeCheck("canary:csv:stock_metadata", hasRows, `${metadataName}:${hasRows ? "rows_detected" : "header_only_or_unreadable"}`));
+    }
+
+    const ohlcvName = await resolveReadableCandidate(backendStatus.dataDir, [
+      "ohlcv_2018_2025.csv",
+      "HOSE_VERIFIED_OHLCV_INDUSTRY_2018_2025.csv",
+      "ohlcv_enriched.csv",
+    ]);
+    if (!ohlcvName) {
+      checks.push(buildProbeCheck("canary:csv:ohlcv", false, "ohlcv file missing"));
+    } else {
+      const ohlcvPath = path.join(backendStatus.dataDir, ohlcvName);
+      const hasRows = await fileHasLikelyDataRow(ohlcvPath);
+      checks.push(buildProbeCheck("canary:csv:ohlcv", hasRows, `${ohlcvName}:${hasRows ? "rows_detected" : "header_only_or_unreadable"}`));
+    }
+  }
+
+  if (includeFundamentals) {
+    const firstFundamentals = FUNDAMENTALS_CSV_FILES[0];
+    const csvPath = path.join(backendStatus.dataDir, firstFundamentals);
+    if (backendStatus.active === "duckdb") {
+      const tableCheck = await probeDuckDbTable(backendStatus, "fundamentals_is", true);
+      checks.push(
+        buildProbeCheck(
+          "canary:fundamentals",
+          tableCheck.ok,
+          tableCheck.ok ? "duckdb:fundamentals_is:rows_available" : tableCheck.detail
+        )
+      );
+    } else {
+      const readable = await fileHasLikelyDataRow(csvPath);
+      checks.push(
+        buildProbeCheck(
+          "canary:fundamentals",
+          readable,
+          readable ? `${firstFundamentals}:rows_detected` : `${firstFundamentals}:missing_or_unreadable`
+        )
+      );
+    }
+  }
+
+  return checks;
+}
+
 function buildDatasetHealth(
   dataset: DatasetName,
   loadedRows: number,
@@ -303,6 +428,7 @@ export async function GET(request: Request) {
   const startedAt = Date.now();
   const { searchParams } = new URL(request.url);
   const probe = parseBoolean(searchParams.get("probe"), false);
+  const canary = parseBoolean(searchParams.get("canary"), false);
   const refresh = parseBoolean(searchParams.get("refresh"), false);
   const includeFundamentals = parseBoolean(searchParams.get("includeFundamentals"), true);
   const clientId = getClientIdentifier(request);
@@ -366,11 +492,16 @@ export async function GET(request: Request) {
   const resolvedBackendStatus = backendStatus as DataBackendStatus;
   if (probe) {
     const checks = await runProbeChecks(resolvedBackendStatus, includeFundamentals);
+    if (canary) {
+      const canaryChecks = await runCanaryChecks(resolvedBackendStatus, includeFundamentals);
+      checks.push(...canaryChecks);
+    }
     const ok = checks.every((check) => check.ok);
     return NextResponse.json(
       {
         ok,
-        mode: "probe",
+        mode: canary ? "probe_canary" : "probe",
+        canary,
         timestamp: new Date().toISOString(),
         durationMs: Date.now() - startedAt,
         backend: {

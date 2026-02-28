@@ -140,18 +140,80 @@ function pickCanonicalReportPath(stabilitySuite) {
 
 async function runNodeCommand({ scriptPath, args = [], env = {} }) {
   return await new Promise((resolve) => {
-    const child = spawn(process.execPath, [scriptPath, ...args], {
-      cwd: process.cwd(),
-      env: { ...process.env, ...env },
-      stdio: "inherit",
+    const timeoutMsRaw = Number.parseInt(
+      String(env.ASSISTANT_EVAL_CHILD_TIMEOUT_MS ?? process.env.ASSISTANT_EVAL_CHILD_TIMEOUT_MS ?? "1800000"),
+      10
+    );
+    const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw >= 10_000 ? timeoutMsRaw : 1_800_000;
+    let settled = false;
+    let timer = null;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(payload);
+    };
+
+    let child = null;
+    try {
+      child = spawn(process.execPath, [scriptPath, ...args], {
+        cwd: process.cwd(),
+        env: { ...process.env, ...env },
+        stdio: "inherit",
+      });
+    } catch (error) {
+      finish({
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        spawnError: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    timer = setTimeout(() => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      finish({
+        exitCode: 1,
+        signal: "SIGTERM",
+        timedOut: true,
+        spawnError: null,
+      });
+    }, timeoutMs);
+
+    child.on("error", (error) => {
+      finish({
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        spawnError: error instanceof Error ? error.message : String(error),
+      });
     });
+
     child.on("close", (code, signal) => {
-      resolve({
+      finish({
         exitCode: code ?? 1,
         signal: signal ?? null,
+        timedOut: false,
+        spawnError: null,
       });
     });
   });
+}
+
+function getFileAgeMinutes(filePath) {
+  try {
+    const stat = fs.statSync(path.resolve(filePath));
+    const ageMs = Date.now() - Number(stat.mtimeMs ?? 0);
+    if (!Number.isFinite(ageMs) || ageMs < 0) return null;
+    return ageMs / 60000;
+  } catch {
+    return null;
+  }
 }
 
 function buildStabilityEnv({ criteria, roundsOverride }) {
@@ -253,6 +315,10 @@ async function main() {
   const notes = [];
   const startedAt = Date.now();
   let stabilityExecution = null;
+  const maxReportAgeMinutes = Math.max(
+    1,
+    Math.floor(toNumber(criteria?.stageGates?.nightly?.maxReportAgeMinutes) ?? 180)
+  );
 
   if (!skipStabilityRun) {
     const stabilityEnv = buildStabilityEnv({ criteria, roundsOverride });
@@ -263,6 +329,7 @@ async function main() {
     });
   } else {
     notes.push("Skipped stability execution and reused existing reports.");
+    stabilityExecution = { skipped: true };
   }
 
   const stabilityReport = readJsonFile(stabilityReportPath);
@@ -295,6 +362,7 @@ async function main() {
 
   const suiteResults = Array.from(mergedSuites.values()).map((suite) => {
     const roundsConfigured = toNumber(suite?.thresholds?.rounds) ?? null;
+    const executedRounds = toNumber(suite?.summary?.executedRounds) ?? null;
     const successfulRounds = toNumber(suite?.summary?.successfulRounds) ?? 0;
     const flakeRate = toNumber(suite?.summary?.flakeRate);
     const gatePass = Boolean(suite?.summary?.gatePass);
@@ -304,6 +372,7 @@ async function main() {
       name: suite?.suite ?? "unknown",
       gatePass,
       roundsConfigured,
+      executedRounds,
       successfulRounds,
       flakeRate,
       canonicalReportPath,
@@ -462,10 +531,44 @@ async function main() {
   const insufficientRounds = nightlySuites.filter((suiteName) => {
     const suite = suiteByName[suiteName];
     if (!suite) return true;
-    return (suite.roundsConfigured ?? 0) < nightlyMinimumRounds;
+    return (suite.executedRounds ?? 0) < nightlyMinimumRounds;
+  });
+  const stabilityExecutionOk = !skipStabilityRun
+    ? Boolean(stabilityExecution?.exitCode === 0 && !stabilityExecution?.timedOut && !stabilityExecution?.spawnError)
+    : true;
+  const stabilityReportAgeMinutes = getFileAgeMinutes(stabilityReportPath);
+  const stabilityReportFresh = !skipStabilityRun
+    || (stabilityReportAgeMinutes !== null && stabilityReportAgeMinutes <= maxReportAgeMinutes);
+  const stabilityReportRunAtTs = toTimestamp(stabilityReport?.runAt);
+  const staleCanonicalSuites = nightlySuites.filter((suiteName) => {
+    const suite = suiteByName[suiteName];
+    if (!suite?.canonicalReportPath || !suite.canonicalReport) return true;
+    if (stabilityReportRunAtTs === null) return false;
+    const canonicalTs = toTimestamp(suite.canonicalReport?.runAt ?? suite.canonicalReport?.generatedAt);
+    if (canonicalTs === null) return true;
+    return canonicalTs + 1000 < stabilityReportRunAtTs;
   });
 
   const stageGates = [
+    {
+      name: "stability_execution_ok",
+      pass: stabilityExecutionOk,
+      detail: skipStabilityRun
+        ? "skipped"
+        : stabilityExecutionOk
+          ? "exitCode=0"
+          : `exitCode=${String(stabilityExecution?.exitCode ?? "n/a")}, timedOut=${String(stabilityExecution?.timedOut ?? false)}, spawnError=${String(stabilityExecution?.spawnError ?? "none")}`,
+    },
+    {
+      name: "stability_report_fresh",
+      pass: stabilityReportFresh,
+      detail:
+        stabilityReportAgeMinutes === null
+          ? "report_missing_or_unreadable"
+          : stabilityReportFresh
+            ? `ageMinutes=${stabilityReportAgeMinutes.toFixed(2)} <= ${maxReportAgeMinutes}`
+            : `ageMinutes=${stabilityReportAgeMinutes.toFixed(2)} > ${maxReportAgeMinutes}`,
+    },
     {
       name: "nightly_required_suites_present",
       pass: missingSuites.length === 0,
@@ -485,6 +588,11 @@ async function main() {
           : `below min rounds: ${insufficientRounds.join(",")}`,
     },
     {
+      name: "canonical_reports_fresh",
+      pass: staleCanonicalSuites.length === 0,
+      detail: staleCanonicalSuites.length === 0 ? "all aligned with stability runAt" : `stale_or_missing: ${staleCanonicalSuites.join(",")}`,
+    },
+    {
       name: "metrics_required",
       pass: requiredMetricFailures.length === 0 && missingRequiredMetrics.length === 0,
       detail:
@@ -497,8 +605,11 @@ async function main() {
   if (metrics.some((metric) => metric.id === "unsupportedClaimRate" && metric.status === "not_measured")) {
     notes.push("unsupportedClaimRate is not measured from current suite outputs; enable --enforce-unsupported-claim to hard-fail this condition.");
   }
-  if (stabilityExecution && stabilityExecution.exitCode !== 0) {
+  if (!skipStabilityRun && Number.isFinite(stabilityExecution?.exitCode) && stabilityExecution.exitCode !== 0) {
     notes.push(`stability gate process exited with code ${stabilityExecution.exitCode}.`);
+  }
+  if (skipStabilityRun && !stabilityReportFresh) {
+    notes.push(`stability report is stale for skip-run mode (ageMinutes=${stabilityReportAgeMinutes === null ? "n/a" : stabilityReportAgeMinutes.toFixed(2)}, max=${maxReportAgeMinutes}).`);
   }
 
   const overallPass = stageGates.every((gate) => gate.pass);
@@ -515,6 +626,7 @@ async function main() {
       name: suite.name,
       gatePass: suite.gatePass,
       roundsConfigured: suite.roundsConfigured,
+      executedRounds: suite.executedRounds,
       successfulRounds: suite.successfulRounds,
       flakeRate: suite.flakeRate,
       canonicalReportPath: suite.canonicalReportPath,

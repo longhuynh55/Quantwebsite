@@ -39,6 +39,59 @@ function readJson(filePath) {
   }
 }
 
+async function removeFileIfExists(filePath) {
+  try {
+    await fs.promises.rm(filePath, { force: true });
+  } catch {
+    // ignore
+  }
+}
+
+async function readSuiteReportWithFreshness({ suiteReportPath, suiteStartedAt, collectOnly }) {
+  if (!fs.existsSync(suiteReportPath)) {
+    return {
+      report: null,
+      infraStatus: "blocked",
+      infraReason: "report_missing",
+      reportMtimeMs: null,
+    };
+  }
+
+  let reportMtimeMs = null;
+  try {
+    const stat = await fs.promises.stat(suiteReportPath);
+    reportMtimeMs = Number.isFinite(stat?.mtimeMs) ? stat.mtimeMs : null;
+  } catch {
+    reportMtimeMs = null;
+  }
+
+  if (!collectOnly && Number.isFinite(reportMtimeMs) && reportMtimeMs < suiteStartedAt - 20) {
+    return {
+      report: null,
+      infraStatus: "blocked",
+      infraReason: "report_stale",
+      reportMtimeMs,
+    };
+  }
+
+  const report = readJson(suiteReportPath);
+  if (!report) {
+    return {
+      report: null,
+      infraStatus: "blocked",
+      infraReason: "report_invalid_json",
+      reportMtimeMs,
+    };
+  }
+
+  return {
+    report,
+    infraStatus: "ok",
+    infraReason: null,
+    reportMtimeMs,
+  };
+}
+
 function formatPercent(value) {
   if (!Number.isFinite(value)) return "n/a";
   return `${(value * 100).toFixed(2)}%`;
@@ -170,13 +223,22 @@ function extractSuiteMetrics(report, exitCode) {
   };
 }
 
-async function runCommand(command, args, env) {
+async function runCommand(command, args, env, options = {}) {
   const stdoutTail = [];
   const stderrTail = [];
   const startedAt = Date.now();
+  const heartbeatSecondsRaw = Number.parseInt(
+    String(options.heartbeatSeconds ?? env.ASSISTANT_EVAL_HEARTBEAT_SECONDS ?? "12"),
+    10
+  );
+  const heartbeatSeconds = Number.isFinite(heartbeatSecondsRaw) && heartbeatSecondsRaw >= 5
+    ? heartbeatSecondsRaw
+    : 12;
+  const heartbeatLabel = String(options.label ?? "suite");
 
   return await new Promise((resolve) => {
     let child = null;
+    let heartbeatTimer = null;
     try {
       child = spawn(command, args, {
         env,
@@ -193,6 +255,10 @@ async function runCommand(command, args, env) {
       });
       return;
     }
+    heartbeatTimer = setInterval(() => {
+      const elapsedMs = Date.now() - startedAt;
+      console.log(`[criteria-v1][heartbeat] suite=${heartbeatLabel} elapsedMs=${elapsedMs}`);
+    }, heartbeatSeconds * 1000);
 
     child.stdout.on("data", (chunk) => {
       process.stdout.write(chunk);
@@ -209,6 +275,7 @@ async function runCommand(command, args, env) {
     });
 
     child.on("error", (error) => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       clampTail(stderrTail, String(error?.message ?? error));
       resolve({
         exitCode: 1,
@@ -219,6 +286,7 @@ async function runCommand(command, args, env) {
     });
 
     child.on("close", (exitCode) => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       resolve({
         exitCode: Number(exitCode ?? 1),
         durationMs: Date.now() - startedAt,
@@ -375,9 +443,12 @@ async function main() {
       suiteRuns.push({
         id,
         skipped: true,
+        infraStatus: "skip",
+        infraReason: null,
         exitCode: null,
         durationMs: 0,
         reportPath: toAbsolutePath(suite.reportPath),
+        reportMtimeMs: null,
         metrics: {
           total: null,
           passed: null,
@@ -399,6 +470,9 @@ async function main() {
 
     const suiteReportPath = toAbsolutePath(suite.reportPath);
     await fs.promises.mkdir(path.dirname(suiteReportPath), { recursive: true });
+    if (!collectOnly) {
+      await removeFileIfExists(suiteReportPath);
+    }
 
     const env = {
       ...process.env,
@@ -413,6 +487,7 @@ async function main() {
       stdoutTail: [],
       stderrTail: [],
     };
+    const suiteStartedAt = Date.now();
     if (!collectOnly) {
       let command = "";
       let args = [];
@@ -440,17 +515,36 @@ async function main() {
       }
 
       console.log(`[criteria-v1] running suite=${id}`);
-      execution = await runCommand(command, args, env);
+      execution = await runCommand(command, args, env, { label: id });
     }
-    const report = readJson(suiteReportPath);
-    const metrics = extractSuiteMetrics(report, execution.exitCode ?? 0);
+    const reportRead = await readSuiteReportWithFreshness({
+      suiteReportPath,
+      suiteStartedAt,
+      collectOnly,
+    });
+    const effectiveExitCode = (() => {
+      const raw = Number.isFinite(execution.exitCode) ? Number(execution.exitCode) : 1;
+      if (reportRead.infraStatus === "blocked" && raw === 0) return 1;
+      return raw;
+    })();
+    if (reportRead.infraStatus === "blocked") {
+      clampTail(execution.stderrTail, `suite_report_${reportRead.infraReason}`);
+    }
+    const metrics = extractSuiteMetrics(reportRead.report, effectiveExitCode);
+    if (reportRead.infraStatus === "blocked") {
+      metrics.overallStatus = "fail";
+      metrics.gatesPass = false;
+    }
 
     suiteRuns.push({
       id,
       skipped: false,
-      exitCode: execution.exitCode,
+      infraStatus: reportRead.infraStatus,
+      infraReason: reportRead.infraReason,
+      exitCode: effectiveExitCode,
       durationMs: execution.durationMs,
       reportPath: suiteReportPath,
+      reportMtimeMs: reportRead.reportMtimeMs,
       metrics,
       stdoutTail: execution.stdoutTail,
       stderrTail: execution.stderrTail,
@@ -533,14 +627,15 @@ async function main() {
   );
 
   const technicalPass =
-    Boolean(technicalSuite?.metrics.gatesPass === true)
-    || String(technicalSuite?.metrics.overallStatus ?? "") === "pass";
+    technicalSuite?.infraStatus === "ok"
+    && technicalSuite?.exitCode === 0
+    && technicalSuite?.metrics.gatesPass === true;
   criteria.push(
     toCriterion(
       "technical_workflow_backtesting_kpi",
       technicalPass,
       `overall=${String(technicalSuite?.metrics.overallStatus ?? "unknown")}, gatesPass=${String(technicalSuite?.metrics.gatesPass ?? "n/a")}`,
-      "overall=pass and/or gatesPass=true",
+      "exitCode=0 and gatesPass=true",
       "Backtesting KPI matrix for technical/risk handling"
     )
   );

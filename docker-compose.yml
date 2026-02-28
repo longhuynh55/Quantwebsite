@@ -57,7 +57,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3000/api/health/data?probe=true&canary=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -155,7 +155,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/api/health/data?probe=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3000/api/health/data?probe=true&canary=true&includeFundamentals=false').then(async (r)=>{if(!r.ok)process.exit(1);const j=await r.json().catch(()=>null);if(!j?.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
