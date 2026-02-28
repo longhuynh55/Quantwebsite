@@ -109,6 +109,7 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "DO",
   "VA",
   "LA",
+  "GIU",
   "BAO",
   "NHIU",
   "NHIEU",
@@ -850,6 +851,7 @@ export function getCandidateSymbols(
 
   const explicitMessageSymbols = extractExplicitSymbolHints(message);
   const compareMessageSymbols = extractCompareSymbolHints(message);
+  const messageUppercaseTokens = extractUppercaseSymbolTokens(message);
   const historyText = typeof conversationHistory === "string" ? conversationHistory : "";
   const explicitHistorySymbols = historyText ? extractExplicitSymbolHints(historyText) : [];
   const compareHistorySymbols = historyText ? extractCompareSymbolHints(historyText) : [];
@@ -865,15 +867,25 @@ export function getCandidateSymbols(
     return [];
   }
 
-  const messageUppercaseTokens = extractUppercaseSymbolTokens(message);
+  const explicitCurrentSymbols = Array.from(
+    new Set([
+      ...explicitMessageSymbols,
+      ...compareMessageSymbols,
+      ...messageUppercaseTokens,
+    ])
+  ).filter((symbol) => isLikelySymbolToken(symbol));
+
+  // When the current prompt explicitly names symbols, prefer those symbols and
+  // avoid leaking stale context/history symbols into multi-symbol fanout.
+  if (explicitCurrentSymbols.length > 0) {
+    return explicitCurrentSymbols.slice(0, 3);
+  }
+
   const unique = Array.from(
     new Set([
       ...contextSymbols,
-      ...explicitMessageSymbols,
-      ...compareMessageSymbols,
       ...explicitHistorySymbols,
       ...compareHistorySymbols,
-      ...messageUppercaseTokens,
       ...historyUppercaseTokens,
     ])
   )
