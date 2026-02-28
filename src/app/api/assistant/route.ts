@@ -13,7 +13,7 @@ import { SYSTEM_PROMPT } from '@/types/assistant';
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/providers';
 import { runGroundingTools, type GroundingResult } from '@/lib/assistant/tools';
-import { evaluateAssistantPolicy } from '@/lib/assistant/policy';
+import { evaluateAssistantPolicy, type PolicyEvaluationResult } from '@/lib/assistant/policy';
 import { buildAssistantQueryPlan, type AssistantQueryPlan } from '@/lib/assistant/planner';
 import { getCandidateSymbols, normalizeForKeywordMatch } from '@/lib/assistant/signals';
 import { createLogger, hashText, toErrorMeta } from '@/lib/logger';
@@ -27,6 +27,10 @@ const EVAL_TOKEN_HEADER = 'x-assistant-eval-token';
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
 const EVAL_FORCE_GROUNDED_RESPONSE = parseFeatureFlag(
   process.env.ASSISTANT_EVAL_FORCE_GROUNDED_RESPONSE,
+  true
+);
+const POST_RESPONSE_NUMERIC_GUARD = parseFeatureFlag(
+  process.env.ASSISTANT_POST_RESPONSE_NUMERIC_GUARD,
   true
 );
 const TRUSTED_TOOL_BASE_URL_ENV_KEYS = [
@@ -563,6 +567,45 @@ export async function POST(request: NextRequest) {
         { status: generation.statusCode }
       );
     }
+    const postResponseGuard = evaluatePostResponseNumericGuard({
+      enabled: POST_RESPONSE_NUMERIC_GUARD,
+      message,
+      generatedText: generation.text,
+      policy,
+      queryPlan,
+      grounding,
+      responseCitations,
+    });
+    if (postResponseGuard.blocked) {
+      const guardedMessage = buildPostResponseNumericGuardMessage(postResponseGuard.reason);
+      logger.warn("response.post_numeric_guard_blocked", {
+        reason: postResponseGuard.reason,
+        responseNumericCount: postResponseGuard.responseNumericCount,
+        groundedNumericCount: postResponseGuard.groundedNumericCount,
+        overlapCount: postResponseGuard.overlapCount,
+        citationCount: responseCitations.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json<AssistantResponse>({
+        message: guardedMessage,
+        success: true,
+        grounded: responseCitations.length > 0,
+        policyStatus: "fallback",
+        policyReason: postResponseGuard.reason,
+        dataConfidence: "low",
+        citations: responseCitations,
+        usedTools: grounding.usedTools,
+        messageBlocks: grounding.messageBlocks,
+        meta: {
+          providerUsed: "policy-post-guard",
+          fallbackUsed: true,
+          latencyMs: generation.latencyMs,
+          ...policyMeta,
+          policyReasonCode: "no_numeric_evidence",
+          groundingSatisfied: false,
+        },
+      });
+    }
     logger.info('request.completed', {
       providerUsed: generation.providerUsed,
       fallbackUsed: generation.fallbackUsed,
@@ -853,6 +896,209 @@ function buildGroundedFallbackMessage(facts: string[], usedTools: AssistantToolU
   const guidance =
     'Ask a narrower follow-up with metric + timeframe for a more precise answer (example: VCB net interest income 2025Q4).';
   return [header, toolLine, ...factLines, guidance].join('\n');
+}
+
+interface PostResponseNumericGuardInput {
+  enabled: boolean;
+  message: string;
+  generatedText: string;
+  policy: PolicyEvaluationResult;
+  queryPlan: AssistantQueryPlan;
+  grounding: GroundingResult;
+  responseCitations: AssistantCitation[];
+}
+
+interface PostResponseNumericGuardResult {
+  blocked: boolean;
+  reason: string;
+  responseNumericCount: number;
+  groundedNumericCount: number;
+  overlapCount: number;
+}
+
+const NUMERIC_RESPONSE_FINANCE_HINTS = [
+  "close",
+  "open",
+  "high",
+  "low",
+  "volume",
+  "gia dong",
+  "gia mo",
+  "gia cao",
+  "gia thap",
+  "khoi luong",
+  "drawdown",
+  "volatility",
+  "sharpe",
+  "sortino",
+  "return",
+  "cagr",
+  "beta",
+  "var",
+  "cvar",
+  "doanh thu",
+  "loi nhuan",
+  "tong tai san",
+  "pe",
+  "pb",
+  "ev/ebitda",
+] as const;
+
+function evaluatePostResponseNumericGuard(input: PostResponseNumericGuardInput): PostResponseNumericGuardResult {
+  const defaultResult: PostResponseNumericGuardResult = {
+    blocked: false,
+    reason: "",
+    responseNumericCount: 0,
+    groundedNumericCount: 0,
+    overlapCount: 0,
+  };
+  if (!input.enabled) return defaultResult;
+  if (!input.policy.groundingRequired) return defaultResult;
+
+  const normalizedMessage = normalizeForKeywordMatch(input.message);
+  const normalizedResponse = normalizeForKeywordMatch(input.generatedText);
+  const financeIntent =
+    isFinancialIntentForPostGuard(normalizedMessage, input.queryPlan)
+    || NUMERIC_RESPONSE_FINANCE_HINTS.some((hint) => normalizedResponse.includes(hint));
+  if (!financeIntent) return defaultResult;
+
+  const responseNumericTokens = extractComparableNumericTokens(input.generatedText);
+  if (responseNumericTokens.size === 0) return defaultResult;
+
+  if (input.responseCitations.length === 0) {
+    return {
+      blocked: true,
+      reason: "Generated numeric response has no grounded citations.",
+      responseNumericCount: responseNumericTokens.size,
+      groundedNumericCount: 0,
+      overlapCount: 0,
+    };
+  }
+
+  const groundedNumericTokens = extractComparableNumericTokens(input.grounding.facts.join("\n"));
+  if (groundedNumericTokens.size === 0) {
+    return {
+      blocked: true,
+      reason: "Grounded facts do not contain numeric evidence for generated claims.",
+      responseNumericCount: responseNumericTokens.size,
+      groundedNumericCount: 0,
+      overlapCount: 0,
+    };
+  }
+
+  let overlapCount = 0;
+  for (const token of responseNumericTokens) {
+    if (groundedNumericTokens.has(token)) {
+      overlapCount += 1;
+    }
+  }
+  const responseNumericCount = responseNumericTokens.size;
+  const groundedNumericCount = groundedNumericTokens.size;
+  const overlapRatio = overlapCount / responseNumericCount;
+  const blockOnZeroOverlap = responseNumericCount >= 2 && overlapCount === 0;
+  const blockOnLowOverlap = responseNumericCount >= 4 && overlapRatio < 0.2;
+  if (blockOnZeroOverlap || blockOnLowOverlap) {
+    return {
+      blocked: true,
+      reason: "Generated numeric claims do not align with grounded evidence tokens.",
+      responseNumericCount,
+      groundedNumericCount,
+      overlapCount,
+    };
+  }
+
+  return {
+    blocked: false,
+    reason: "",
+    responseNumericCount,
+    groundedNumericCount,
+    overlapCount,
+  };
+}
+
+function isFinancialIntentForPostGuard(normalizedMessage: string, queryPlan: AssistantQueryPlan): boolean {
+  if (NUMERIC_RESPONSE_FINANCE_HINTS.some((hint) => normalizedMessage.includes(hint))) return true;
+  return (
+    queryPlan.intent === "stock_snapshot"
+    || queryPlan.intent === "valuation"
+    || queryPlan.intent === "valuation_ranking"
+    || queryPlan.intent === "fundamentals"
+    || queryPlan.intent === "risk"
+    || queryPlan.intent === "backtesting"
+    || queryPlan.intent === "factor"
+  );
+}
+
+function extractComparableNumericTokens(text: string): Set<string> {
+  const tokens = new Set<string>();
+  const matches = text.match(/-?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?/g) ?? [];
+  for (const match of matches) {
+    const token = normalizeNumericTokenForGuard(match);
+    if (!token) continue;
+    if (isLikelyYearToken(token)) continue;
+    tokens.add(token);
+  }
+  return tokens;
+}
+
+function normalizeNumericTokenForGuard(rawToken: string): string | null {
+  let token = String(rawToken ?? "").trim();
+  if (!token) return null;
+
+  const isPercent = token.endsWith("%");
+  if (isPercent) {
+    token = token.slice(0, -1).trim();
+  }
+  if (!token) return null;
+
+  const cleaned = token.replace(/\s+/g, "");
+  const normalized = normalizeLocaleNumber(cleaned);
+  const numeric = Number.parseFloat(normalized);
+  if (!Number.isFinite(numeric)) return null;
+  const canonical = numeric.toString();
+  return isPercent ? `${canonical}%` : canonical;
+}
+
+function normalizeLocaleNumber(value: string): string {
+  const hasComma = value.includes(",");
+  const hasDot = value.includes(".");
+  if (hasComma && hasDot) {
+    const lastComma = value.lastIndexOf(",");
+    const lastDot = value.lastIndexOf(".");
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const thousandSeparator = decimalSeparator === "," ? "." : ",";
+    return value
+      .split(thousandSeparator).join("")
+      .replace(decimalSeparator, ".");
+  }
+  if (hasComma) {
+    if (/,\d{1,2}$/.test(value)) return value.replace(",", ".");
+    return value.split(",").join("");
+  }
+  if (hasDot && /\.\d{3}$/.test(value) && (value.match(/\./g)?.length ?? 0) >= 1) {
+    return value.split(".").join("");
+  }
+  return value;
+}
+
+function isLikelyYearToken(token: string): boolean {
+  if (!/^\d{4}$/.test(token)) return false;
+  const numeric = Number.parseInt(token, 10);
+  return numeric >= 1900 && numeric <= 2100;
+}
+
+function buildPostResponseNumericGuardMessage(reason: string): string {
+  const safeReason = String(reason ?? "")
+    .replace(/\d+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const reasonLine = safeReason ? `Reason: ${safeReason}` : "Reason: numeric evidence mismatch";
+  return [
+    "INSUFFICIENT_DATA",
+    reasonLine,
+    "Generated numeric response could not be validated against grounded evidence.",
+    "Please retry with symbol + metric + timeframe so grounded tools can return verifiable numbers.",
+  ].join("\n");
 }
 
 function buildDeterministicEvalGroundedMessage(

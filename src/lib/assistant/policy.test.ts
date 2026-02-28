@@ -127,4 +127,195 @@ describe("evaluateAssistantPolicy recommendation grounding", () => {
     expect(result.reasonCode).toBe("invalid_date_not_supported");
     expect(result.status === "shadow_blocked" || result.status === "fallback").toBe(true);
   });
+
+  it("blocks English buy/sell recommendation prompts without grounding", () => {
+    const result = evaluateAssistantPolicy({
+      message: "Should I buy VNM this week?",
+      contextSnapshot: { page: "home" },
+      grounding: emptyGrounding,
+    });
+
+    expect(result.status).toBe("fallback");
+    expect(result.shouldBypassLlm).toBe(true);
+    expect(result.groundingRequired).toBe(true);
+  });
+
+  it("does not block non-financial invalid-date educational prompts", () => {
+    const result = evaluateAssistantPolicy({
+      message: "Vi sao ngay 31/04/2025 khong ton tai trong lich?",
+      contextSnapshot: { page: "home" },
+      grounding: emptyGrounding,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.shouldBypassLlm).toBe(false);
+    expect(result.reasonCode).toBeUndefined();
+  });
+
+  it("enforces symbol grounding for single-symbol requests", () => {
+    const queryPlan: AssistantQueryPlan = {
+      intent: "stock_snapshot",
+      confidence: "high",
+      source: "signal",
+      symbols: ["VNM"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          reason: "grounded",
+          required: true,
+        },
+      ],
+      summary: "intent=stock_snapshot | source=signal | symbols=VNM | tools=stockSnapshot",
+    };
+
+    const result = evaluateAssistantPolicy({
+      message: "Gia dong cua VNM la bao nhieu?",
+      contextSnapshot: { page: "home" },
+      queryPlan,
+      grounding: {
+        facts: ["HPG close=30,000"],
+        citations: [
+          {
+            id: "c1",
+            sourceType: "api",
+            title: "stocks",
+            endpoint: "/api/stocks?symbol=HPG",
+            symbol: "HPG",
+          },
+        ],
+        usedTools: [
+          {
+            name: "stockSnapshot",
+            status: "success",
+            evidenceCount: 1,
+            warningCount: 0,
+            requestParams: { symbol: "HPG" },
+          },
+        ],
+        messageBlocks: [],
+        groundingSource: "/api/stocks?symbol=HPG",
+      },
+    });
+
+    expect(result.status).toBe("fallback");
+    expect(result.reasonCode).toBe("missing_symbol_grounding");
+    expect(result.groundingSatisfied).toBe(false);
+  });
+
+  it("returns shadow_blocked for ambiguous symbols in shadow mode", () => {
+    const originalMode = process.env.ASSISTANT_POLICY_MODE;
+    process.env.ASSISTANT_POLICY_MODE = "shadow";
+    const result = evaluateAssistantPolicy({
+      message: "So sanh close API vs HTTP",
+      contextSnapshot: { page: "home" },
+      grounding: emptyGrounding,
+    });
+    process.env.ASSISTANT_POLICY_MODE = originalMode;
+
+    expect(result.reasonCode).toBe("ambiguous_symbol_not_supported");
+    expect(result.status).toBe("shadow_blocked");
+    expect(result.shadowBlocked).toBe(true);
+  });
+
+  it("requires exact endpoint path match for citations", () => {
+    const queryPlan: AssistantQueryPlan = {
+      intent: "stock_snapshot",
+      confidence: "high",
+      source: "signal",
+      symbols: ["VNM"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          reason: "grounded",
+          required: true,
+        },
+      ],
+      summary: "intent=stock_snapshot | source=signal | symbols=VNM | tools=stockSnapshot",
+    };
+
+    const result = evaluateAssistantPolicy({
+      message: "Gia dong cua VNM",
+      contextSnapshot: { page: "home" },
+      queryPlan,
+      grounding: {
+        facts: ["VNM close=80000"],
+        citations: [
+          {
+            id: "c1",
+            sourceType: "api",
+            title: "stocks-history",
+            endpoint: "/api/stocks-history?symbol=VNM",
+            symbol: "VNM",
+          },
+        ],
+        usedTools: [
+          {
+            name: "stockSnapshot",
+            status: "success",
+            evidenceCount: 1,
+            warningCount: 0,
+          },
+        ],
+        messageBlocks: [],
+        groundingSource: "/api/stocks-history?symbol=VNM",
+      },
+    });
+
+    expect(result.status === "fallback" || result.status === "shadow_blocked").toBe(true);
+    expect(result.reasonCode).toBe("missing_citation");
+  });
+
+  it("accepts absolute citation URLs when endpoint path matches exactly", () => {
+    const queryPlan: AssistantQueryPlan = {
+      intent: "stock_snapshot",
+      confidence: "high",
+      source: "signal",
+      symbols: ["VNM"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          reason: "grounded",
+          required: true,
+        },
+      ],
+      summary: "intent=stock_snapshot | source=signal | symbols=VNM | tools=stockSnapshot",
+    };
+
+    const result = evaluateAssistantPolicy({
+      message: "Gia dong cua VNM",
+      contextSnapshot: { page: "home" },
+      queryPlan,
+      grounding: {
+        facts: ["VNM close=80000"],
+        citations: [
+          {
+            id: "c1",
+            sourceType: "api",
+            title: "stocks",
+            endpoint: "https://quantvn.example.com/api/stocks?symbol=VNM",
+            symbol: "VNM",
+          },
+        ],
+        usedTools: [
+          {
+            name: "stockSnapshot",
+            status: "success",
+            evidenceCount: 1,
+            warningCount: 0,
+          },
+        ],
+        messageBlocks: [],
+        groundingSource: "/api/stocks?symbol=VNM",
+      },
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.groundingSatisfied).toBe(true);
+  });
 });

@@ -104,6 +104,19 @@ const NUMERIC_KEYWORDS = [
   "so lieu",
   "ti le",
   "phan tram",
+  "close",
+  "open",
+  "high",
+  "low",
+  "volume",
+  "gia dong cua",
+  "gia dong",
+  "dong cua",
+  "gia mo cua",
+  "gia mo",
+  "gia cao nhat",
+  "gia thap nhat",
+  "khoi luong",
 ];
 const RECOMMENDATION_KEYWORDS = [
   "khuyen nghi",
@@ -111,6 +124,12 @@ const RECOMMENDATION_KEYWORDS = [
   "nen mua",
   "nen ban",
   "nen giu",
+  "buy",
+  "sell",
+  "hold",
+  "should i buy",
+  "should i sell",
+  "should i hold",
   "de xuat",
   "recommend",
   "recommendation",
@@ -174,47 +193,12 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
   const ambiguousSymbolViolation = detectAmbiguousSymbolViolation(input.message, input.contextSnapshot);
   if (ambiguousSymbolViolation) {
     const fallbackMessage = buildFallbackMessage("ambiguous_symbol_not_supported", ambiguousSymbolViolation.reason);
+    const shadowBlocked = mode === "shadow";
     return {
       mode,
-      status: "fallback",
+      status: shadowBlocked ? "shadow_blocked" : "fallback",
       reasonCode: "ambiguous_symbol_not_supported",
       reason: ambiguousSymbolViolation.reason,
-      dataConfidence: "low",
-      groundingRequired: false,
-      groundingSatisfied: false,
-      shouldBypassLlm: true,
-      responseMessage: fallbackMessage,
-      shadowBlocked: false,
-    };
-  }
-  const futureDateViolation = detectFutureDateViolation(input.message, input.contextSnapshot);
-  if (futureDateViolation) {
-    const reason = `Requested date ${futureDateViolation.requestedDate} is in the future and unsupported for grounded market data.`;
-    const fallbackMessage = buildFallbackMessage("future_date_not_supported", reason);
-    const shadowBlocked = mode === "shadow";
-    return {
-      mode,
-      status: shadowBlocked ? "shadow_blocked" : "fallback",
-      reasonCode: "future_date_not_supported",
-      reason,
-      dataConfidence: "low",
-      groundingRequired: false,
-      groundingSatisfied: false,
-      shouldBypassLlm: true,
-      responseMessage: fallbackMessage,
-      shadowBlocked,
-    };
-  }
-  const invalidDateViolation = detectInvalidDateViolation(input.message, input.contextSnapshot);
-  if (invalidDateViolation) {
-    const reason = `Requested date ${invalidDateViolation.invalidDate} is invalid and unsupported for grounded market data.`;
-    const fallbackMessage = buildFallbackMessage("invalid_date_not_supported", reason);
-    const shadowBlocked = mode === "shadow";
-    return {
-      mode,
-      status: shadowBlocked ? "shadow_blocked" : "fallback",
-      reasonCode: "invalid_date_not_supported",
-      reason,
       dataConfidence: "low",
       groundingRequired: false,
       groundingSatisfied: false,
@@ -227,6 +211,45 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
   const numericIntent = isNumericIntent(normalizedMessage, input.contextSnapshot, requiredSignals);
   const recommendationIntent = isRecommendationIntent(normalizedMessage, input.queryPlan);
   const strictGroundingIntent = numericIntent || recommendationIntent;
+
+  if (strictGroundingIntent) {
+    const futureDateViolation = detectFutureDateViolation(input.message, input.contextSnapshot);
+    if (futureDateViolation) {
+      const reason = `Requested date ${futureDateViolation.requestedDate} is in the future and unsupported for grounded market data.`;
+      const fallbackMessage = buildFallbackMessage("future_date_not_supported", reason);
+      const shadowBlocked = mode === "shadow";
+      return {
+        mode,
+        status: shadowBlocked ? "shadow_blocked" : "fallback",
+        reasonCode: "future_date_not_supported",
+        reason,
+        dataConfidence: "low",
+        groundingRequired: false,
+        groundingSatisfied: false,
+        shouldBypassLlm: true,
+        responseMessage: fallbackMessage,
+        shadowBlocked,
+      };
+    }
+    const invalidDateViolation = detectInvalidDateViolation(input.message, input.contextSnapshot);
+    if (invalidDateViolation) {
+      const reason = `Requested date ${invalidDateViolation.invalidDate} is invalid and unsupported for grounded market data.`;
+      const fallbackMessage = buildFallbackMessage("invalid_date_not_supported", reason);
+      const shadowBlocked = mode === "shadow";
+      return {
+        mode,
+        status: shadowBlocked ? "shadow_blocked" : "fallback",
+        reasonCode: "invalid_date_not_supported",
+        reason,
+        dataConfidence: "low",
+        groundingRequired: false,
+        groundingSatisfied: false,
+        shouldBypassLlm: true,
+        responseMessage: fallbackMessage,
+        shadowBlocked,
+      };
+    }
+  }
 
   const enforcementApplies = shouldApplyEnforcement(mode, strictGroundingIntent, input.contextSnapshot, requiredSignals);
   if (!strictGroundingIntent) {
@@ -388,9 +411,10 @@ function isNumericIntent(
   contextSnapshot: AssistantContextSnapshot | undefined,
   requiredSignals: RequiredSignal[]
 ): boolean {
-  if (requiredSignals.length > 0) return true;
+  const hasNumericCue = NUMERIC_KEYWORDS.some((keyword) => messageLower.includes(keyword));
+  if (requiredSignals.length > 0 && (hasNumericCue || hasNumericFilterHints(contextSnapshot?.filters))) return true;
   if (hasNumericFilterHints(contextSnapshot?.filters)) return true;
-  if (NUMERIC_KEYWORDS.some((keyword) => messageLower.includes(keyword))) return true;
+  if (hasNumericCue) return true;
   if (/%|\b\d+(\.\d+)?\b/.test(messageLower) && HIGH_RISK_PAGES.has(contextSnapshot?.page ?? "home")) return true;
   return false;
 }
@@ -444,8 +468,10 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
     }
   }
 
-  const citationEndpoints = new Set(
-    grounding.citations.map((citation) => String(citation.endpoint ?? "")).filter(Boolean)
+  const citationEndpointPaths = new Set(
+    grounding.citations
+      .map((citation) => normalizeEndpointPath(String(citation.endpoint ?? "")))
+      .filter((value): value is string => Boolean(value))
   );
 
   if (requiredSignals.length === 0) {
@@ -491,7 +517,7 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
       if (signal.tool === "fundamentalSnapshot") {
         const analysisTool = successByTool.get("fundamentalAnalysis");
         const analysisHasEvidence = (analysisTool?.evidenceCount ?? 0) > 0;
-        const analysisHasCitation = hasMatchingEndpoint(citationEndpoints, "/api/finance-analysis");
+        const analysisHasCitation = hasMatchingEndpoint(citationEndpointPaths, "/api/finance-analysis");
         if (analysisHasEvidence && analysisHasCitation) {
           continue;
         }
@@ -501,7 +527,7 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
         reason: `Required tool ${signal.tool} returned no numeric evidence.`,
       };
     }
-    if (!hasMatchingEndpoint(citationEndpoints, signal.endpoint)) {
+    if (!hasMatchingEndpoint(citationEndpointPaths, signal.endpoint)) {
       return {
         reasonCode: "missing_citation",
         reason: `Missing citation for required endpoint ${signal.endpoint}.`,
@@ -523,7 +549,7 @@ function evaluateMultiSymbolGrounding(
         .filter((symbol): symbol is string => Boolean(symbol))
     )
   );
-  if (normalizedRequested.length < 2) return null;
+  if (normalizedRequested.length === 0) return null;
 
   const groundedSymbols = new Set<string>();
   for (const citation of grounding.citations) {
@@ -562,10 +588,36 @@ function isSoftNumericFailure(
 }
 
 function hasMatchingEndpoint(endpoints: Set<string>, requiredEndpoint: string): boolean {
-  for (const endpoint of endpoints) {
-    if (endpoint.includes(requiredEndpoint)) return true;
+  const requiredPath = normalizeEndpointPath(requiredEndpoint);
+  if (!requiredPath) return false;
+  return endpoints.has(requiredPath);
+}
+
+function normalizeEndpointPath(endpoint: string): string | null {
+  const value = String(endpoint ?? "").trim();
+  if (!value) return null;
+
+  const stripped = value.split("#")[0].split("?")[0].trim();
+  if (!stripped) return null;
+
+  try {
+    const parsed = stripped.startsWith("http://") || stripped.startsWith("https://")
+      ? new URL(stripped)
+      : new URL(stripped, "http://localhost");
+    if (!parsed.pathname.startsWith("/")) return null;
+    return normalizeEndpointPathname(parsed.pathname);
+  } catch {
+    return null;
   }
-  return false;
+}
+
+function normalizeEndpointPathname(pathname: string): string {
+  if (!pathname || pathname === "/") return "/";
+  const collapsed = pathname.replace(/\/{2,}/g, "/");
+  if (collapsed.length > 1 && collapsed.endsWith("/")) {
+    return collapsed.slice(0, -1);
+  }
+  return collapsed;
 }
 
 function normalizeForKeywordMatch(value: string): string {
