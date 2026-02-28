@@ -15,19 +15,13 @@ import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/p
 import { runGroundingTools, type GroundingResult } from '@/lib/assistant/tools';
 import { evaluateAssistantPolicy } from '@/lib/assistant/policy';
 import { buildAssistantQueryPlan, type AssistantQueryPlan } from '@/lib/assistant/planner';
+import { resolveTrustedToolBaseUrl } from '@/lib/assistant/toolBaseUrl';
 import { createLogger, hashText, toErrorMeta } from '@/lib/logger';
 
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_RESPONSE_CITATIONS = 12;
 const DEFAULT_DEV_TOOL_BASE_URL = 'http://127.0.0.1:3000';
-const TRUSTED_TOOL_BASE_URL_ENV_KEYS = [
-  'ASSISTANT_TOOL_BASE_URL',
-  'INTERNAL_API_BASE_URL',
-  'APP_BASE_URL',
-  'NEXT_PUBLIC_SITE_URL',
-  'NEXT_PUBLIC_APP_URL',
-] as const;
 const EVAL_MODE_HEADER = 'x-assistant-eval';
 const EVAL_TOKEN_HEADER = 'x-assistant-eval-token';
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
@@ -66,6 +60,12 @@ export async function POST(request: NextRequest) {
           message: '',
           success: false,
           error: 'Too many requests. Please wait a moment and try again.',
+          meta: {
+            providerUsed: 'none',
+            fallbackUsed: false,
+            latencyMs: 0,
+            requestId,
+          },
         },
         { status: 429 }
       );
@@ -80,12 +80,23 @@ export async function POST(request: NextRequest) {
           message: '',
           success: false,
           error: 'Unauthorized eval request.',
+          meta: {
+            providerUsed: 'none',
+            fallbackUsed: false,
+            latencyMs: 0,
+            requestId,
+          },
         },
         { status: 401 }
       );
     }
 
-    const toolBaseResolution = resolveTrustedToolBaseUrl(logger);
+    const toolBaseResolution = resolveTrustedToolBaseUrl({
+      defaultDevBaseUrl: DEFAULT_DEV_TOOL_BASE_URL,
+      onInvalidEnvValue: (envKey) => {
+        logger.warn('tool_base.invalid_env_value', { envKey });
+      },
+    });
     const metaBase = {
       requestId: '',
       groundingMode: toolBaseResolution.baseUrl ? ('enabled' as const) : ('disabled' as const),
@@ -105,6 +116,12 @@ export async function POST(request: NextRequest) {
             message: "",
             success: false,
             error: "Invalid JSON payload. Expected an object body.",
+            meta: {
+              providerUsed: "none",
+              fallbackUsed: false,
+              latencyMs: 0,
+              requestId,
+            },
           },
           { status: 400 }
         );
@@ -120,6 +137,12 @@ export async function POST(request: NextRequest) {
           message: "",
           success: false,
           error: "Invalid JSON payload.",
+          meta: {
+            providerUsed: "none",
+            fallbackUsed: false,
+            latencyMs: 0,
+            requestId,
+          },
         },
         { status: 400 }
       );
@@ -183,6 +206,12 @@ export async function POST(request: NextRequest) {
           message: '',
           success: false,
           error: 'Message is required.',
+          meta: {
+            providerUsed: 'none',
+            fallbackUsed: false,
+            latencyMs: 0,
+            requestId,
+          },
         },
         { status: 400 }
       );
@@ -222,10 +251,10 @@ export async function POST(request: NextRequest) {
         grounded: responseCitations.length > 0,
         policyStatus: "shadow_blocked",
         policyReason: "Only HOSE exchange is supported for grounded stock-universe ranking.",
-        dataConfidence: "high",
+        dataConfidence: "low",
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: grounding.messageBlocks,
+        messageBlocks: [],
         meta: {
           providerUsed: "policy",
           fallbackUsed: false,
@@ -234,7 +263,7 @@ export async function POST(request: NextRequest) {
           ...planContextMeta,
           policyMode: "shadow",
           groundingRequired: true,
-          groundingSatisfied: true,
+          groundingSatisfied: false,
           policyReasonCode: "non_hose_scope_guard",
           groundedFactsCount: grounding.facts.length,
           citationCount: responseCitations.length,
@@ -282,6 +311,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (policy.shouldBypassLlm) {
+      const bypassMessageBlocks = policy.shadowBlocked ? [] : grounding.messageBlocks;
       logger.info('response.policy_bypass', {
         policyStatus: policy.status,
         policyReasonCode: policy.reasonCode,
@@ -300,7 +330,7 @@ export async function POST(request: NextRequest) {
         dataConfidence: policy.dataConfidence,
         citations: responseCitations,
         usedTools: grounding.usedTools,
-        messageBlocks: grounding.messageBlocks,
+        messageBlocks: bypassMessageBlocks,
         meta: {
           providerUsed: 'policy',
           fallbackUsed: false,
@@ -498,6 +528,12 @@ export async function POST(request: NextRequest) {
         message: '',
         success: false,
         error: 'An unexpected error occurred. Please try again.',
+        meta: {
+          providerUsed: 'none',
+          fallbackUsed: false,
+          latencyMs: 0,
+          requestId,
+        },
       },
       { status: 500 }
     );
@@ -736,8 +772,9 @@ function extractTrendPeriodsFromFacts(facts: string[]): string[] {
 function buildGroundedFallbackMessage(facts: string[], usedTools: AssistantToolUsage[]): string {
   const successTools = usedTools.filter((tool) => tool.status === 'success').map((tool) => tool.name);
   const factLines = facts.slice(0, 6).map((fact) => `- ${fact}`);
-  const header =
-    'AI model timed out or is temporarily overloaded. Returning grounded data fetched directly from QuantVN APIs:';
+  const header = successTools.length > 0
+    ? 'AI model timed out or is temporarily overloaded. Returning grounded data fetched directly from QuantVN APIs:'
+    : 'AI model timed out or is temporarily overloaded. Returning grounding diagnostics currently available:';
   const toolLine = `Successful tools: ${successTools.length > 0 ? successTools.join(', ') : 'none'}.`;
   const guidance =
     'Ask a narrower follow-up with metric + timeframe for a more precise answer (example: VCB net interest income 2025Q4).';
@@ -1072,34 +1109,6 @@ function isAllowedNavGroup(value: string): value is NonNullable<AssistantContext
   );
 }
 
-function resolveTrustedToolBaseUrl(logger: ReturnType<typeof createLogger>): { baseUrl?: string; source: string } {
-  for (const key of TRUSTED_TOOL_BASE_URL_ENV_KEYS) {
-    const value = process.env[key]?.trim();
-    if (!value) continue;
-    const normalized = normalizeBaseUrl(value);
-    if (normalized) {
-      return {
-        baseUrl: normalized,
-        source: `env:${key}`,
-      };
-    }
-
-    logger.warn('tool_base.invalid_env_value', { envKey: key });
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    const localhostDevBaseUrl = resolveDevLocalhostBaseUrl();
-    return {
-      baseUrl: localhostDevBaseUrl,
-      source: 'dev-localhost',
-    };
-  }
-
-  return {
-    source: 'none',
-  };
-}
-
 function resolveAssistantFeatureFlags(): {
   screenerPresets: boolean;
   watchlistBridge: boolean;
@@ -1120,58 +1129,6 @@ function parseFeatureFlag(raw: string | undefined, fallback: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return fallback;
-}
-
-function normalizeBaseUrl(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
-    if (parsed.username || parsed.password) return undefined;
-    if (parsed.search || parsed.hash) return undefined;
-    const normalizedPath = normalizeBasePath(parsed.pathname);
-    if (normalizedPath === undefined) return undefined;
-    return `${parsed.origin}${normalizedPath}`;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeBasePath(pathname: string): string | undefined {
-  if (!pathname || pathname === '/') return '';
-  if (!pathname.startsWith('/')) return undefined;
-
-  const normalizedPath = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/g, '');
-  if (!normalizedPath || normalizedPath === '/') return '';
-
-  const segments = normalizedPath.split('/').slice(1);
-  for (const segment of segments) {
-    if (!segment) continue;
-    try {
-      const decodedSegment = decodeURIComponent(segment);
-      if (decodedSegment === '.' || decodedSegment === '..') return undefined;
-      if (decodedSegment.includes('/') || decodedSegment.includes('\\')) return undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  return normalizedPath;
-}
-
-function resolveDevLocalhostBaseUrl(): string {
-  const port = normalizePort(process.env.PORT);
-  if (!port) return DEFAULT_DEV_TOOL_BASE_URL;
-  return `http://127.0.0.1:${port}`;
-}
-
-function normalizePort(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) {
-    return undefined;
-  }
-  return String(parsed);
 }
 
 type EvalAuthResult = {

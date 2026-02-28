@@ -37,6 +37,14 @@ describe("assistant signals symbol extraction", () => {
     const symbols = getCandidateSymbols("gia dong cua vcb ngay 31/12/2025", analysisContext);
     expect(symbols).toContain("VCB");
   });
+
+  it("does not infer BAT ticker from 'bat dong san' sector phrase", () => {
+    const symbols = getCandidateSymbols(
+      "Top 5 co phieu bat dong san tren HOSE ngay 31/12/2025 theo PE cao nhat.",
+      { page: "home" }
+    );
+    expect(symbols).not.toContain("BAT");
+  });
 });
 
 describe("assistant signals required tools", () => {
@@ -71,6 +79,54 @@ describe("assistant signals required tools", () => {
     const tools = signals.map((item) => item.tool);
     expect(tools).toContain("stockSnapshot");
     expect(tools).not.toContain("marketSnapshot");
+  });
+
+  it("keeps broad market overview on marketSnapshot even when history has stale symbol", () => {
+    const signals = collectRequiredSignals({
+      message: "Cho toi market overview VNINDEX, top gainer va top loser hien tai",
+      conversationHistory: "Gia dong cua VNM ngay 31/12/2025",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).toContain("marketSnapshot");
+    expect(tools).not.toContain("stockSnapshot");
+  });
+
+  it("does not force valuationRanking for symbol-scoped valuation with temporal ranking wording", () => {
+    const signals = collectRequiredSignals({
+      message: "P/E cua VNM cao nhat trong 5 nam qua la bao nhieu?",
+      contextSnapshot: { page: "analysis", symbol: "VNM" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).not.toContain("valuationRanking");
+    expect(tools).toContain("peerMultiples");
+  });
+
+  it("does not require riskSnapshot when no symbol is provided", () => {
+    const signals = collectRequiredSignals({
+      message: "Rui ro thi truong hom nay nhu the nao?",
+      contextSnapshot: { page: "home" },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).not.toContain("riskSnapshot");
+  });
+
+  it("treats HSX alias in exchange filter as HOSE universe scope", () => {
+    const signals = collectRequiredSignals({
+      message: "Top 5 co phieu theo PE hien tai",
+      contextSnapshot: {
+        page: "screener",
+        filters: {
+          exchange: "HSX",
+        },
+      },
+      baselineOnlyMode: false,
+    });
+    const tools = signals.map((item) => item.tool);
+    expect(tools).toContain("valuationRanking");
   });
 });
 

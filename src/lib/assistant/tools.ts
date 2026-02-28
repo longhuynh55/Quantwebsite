@@ -28,6 +28,7 @@ const MAX_FACTS = 12;
 const MAX_MESSAGE_BLOCKS = 6;
 const BASELINE_ONLY_MODE = String(process.env.ASSISTANT_BASELINE_ONLY ?? "false").trim().toLowerCase() === "true";
 const QUERY_PLAN_STRICT_MODE = String(process.env.ASSISTANT_QUERY_PLAN_STRICT ?? "true").trim().toLowerCase() === "true";
+const DEFAULT_BACKTEST_SYMBOL = String(process.env.ASSISTANT_DEFAULT_BACKTEST_SYMBOL ?? "VNM").trim().toUpperCase();
 const groundingToolsLogger = createLogger('assistant.tools');
 let hoseSymbolUniversePromise: Promise<Set<string>> | null = null;
 
@@ -93,10 +94,61 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         .map((symbol) => String(symbol ?? "").trim().toUpperCase())
         .filter((symbol) => symbol.length > 0)
     : [];
-  const symbols = planSymbols.length > 0
+  let symbols = planSymbols.length > 0
     ? planSymbols
     : getCandidateSymbols(input.message, input.contextSnapshot);
+  const hasContextSymbols = Boolean(
+    (typeof input.contextSnapshot?.symbol === "string" && input.contextSnapshot.symbol.trim().length > 0)
+    || (Array.isArray(input.contextSnapshot?.symbols) && input.contextSnapshot.symbols.length > 0)
+  );
+  let seededBacktestSymbol = false;
+  if (
+    input.queryPlan?.intent === "backtesting"
+    && symbols.length === 0
+    && !hasContextSymbols
+    && shouldSeedBacktestSymbolFromFollowUp(input.message)
+  ) {
+    symbols = [DEFAULT_BACKTEST_SYMBOL];
+    seededBacktestSymbol = true;
+  }
   const symbolScope = buildSymbolGroundingScope(input.message, symbols, input.contextSnapshot);
+  const intentRequiresSymbol =
+    input.queryPlan?.intent === "fundamentals"
+    || input.queryPlan?.intent === "valuation"
+    || input.queryPlan?.intent === "risk"
+    || input.queryPlan?.intent === "backtesting";
+  if (intentRequiresSymbol && planSymbols.length === 0 && !hasContextSymbols && !seededBacktestSymbol) {
+    let skippedToolName: AssistantToolName = "stockSnapshot";
+    if (input.queryPlan?.intent === "fundamentals") skippedToolName = "fundamentalSnapshot";
+    if (input.queryPlan?.intent === "valuation") skippedToolName = "valuationDcf";
+    if (input.queryPlan?.intent === "risk") skippedToolName = "riskSnapshot";
+    if (input.queryPlan?.intent === "backtesting") skippedToolName = "backtestSummary";
+    return {
+      facts: [
+        `Grounding requires explicit symbol for intent=${input.queryPlan?.intent}. Please provide a valid HOSE ticker.`,
+      ],
+      citations: [],
+      usedTools: [
+        {
+          name: skippedToolName,
+          status: "skipped",
+          latencyMs: 0,
+          evidenceCount: 0,
+          warningCount: 1,
+          errorCode: "symbol_required_for_intent",
+          error: "A symbol is required for this intent before grounded tools can execute.",
+        },
+      ],
+      messageBlocks: [
+        {
+          type: "text",
+          title: "Grounding Diagnostics",
+          content: "A symbol is required for this request type. Retry with symbol + metric + timeframe.",
+        },
+      ],
+      groundingSource: "none",
+    };
+  }
   const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan);
   logger.debug('grounding.started', {
     hasToolBaseUrl: Boolean(input.baseUrl),
@@ -420,6 +472,24 @@ async function runTasksWithConcurrency(
   return results;
 }
 
+function shouldSeedBacktestSymbolFromFollowUp(message: string): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  if (!normalized) return false;
+  const asksBacktest =
+    normalized.includes("backtest")
+    || normalized.includes("sma")
+    || normalized.includes("strategy")
+    || normalized.includes("chien luoc");
+  if (!asksBacktest) return false;
+  return (
+    normalized.includes("ma dau")
+    || normalized.includes("top")
+    || normalized.includes("tung ma")
+    || normalized.includes("cho tung ma")
+    || normalized.includes("for each")
+  );
+}
+
 function buildToolTasks(
   baseUrl: string,
   message: string,
@@ -476,6 +546,17 @@ function buildToolTasks(
       addTask(name, () => runner(symbol), `${name}:${symbol}`);
     }
   };
+  const symbolRequiredIntentWithoutTargets =
+    !hasSymbolTargets
+    && (
+      queryPlan?.intent === "fundamentals"
+      || queryPlan?.intent === "valuation"
+      || queryPlan?.intent === "risk"
+      || queryPlan?.intent === "backtesting"
+    );
+  if (symbolRequiredIntentWithoutTargets) {
+    return tasks;
+  }
 
   const addTaskByName = (name: AssistantToolName) => {
     if (name === "dataHealth") {
@@ -558,16 +639,27 @@ function buildToolTasks(
       if (queryPlan?.intent === "stock_snapshot") {
         return;
       }
+      if (
+        !hasSymbolTargets
+        && (
+          queryPlan?.intent === "fundamentals"
+          || queryPlan?.intent === "valuation"
+          || queryPlan?.intent === "risk"
+          || queryPlan?.intent === "backtesting"
+        )
+      ) {
+        return;
+      }
       addTask(name, () => fetchMarketSnapshot(baseUrl));
       return;
     }
     if (name === "icbSnapshot") {
-      addTask(name, () => fetchIcbSnapshot(baseUrl, message, contextSnapshot));
+      addTask(name, () => fetchIcbSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters));
       return;
     }
     if (name === "valuationRanking") {
       if (BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchValuationRanking(baseUrl, message, contextSnapshot));
+      addTask(name, () => fetchValuationRanking(baseUrl, message, contextSnapshot, queryPlanFilters));
     }
   };
 
@@ -1312,17 +1404,33 @@ async function fetchMarketSnapshot(baseUrl: string): Promise<ToolRunOutput> {
 async function fetchIcbSnapshot(
   baseUrl: string,
   message: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlanFilters?: AssistantQueryPlan["filters"]
 ): Promise<ToolRunOutput> {
-  const requestedDate = extractRequestedDate(message, contextSnapshot);
-  const icbLevel = extractIcbLevel(message, contextSnapshot);
-  const limit = extractTopLimit(message, contextSnapshot, 12);
-  const icbFilter = extractIcbFilter(message, contextSnapshot);
+  const plannedDate = normalizeDateLike(queryPlanFilters?.date);
+  const plannedIcbLevel =
+    queryPlanFilters?.icbLevel === "2" || queryPlanFilters?.icbLevel === "3" || queryPlanFilters?.icbLevel === "4"
+      ? queryPlanFilters.icbLevel
+      : null;
+  const plannedLimit = Number.isFinite(queryPlanFilters?.limit)
+    ? Math.min(50, Math.max(1, Number(queryPlanFilters?.limit)))
+    : null;
+  const plannedIcbFilter = typeof queryPlanFilters?.icb === "string" && queryPlanFilters.icb.trim().length > 0
+    ? queryPlanFilters.icb.trim()
+    : null;
+  const plannedExchange = queryPlanFilters?.exchange;
+  const requestedDate = plannedDate ?? extractRequestedDate(message, contextSnapshot);
+  const icbLevel = plannedIcbLevel ?? extractIcbLevel(message, contextSnapshot);
+  const limit = plannedLimit ?? extractTopLimit(message, contextSnapshot, 12);
+  const icbFilter = plannedIcbFilter ?? extractIcbFilter(message, contextSnapshot);
   const params = new URLSearchParams();
   if (requestedDate) params.set("date", requestedDate);
   if (icbLevel) params.set("icbLevel", icbLevel);
   if (limit !== null) params.set("limit", String(limit));
   if (icbFilter) params.set("icb", icbFilter);
+  if (plannedExchange === "HOSE" || plannedExchange === "HNX" || plannedExchange === "UPCOM") {
+    params.set("exchange", plannedExchange);
+  }
 
   const endpoint = `/api/analytics/icb-snapshot${params.size > 0 ? `?${params.toString()}` : ""}`;
   const payload = await fetchJson<{
@@ -1428,6 +1536,7 @@ async function fetchIcbSnapshot(
       icbLevel,
       icbFilter,
       limit,
+      exchange: plannedExchange ?? null,
     },
   };
 }
@@ -1435,15 +1544,35 @@ async function fetchIcbSnapshot(
 async function fetchValuationRanking(
   baseUrl: string,
   message: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  queryPlanFilters?: AssistantQueryPlan["filters"]
 ): Promise<ToolRunOutput> {
-  const requestedDate = extractRequestedDate(message, contextSnapshot);
-  const icbLevel = extractIcbLevel(message, contextSnapshot);
-  const icbFilter = extractIcbFilter(message, contextSnapshot);
-  const limit = extractTopLimit(message, contextSnapshot, 10);
-  const metric = extractValuationMetric(message, contextSnapshot);
-  const order = extractRankingOrder(message, contextSnapshot);
-  const requestedExchange = extractStockUniverseExchange(message, contextSnapshot);
+  const plannedDate = normalizeDateLike(queryPlanFilters?.date);
+  const plannedIcbLevel =
+    queryPlanFilters?.icbLevel === "2" || queryPlanFilters?.icbLevel === "3" || queryPlanFilters?.icbLevel === "4"
+      ? queryPlanFilters.icbLevel
+      : null;
+  const plannedIcbFilter = typeof queryPlanFilters?.icb === "string" && queryPlanFilters.icb.trim().length > 0
+    ? queryPlanFilters.icb.trim()
+    : null;
+  const plannedLimit = Number.isFinite(queryPlanFilters?.limit)
+    ? Math.min(50, Math.max(1, Number(queryPlanFilters?.limit)))
+    : null;
+  const plannedMetric =
+    queryPlanFilters?.metric === "pe" || queryPlanFilters?.metric === "pb" || queryPlanFilters?.metric === "ev_ebitda"
+      ? queryPlanFilters.metric
+      : null;
+  const plannedOrder = queryPlanFilters?.order === "asc" || queryPlanFilters?.order === "desc"
+    ? queryPlanFilters.order
+    : null;
+  const plannedExchange = queryPlanFilters?.exchange;
+  const requestedDate = plannedDate ?? extractRequestedDate(message, contextSnapshot);
+  const icbLevel = plannedIcbLevel ?? extractIcbLevel(message, contextSnapshot);
+  const icbFilter = plannedIcbFilter ?? extractIcbFilter(message, contextSnapshot);
+  const limit = plannedLimit ?? extractTopLimit(message, contextSnapshot, 10);
+  const metric = plannedMetric ?? extractValuationMetric(message, contextSnapshot);
+  const order = plannedOrder ?? extractRankingOrder(message, contextSnapshot);
+  const requestedExchange = plannedExchange ?? extractStockUniverseExchange(message, contextSnapshot);
   const exchange = "HOSE";
 
   if (requestedExchange !== "HOSE") {
@@ -3051,7 +3180,7 @@ function resolveBacktestFallbackSymbol(contextSnapshot?: AssistantContextSnapsho
       if (/^[A-Z0-9]{2,8}$/.test(candidate)) return candidate;
     }
   }
-  return "VNM";
+  return null;
 }
 
 function resolveStockSnapshotLimit(

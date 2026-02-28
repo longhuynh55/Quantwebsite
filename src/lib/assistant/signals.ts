@@ -99,6 +99,8 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "XI",
   "TRONG",
   "NHOM",
+  "BAT",
+  "DAU",
   "NGAN",
   "HANG",
   "BANK",
@@ -458,7 +460,7 @@ export function collectRequiredSignals(input: {
   const filters = isRecord(input.contextSnapshot?.filters) ? input.contextSnapshot.filters : undefined;
   const hasDateFilter = hasFilterValue(filters, ["date", "asOfDate", "as_of_date", "day", "from", "to"]);
   const hasIcbFilter = hasFilterValue(filters, ["icb", "industry", "sector", "icbLevel", "icb_level"]);
-  const hasHoseFilter = hasFilterKeyword(filters, ["exchange", "market", "san"], ["hose", "ho chi minh"]);
+  const hasHoseFilter = hasFilterKeyword(filters, ["exchange", "market", "san"], ["hose", "hsx", "ho chi minh"]);
   const hasRankingFilter =
     hasFilterValue(filters, ["top", "limit", "n", "size"])
     || hasFilterKeyword(filters, ["sort", "order", "direction"], ["asc", "desc", "top", "bottom"]);
@@ -473,11 +475,12 @@ export function collectRequiredSignals(input: {
     ["pe", "p/e", "pb", "p/b", "ev/ebitda", "ev_ebitda"]
   );
   const asksUniverseFilters = hasDateFilter || hasIcbFilter || hasHoseFilter;
-  const hasCandidateSymbol = hasResolvableSymbol(
+  const rawHasCandidateSymbol = hasResolvableSymbol(
     input.message,
     input.contextSnapshot,
     input.conversationHistory
   );
+  const hasMessageScopedSymbol = getCandidateSymbols(input.message).length > 0;
   const asksIcb = hasAnyKeyword(messageLower, ICB_KEYWORDS);
   const asksHoseUniverse = hasAnyKeyword(messageLower, HOSE_KEYWORDS);
   const asksRanking = hasAnyKeyword(messageLower, RANKING_KEYWORDS);
@@ -493,6 +496,18 @@ export function collectRequiredSignals(input: {
     || hasValuationRankingSignal(messageLower)
     || hasValuationMetricFilter;
   const asksRecommendation = hasAnyKeyword(messageLower, RECOMMENDATION_KEYWORDS);
+  const asksStockUniverseRanking = isStockUniverseRankingIntent(input.message, input.contextSnapshot);
+  const asksBroadScopeWithoutMessageSymbol =
+    !hasMessageScopedSymbol
+    && (
+      asksMarket
+      || asksRanking
+      || asksIcb
+      || asksHoseUniverse
+      || asksStockUniverseRanking
+      || asksUniverseFilters
+    );
+  const hasCandidateSymbol = rawHasCandidateSymbol && !asksBroadScopeWithoutMessageSymbol;
   const asksFundamentals =
     hasAnyKeyword(messageLower, FUNDAMENTALS_KEYWORDS)
     || asksFundamentalRatios
@@ -528,7 +543,6 @@ export function collectRequiredSignals(input: {
         && !asksNumericMarketData
       )
     );
-  const asksStockUniverseRanking = isStockUniverseRankingIntent(input.message, input.contextSnapshot);
   const asksOhlcvSeries = hasAnyKeyword(messageLower, OHLCV_KEYWORDS);
   const asksAmbiguousMetricKeyword = hasAnyKeyword(messageLower, AMBIGUOUS_METRIC_KEYWORDS);
   const hasStrongIntentSignal =
@@ -586,10 +600,10 @@ export function collectRequiredSignals(input: {
     pushUnique("stockSnapshot", "/api/stocks");
   }
 
-  if (
-    (input.contextSnapshot?.page === "risk" && hasCandidateSymbol)
+  if (hasCandidateSymbol && (
+    input.contextSnapshot?.page === "risk"
     || hasAnyKeyword(messageLower, RISK_KEYWORDS)
-  ) {
+  )) {
     pushUnique("riskSnapshot", "/api/risk");
   }
 
@@ -630,7 +644,7 @@ export function collectRequiredSignals(input: {
       pushUnique("scenarioSensitivity", "/api/finance-analysis");
     }
 
-    if (asksValuationSignal && (asksRanking || asksIcb || asksHoseUniverse || hasRankingFilter || asksUniverseFilters)) {
+    if (valuationRankingUniverseIntent) {
       pushUnique("valuationRanking", "/api/analytics/valuation-rankings");
     }
   }
