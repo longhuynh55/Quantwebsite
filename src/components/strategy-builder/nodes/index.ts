@@ -7,6 +7,9 @@ export { WeightingNode } from "./WeightingNode";
 export { ConditionalNode } from "./ConditionalNode";
 export { SortNode } from "./SortNode";
 export { MathNode } from "./MathNode";
+export { MergeNode } from "./MergeNode";
+export { RiskNode } from "./RiskNode";
+export { BacktestNode } from "./BacktestNode";
 
 import { DataSourceNode } from "./DataSourceNode";
 import { IndicatorNode } from "./IndicatorNode";
@@ -17,6 +20,9 @@ import { WeightingNode } from "./WeightingNode";
 import { ConditionalNode } from "./ConditionalNode";
 import { SortNode } from "./SortNode";
 import { MathNode } from "./MathNode";
+import { MergeNode } from "./MergeNode";
+import { RiskNode } from "./RiskNode";
+import { BacktestNode } from "./BacktestNode";
 
 // Node type map for React Flow
 export const nodeTypes = {
@@ -29,5 +35,8 @@ export const nodeTypes = {
   conditional: ConditionalNode,
   sort: SortNode,
   math: MathNode,
+  merge: MergeNode,
+  risk: RiskNode,
+  backtest: BacktestNode,
 };
 

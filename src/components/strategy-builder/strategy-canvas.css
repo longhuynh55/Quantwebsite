@@ -47,6 +47,12 @@
   /* neutral-950 */
 }
 
+/* Softer dots in dark mode */
+:is(.dark) .strategy-canvas-flow .react-flow__background pattern circle {
+  fill: #525252;
+  /* neutral-600 — lighter dots for contrast */
+}
+
 /* ============================================================
    Edge Styling
    ============================================================ */

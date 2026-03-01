@@ -126,6 +126,43 @@ export function createStrategyNodeFromPaletteType(
         },
       };
       break;
+    case "merge":
+      label = "Signal Merge";
+      nodeData = {
+        type: "merge",
+        label,
+        config: {
+          label,
+          logic: "and",
+        },
+      };
+      break;
+    case "risk":
+      label = "Risk Manager";
+      nodeData = {
+        type: "risk",
+        label,
+        config: {
+          label,
+          method: "fixed",
+          maxPosition: 10,
+          maxDrawdown: 20,
+        },
+      };
+      break;
+    case "backtest":
+      label = "Run Backtest";
+      nodeData = {
+        type: "backtest",
+        label,
+        config: {
+          label,
+          initialCapital: 100000000,
+          commission: 0.15,
+          slippage: 0.05,
+        },
+      };
+      break;
     default:
       return null;
   }

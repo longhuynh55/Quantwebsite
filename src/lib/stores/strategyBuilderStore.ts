@@ -42,7 +42,7 @@ export interface OutputNodeData {
   metrics: string[];
 }
 
-export type AdvancedNodeType = 'weighting' | 'conditional' | 'sort' | 'math';
+export type AdvancedNodeType = 'weighting' | 'conditional' | 'sort' | 'math' | 'merge' | 'risk' | 'backtest';
 
 export type AdvancedNodeConfigValue =
   | string

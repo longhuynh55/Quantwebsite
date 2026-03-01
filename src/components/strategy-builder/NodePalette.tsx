@@ -16,6 +16,9 @@ import {
   ArrowDownUp,
   Calculator,
   Search,
+  Merge,
+  ShieldCheck,
+  PlayCircle,
 } from "lucide-react";
 
 interface NodeTypeItem {
@@ -78,11 +81,27 @@ const nodeSections: NodeSection[] = [
         color: "text-rose-600 dark:text-rose-400",
         bgColor: "bg-rose-100 dark:bg-rose-900/40",
       },
+      {
+        type: "merge",
+        label: "Merge",
+        description: "Combine signals (AND/OR)",
+        icon: Merge,
+        color: "text-teal-600 dark:text-teal-400",
+        bgColor: "bg-teal-100 dark:bg-teal-900/40",
+      },
     ],
   },
   {
-    label: "Execution",
+    label: "Risk & Execution",
     items: [
+      {
+        type: "risk",
+        label: "Risk Manager",
+        description: "Position sizing & limits",
+        icon: ShieldCheck,
+        color: "text-amber-600 dark:text-amber-400",
+        bgColor: "bg-amber-100 dark:bg-amber-900/40",
+      },
       {
         type: "output",
         label: "Output",
@@ -90,6 +109,14 @@ const nodeSections: NodeSection[] = [
         icon: BarChart2,
         color: "text-emerald-700 dark:text-emerald-300",
         bgColor: "bg-emerald-100 dark:bg-emerald-900/50",
+      },
+      {
+        type: "backtest",
+        label: "Backtest",
+        description: "Run strategy simulation",
+        icon: PlayCircle,
+        color: "text-emerald-600 dark:text-emerald-400",
+        bgColor: "bg-emerald-100 dark:bg-emerald-900/40",
       },
     ],
   },
@@ -101,8 +128,8 @@ const nodeSections: NodeSection[] = [
         label: "Weighting",
         description: "Asset weight allocation",
         icon: Scale,
-        color: "text-violet-600 dark:text-violet-400",
-        bgColor: "bg-violet-100 dark:bg-violet-900/40",
+        color: "text-emerald-600 dark:text-emerald-400",
+        bgColor: "bg-emerald-100 dark:bg-emerald-900/40",
       },
       {
         type: "conditional",
