@@ -45,19 +45,66 @@ interface AiStrategyResponse {
     edges: Array<{ from: number; to: number }>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidStrategyNodeConfig(value: unknown): value is StrategyNodeConfig {
+    if (!isRecord(value)) return false;
+    return (
+        typeof value.type === 'string' &&
+        value.type.length > 0 &&
+        typeof value.label === 'string' &&
+        value.label.length > 0 &&
+        isRecord(value.config)
+    );
+}
+
+function isValidStrategyEdge(value: unknown, nodeCount: number): value is { from: number; to: number } {
+    if (!isRecord(value)) return false;
+    const { from, to } = value;
+    return (
+        typeof from === 'number' &&
+        typeof to === 'number' &&
+        Number.isInteger(from) &&
+        Number.isInteger(to) &&
+        from >= 0 &&
+        to >= 0 &&
+        from < nodeCount &&
+        to < nodeCount
+    );
+}
+
+function isValidAiStrategyResponse(value: unknown): value is AiStrategyResponse {
+    if (!isRecord(value)) return false;
+    const { name, nodes, edges } = value;
+    if (typeof name !== 'string' || name.trim().length === 0) return false;
+    if (!Array.isArray(nodes) || nodes.length === 0 || !Array.isArray(edges)) return false;
+    if (!nodes.every(isValidStrategyNodeConfig)) return false;
+    if (!edges.every((edge) => isValidStrategyEdge(edge, nodes.length))) return false;
+    return true;
+}
+
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { prompt } = body;
+        const body = await request.json() as unknown;
+        if (!isRecord(body)) {
+            return NextResponse.json(
+                { error: 'Invalid request body' },
+                { status: 400 }
+            );
+        }
+        const prompt = body.prompt;
 
-        if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        if (typeof prompt !== 'string' || prompt.trim().length === 0) {
             return NextResponse.json(
                 { error: 'Missing or empty prompt' },
                 { status: 400 }
             );
         }
+        const normalizedPrompt = prompt.trim();
 
-        if (prompt.trim().length > 500) {
+        if (normalizedPrompt.length > 500) {
             return NextResponse.json(
                 { error: 'Prompt too long (max 500 characters)' },
                 { status: 400 }
@@ -66,7 +113,7 @@ export async function POST(request: NextRequest) {
 
         const messages: LlmMessage[] = [
             { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: prompt.trim() },
+            { role: 'user', content: normalizedPrompt },
         ];
 
         const result = await generateWithProviderFallback(messages, {
@@ -85,7 +132,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Parse the AI response
-        let parsed: AiStrategyResponse;
+        let parsed: unknown;
         try {
             // Extract JSON from response (handle markdown code blocks if present)
             let jsonText = result.text.trim();
@@ -106,7 +153,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate structure
-        if (!parsed.name || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+        if (!isValidAiStrategyResponse(parsed)) {
             return NextResponse.json(
                 {
                     error: 'Invalid AI response structure',

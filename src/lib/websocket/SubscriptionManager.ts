@@ -17,7 +17,7 @@ export class SubscriptionManager {
   private subscriptions: Map<SubscriptionTopic, SubscriptionState> = new Map();
   private callbacks: Map<SubscriptionTopic, Set<SubscriptionCallback>> = new Map();
   private wsManager: WebSocketManager;
-  private pendingSubscriptions: Set<SubscriptionTopic> = new Set();
+  private pendingActions: Map<SubscriptionTopic, "subscribe" | "unsubscribe"> = new Map();
   private resubscribeOnConnect: boolean = true;
 
   constructor(wsManager: WebSocketManager) {
@@ -42,7 +42,7 @@ export class SubscriptionManager {
     if (existingSubscription?.active) {
       // Already subscribed, just return unsubscribe function
       this.log(`Already subscribed to ${topic}`);
-    } else if (this.pendingSubscriptions.has(topic)) {
+    } else if (this.pendingActions.get(topic) === "subscribe") {
       // Subscription pending
       this.log(`Subscription pending for ${topic}`);
     } else {
@@ -88,7 +88,7 @@ export class SubscriptionManager {
     });
     this.callbacks.clear();
     this.subscriptions.clear();
-    this.pendingSubscriptions.clear();
+    this.pendingActions.clear();
   }
 
   /**
@@ -163,27 +163,30 @@ export class SubscriptionManager {
   }
 
   private handleAcknowledgment(topic: SubscriptionTopic, ack: SubscriptionAck): void {
-    this.pendingSubscriptions.delete(topic);
+    const pendingAction = this.pendingActions.get(topic);
+    this.pendingActions.delete(topic);
+    const ackAction = ack.action ?? pendingAction ?? "subscribe";
+    const existing = this.subscriptions.get(topic);
 
     if (ack.success) {
-      const existing = this.subscriptions.get(topic);
       this.subscriptions.set(topic, {
         topic,
         subscribedAt: existing?.subscribedAt ?? Date.now(),
         lastMessageAt: Date.now(),
         messageCount: existing?.messageCount ?? 0,
-        active: true,
+        active: ackAction === "subscribe",
       });
-      this.log(`Subscribed to ${topic}`);
+      this.log(`${ackAction === "subscribe" ? "Subscribed" : "Unsubscribed"} ${ackAction === "subscribe" ? "to" : "from"} ${topic}`);
     } else {
+      const keepActive = ackAction === "unsubscribe" ? (existing?.active ?? false) : false;
       this.subscriptions.set(topic, {
         topic,
-        subscribedAt: Date.now(),
-        lastMessageAt: null,
-        messageCount: 0,
-        active: false,
+        subscribedAt: existing?.subscribedAt ?? Date.now(),
+        lastMessageAt: existing?.lastMessageAt ?? null,
+        messageCount: existing?.messageCount ?? 0,
+        active: keepActive,
       });
-      this.log(`Failed to subscribe to ${topic}: ${ack.error}`);
+      this.log(`Failed to ${ackAction} ${topic}: ${ack.error}`);
     }
   }
 
@@ -213,16 +216,11 @@ export class SubscriptionManager {
 
     if (!isConnected) {
       this.log(`WebSocket not connected, ${action} for ${topic} will be sent on connect`);
-      if (action === 'subscribe') {
-        // Mark as pending so we can subscribe when connected
-        this.pendingSubscriptions.add(topic);
-      }
+      this.pendingActions.set(topic, action);
       return;
     }
 
-    if (action === 'subscribe') {
-      this.pendingSubscriptions.add(topic);
-    }
+    this.pendingActions.set(topic, action);
 
     this.wsManager.send({
       type: action === 'subscribe' ? 'subscribe' : 'unsubscribe',

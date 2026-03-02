@@ -121,7 +121,12 @@ function getState(): StrategyLabState {
       ? safeCallAdapter("loadSnapshot", () => strategyLabStoreAdapter?.loadSnapshot?.())
       : null;
     if (snapshot && snapshot.version === 1) {
-      globalThis.__strategyLabState__ = fromSnapshot(snapshot);
+      try {
+        globalThis.__strategyLabState__ = fromSnapshot(snapshot);
+      } catch (error) {
+        console.error("[strategy-lab/store] invalid snapshot, falling back to empty state:", error);
+        globalThis.__strategyLabState__ = createState();
+      }
     } else {
       globalThis.__strategyLabState__ = createState();
     }

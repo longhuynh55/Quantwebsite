@@ -82,6 +82,15 @@ export class WebSocketManager {
   send<T>(message: WebSocketMessage<T>): boolean {
     if (this.ws?.readyState !== WebSocket.OPEN) {
       this.log('WebSocket not open, queuing message');
+      const queueLimit = Math.max(0, Math.trunc(this.config.maxQueueSize));
+      if (queueLimit === 0) {
+        this.log('Message queue disabled; dropping outbound message:', message.type);
+        return false;
+      }
+      if (this.messageQueue.length >= queueLimit) {
+        this.messageQueue.shift();
+        this.log('Message queue full; dropped oldest outbound message');
+      }
       this.messageQueue.push(message as WebSocketMessage);
       return false;
     }

@@ -69,6 +69,7 @@ export interface SubscriptionRequest {
 export interface SubscriptionAck {
   topic: SubscriptionTopic;
   success: boolean;
+  action?: "subscribe" | "unsubscribe";
   error?: string;
 }
 
@@ -88,6 +89,7 @@ export interface WebSocketConfig {
   reconnectMaxDelay: number; // Max delay in ms
   heartbeatInterval: number; // Heartbeat interval in ms (default: 30000)
   connectionTimeout: number; // Connection timeout in ms
+  maxQueueSize: number; // Maximum queued outbound messages when disconnected
   debug: boolean;
 }
 
@@ -139,6 +141,7 @@ export const DEFAULT_WEBSOCKET_CONFIG: WebSocketConfig = {
   reconnectMaxDelay: 30000,
   heartbeatInterval: 30000, // 30 seconds
   connectionTimeout: 10000,
+  maxQueueSize: 500,
   debug: process.env.NODE_ENV === 'development',
 };
 

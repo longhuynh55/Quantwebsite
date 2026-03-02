@@ -184,15 +184,23 @@ function ResponseTrace({
   policyReasonCode?: string;
   policyStatus?: Message['policyStatus'];
 }) {
-  if (!meta && (!usedTools || usedTools.length === 0)) return null;
   const groundingMissing = meta?.groundingRequired === true && meta?.groundingSatisfied === false;
+  const toolFailureDetected = Array.isArray(usedTools) && usedTools.some((tool) => tool.status !== "success");
   const semanticSummary = summarizeSemanticChecklist(meta?.semantic?.checklist);
+  const orderedChecklist = useMemo(
+    () => sortSemanticChecklist(meta?.semantic?.checklist),
+    [meta?.semantic?.checklist]
+  );
+  if (!meta && (!usedTools || usedTools.length === 0)) return null;
+  const visibleChecklistCount = Math.max(4, semanticSummary.failCount);
   const shouldAutoOpen =
     policyStatus === "fallback" ||
     policyStatus === "shadow_blocked" ||
     meta?.fallbackUsed === true ||
     groundingMissing ||
-    semanticSummary.blockedGuards > 0;
+    semanticSummary.blockedGuards > 0 ||
+    semanticSummary.failCount > 0 ||
+    toolFailureDetected;
   const recoveryHint = buildTraceRecoveryHint(policyStatus, groundingMissing, meta?.fallbackUsed === true);
 
   return (
@@ -227,7 +235,7 @@ function ResponseTrace({
                 Semantic Gate
               </p>
               <Badge
-                variant={semanticSummary.blockedGuards > 0 ? "destructive" : "secondary"}
+                variant={semanticSummary.blockedGuards > 0 || semanticSummary.failCount > 0 ? "destructive" : "secondary"}
                 className="text-[10px] uppercase tracking-wide"
               >
                 {meta.semantic.phase}
@@ -236,21 +244,22 @@ function ResponseTrace({
             <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-600 dark:text-neutral-300">
               <span>Version: {String(meta.semantic.version || "n/a")}</span>
               <span>Checks: {semanticSummary.total}</span>
+              <span>Fails: {semanticSummary.failCount}</span>
               <span>Pass rate: {formatSemanticPercent(meta.semantic.passRate, semanticSummary.passRate)}</span>
               <span>Guard pass: {formatSemanticPercent(meta.semantic.guardPassRate, semanticSummary.guardPassRate)}</span>
             </div>
             {Array.isArray(meta.semantic.checklist) && meta.semantic.checklist.length > 0 && (
               <div className="space-y-1">
-                {meta.semantic.checklist.slice(0, 4).map((item) => (
+                {orderedChecklist.slice(0, visibleChecklistCount).map((item) => (
                   <div key={`semantic-${item.id}`} className="text-[11px] text-stone-600 dark:text-neutral-300 flex items-start gap-1.5">
                     <SemanticStatusIcon status={item.status} />
                     <span className="font-medium">{item.label}</span>
                     {item.guard && <span className="uppercase tracking-wide text-[10px] text-stone-500 dark:text-neutral-400">guard</span>}
                   </div>
                 ))}
-                {meta.semantic.checklist.length > 4 && (
+                {orderedChecklist.length > visibleChecklistCount && (
                   <p className="text-[10px] text-stone-500 dark:text-neutral-400">
-                    +{meta.semantic.checklist.length - 4} more checks
+                    +{orderedChecklist.length - visibleChecklistCount} more checks
                   </p>
                 )}
               </div>
@@ -314,6 +323,7 @@ function summarizeSemanticChecklist(checklist?: AssistantSemanticCheckItem[]) {
   if (!Array.isArray(checklist) || checklist.length === 0) {
     return {
       total: 0,
+      failCount: 0,
       passRate: null as number | null,
       guardPassRate: null as number | null,
       blockedGuards: 0,
@@ -321,12 +331,14 @@ function summarizeSemanticChecklist(checklist?: AssistantSemanticCheckItem[]) {
   }
 
   let passed = 0;
+  let failed = 0;
   let guardPassed = 0;
   let guardEvaluated = 0;
   let blockedGuards = 0;
   for (const item of checklist) {
     const status = item?.status;
     if (status === "pass") passed += 1;
+    if (status === "fail") failed += 1;
     if (item?.guard === true) {
       if (status === "pass") {
         guardPassed += 1;
@@ -340,10 +352,27 @@ function summarizeSemanticChecklist(checklist?: AssistantSemanticCheckItem[]) {
 
   return {
     total: checklist.length,
+    failCount: failed,
     passRate: checklist.length > 0 ? passed / checklist.length : null,
     guardPassRate: guardEvaluated > 0 ? guardPassed / guardEvaluated : null,
     blockedGuards,
   };
+}
+
+function sortSemanticChecklist(checklist?: AssistantSemanticCheckItem[]): AssistantSemanticCheckItem[] {
+  if (!Array.isArray(checklist)) return [];
+  const rank: Record<AssistantSemanticCheckItem["status"], number> = {
+    fail: 0,
+    warn: 1,
+    pass: 2,
+    skipped: 3,
+  };
+  return [...checklist].sort((left, right) => {
+    const leftRank = rank[left.status] ?? 99;
+    const rightRank = rank[right.status] ?? 99;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return left.label.localeCompare(right.label);
+  });
 }
 
 function formatSemanticPercent(primary?: number, fallback?: number | null): string {
@@ -633,7 +662,7 @@ function ChartBlockView({ block }: { block: Extract<AssistantMessageBlock, { typ
               className="text-stone-300 dark:text-neutral-700"
               strokeWidth={1}
             />
-            <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} />
+            <path d={linePath} fill="none" stroke="#059669" strokeWidth={2} />
             <circle cx={scaleX(points.length - 1)} cy={scaleY(latest.y)} r={3} fill="#2563eb" />
           </svg>
           <div className="mt-1 flex items-center justify-between text-[11px] text-stone-500 dark:text-neutral-400">

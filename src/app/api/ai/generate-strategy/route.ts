@@ -15,11 +15,6 @@ const RATE_LIMIT_WINDOW = 60 * 1000;
 const MAX_PROMPT_LENGTH = 2000;
 const PARSE_REPAIR_RETRIES = Number.parseInt(process.env.STRATEGY_PARSE_REPAIR_RETRIES ?? '1', 10) || 1;
 
-interface StrategyGenerationRequest {
-  prompt: string;
-  requestId?: string;
-}
-
 interface StrategyGenerationResponse {
   success: boolean;
   strategy?: GeneratedStrategy;
@@ -28,6 +23,10 @@ interface StrategyGenerationResponse {
   latencyMs?: number;
   providerUsed?: string;
   requestId?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<StrategyGenerationResponse>> {
@@ -57,9 +56,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
     }
 
     // Parse request body
-    let body: StrategyGenerationRequest;
+    let body: unknown;
     try {
-      body = await request.json() as StrategyGenerationRequest;
+      body = await request.json() as unknown;
     } catch {
       logger.warn('request.invalid_json');
       return NextResponse.json<StrategyGenerationResponse>(
@@ -71,9 +70,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
         { status: 400 }
       );
     }
+    if (!isRecord(body)) {
+      logger.warn("request.invalid_shape");
+      return NextResponse.json<StrategyGenerationResponse>(
+        {
+          success: false,
+          error: "Request body must be a JSON object.",
+          requestId,
+        },
+        { status: 400 }
+      );
+    }
+    const promptValue = body.prompt;
+    const clientRequestId =
+      typeof body.requestId === "string" && body.requestId.trim().length > 0
+        ? body.requestId.trim()
+        : undefined;
 
     // Validate prompt
-    const prompt = (body.prompt || '').trim();
+    const prompt = typeof promptValue === "string" ? promptValue.trim() : "";
     if (!prompt) {
       logger.warn('request.empty_prompt');
       return NextResponse.json<StrategyGenerationResponse>(
@@ -103,12 +118,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
 
     logger.info('request.received', {
       promptLength: prompt.length,
-      clientRequestId: body.requestId || null,
+      clientRequestId: clientRequestId ?? null,
     });
 
     // Generate strategy
     const result = await generateStrategyFromPrompt(prompt, {
-      requestId: body.requestId || requestId,
+      requestId: clientRequestId || requestId,
       parseRepairRetries: Math.max(0, PARSE_REPAIR_RETRIES),
     });
 

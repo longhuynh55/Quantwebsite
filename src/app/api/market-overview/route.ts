@@ -26,6 +26,7 @@ type MarketOverviewCacheEntry = {
 };
 
 let marketOverviewCache: MarketOverviewCacheEntry | null = null;
+const marketOverviewInFlightLocks = new Map<MarketOverviewCacheEntry["key"], Promise<void>>();
 
 interface StockReturn {
   symbol: string;
@@ -168,7 +169,42 @@ export async function GET(request: Request) {
       });
     }
 
-    if (lowMemoryMode) {
+    const inFlight = marketOverviewInFlightLocks.get(cacheKey);
+    if (inFlight) {
+      logger.info("cache.wait_inflight", { key: cacheKey });
+      await inFlight;
+      const refreshedNow = Date.now();
+      if (marketOverviewCache && marketOverviewCache.key === cacheKey && marketOverviewCache.expiresAt > refreshedNow) {
+        logger.info("cache.hit_after_wait", {
+          key: cacheKey,
+          ttlMs: marketOverviewCache.expiresAt - refreshedNow,
+        });
+        return NextResponse.json(marketOverviewCache.payload, {
+          headers: {
+            "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+          },
+        });
+      }
+    }
+
+    let releaseInFlight: () => void = () => undefined;
+    const inFlightGate = new Promise<void>((resolve) => {
+      releaseInFlight = () => resolve();
+    });
+    marketOverviewInFlightLocks.set(cacheKey, inFlightGate);
+
+    try {
+      const lockNow = Date.now();
+      if (marketOverviewCache && marketOverviewCache.key === cacheKey && marketOverviewCache.expiresAt > lockNow) {
+        logger.info("cache.hit_after_lock", { key: cacheKey, ttlMs: marketOverviewCache.expiresAt - lockNow });
+        return NextResponse.json(marketOverviewCache.payload, {
+          headers: {
+            "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
+          },
+        });
+      }
+
+      if (lowMemoryMode) {
       const [metadata, indexData] = await Promise.all([
         loadStockMetadata(),
         loadIndexData(),
@@ -523,6 +559,12 @@ export async function GET(request: Request) {
         "Cache-Control": "public, max-age=0, s-maxage=15, stale-while-revalidate=60",
       },
     });
+    } finally {
+      releaseInFlight();
+      if (marketOverviewInFlightLocks.get(cacheKey) === inFlightGate) {
+        marketOverviewInFlightLocks.delete(cacheKey);
+      }
+    }
   } catch (error) {
     logger.error("request.failed", {
       ...toErrorMeta(error),

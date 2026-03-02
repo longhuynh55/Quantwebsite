@@ -79,6 +79,26 @@ let ohlcvCache: Map<string, OHLCV[]> | null = null;
 let ohlcvSymbolCache: Map<string, OHLCV[]> = new Map();
 let indexCache: IndexData[] | null = null;
 
+function cloneOHLCVPoint(point: OHLCV): OHLCV {
+  return {
+    ...point,
+    date: new Date(point.date.getTime()),
+  };
+}
+
+function cloneOHLCVSeries(series: OHLCV[] | undefined): OHLCV[] {
+  if (!Array.isArray(series) || series.length === 0) return [];
+  return series.map((point) => cloneOHLCVPoint(point));
+}
+
+function cloneOHLCVMap(source: Map<string, OHLCV[]>): Map<string, OHLCV[]> {
+  const cloned = new Map<string, OHLCV[]>();
+  for (const [symbol, series] of source.entries()) {
+    cloned.set(symbol, cloneOHLCVSeries(series));
+  }
+  return cloned;
+}
+
 const dataQualityCache: Record<DatasetName, DataQualityReport | null> = {
   stockMetadata: null,
   ohlcv: null,
@@ -171,6 +191,9 @@ function buildQualityReport<T>(
     rejectionReasons: Record<string, number>;
     parseErrorCount: number;
     rows: T[];
+  },
+  options?: {
+    cache?: boolean;
   }
 ): DataQualityReport {
   const report: DataQualityReport = {
@@ -184,7 +207,9 @@ function buildQualityReport<T>(
     generatedAt: new Date(),
   };
 
-  dataQualityCache[dataset] = report;
+  if (options?.cache !== false) {
+    dataQualityCache[dataset] = report;
+  }
   return report;
 }
 
@@ -398,16 +423,18 @@ interface DuckDbValidatedParseResult<T> {
 function normalizeDuckDbRowToRawCsvRow(row: Record<string, unknown>): RawCsvRow {
   const out: RawCsvRow = {};
   for (const [key, value] of Object.entries(row)) {
+    const normalizedKey = key.replace(/^\uFEFF/, "").trim().toLowerCase();
+    if (!normalizedKey) continue;
     if (value === undefined || value === null) continue;
     if (value instanceof Date) {
-      out[key] = value.toISOString().slice(0, 10);
+      out[normalizedKey] = value.toISOString().slice(0, 10);
       continue;
     }
     if (typeof value === "string") {
-      out[key] = value.trim();
+      out[normalizedKey] = value.trim();
       continue;
     }
-    out[key] = String(value);
+    out[normalizedKey] = String(value);
   }
   return out;
 }
@@ -715,7 +742,7 @@ async function ensureRuntimeDataFreshness(): Promise<void> {
 async function loadStockMetadataFromDuckDb(duckdbPath: string): Promise<StockMetadata[]> {
   const rows = await queryDuckDbRows(
     duckdbPath,
-    "SELECT * FROM stock_metadata"
+    "SELECT * FROM stock_metadata ORDER BY symbol"
   );
   const parseResult = parseDuckDbRowsWithValidation(rows, validateStockMetadataRow);
   enforceParseQualityGate("stockMetadata", `duckdb:${duckdbPath}:stock_metadata`, parseResult);
@@ -741,9 +768,6 @@ async function loadOHLCVDataFromDuckDb(duckdbPath: string): Promise<Map<string, 
       dataMap.set(row.symbol, []);
     }
     dataMap.get(row.symbol)!.push(row);
-  }
-  for (const series of dataMap.values()) {
-    series.sort((a, b) => a.date.getTime() - b.date.getTime());
   }
 
   const report = buildQualityReport("ohlcv", parseResult);
@@ -776,7 +800,7 @@ async function loadOHLCVForSymbolFromDuckDb(duckdbPath: string, symbol: string):
     return parseResult.rows;
   }
 
-  const report = buildQualityReport("ohlcv", parseResult);
+  const report = buildQualityReport("ohlcv", parseResult, { cache: false });
   if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
     logQualityReport(report);
   }
@@ -794,15 +818,32 @@ async function loadOHLCVForSymbolsFromDuckDb(
   if (normalized.length === 0) return dataMap;
 
   const source = `duckdb:${duckdbPath}:ohlcv`;
-  const placeholders = normalized.map(() => "?").join(", ");
-  const rows = await queryDuckDbRows(
-    duckdbPath,
-    `SELECT symbol, date, open, high, low, close, volume FROM ohlcv WHERE symbol IN (${placeholders}) ORDER BY symbol, date`,
-    normalized
-  );
-  const parseResult = parseDuckDbRowsWithValidation(rows, validateOHLCVRow);
+  const chunkSize = Math.max(1, parseIntegerEnv(process.env.DUCKDB_IN_CHUNK_SIZE, 500));
+  const allValidatedRows: OHLCV[] = [];
+  let totalRows = 0;
+  let acceptedRows = 0;
+  const rejectionReasons: Record<string, number> = {};
+  let parseErrorCount = 0;
 
-  if (parseResult.totalRows <= 0) {
+  for (let start = 0; start < normalized.length; start += chunkSize) {
+    const chunk = normalized.slice(start, start + chunkSize);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = await queryDuckDbRows(
+      duckdbPath,
+      `SELECT symbol, date, open, high, low, close, volume FROM ohlcv WHERE symbol IN (${placeholders}) ORDER BY symbol, date`,
+      chunk
+    );
+    const parseResult = parseDuckDbRowsWithValidation(rows, validateOHLCVRow);
+    totalRows += parseResult.totalRows;
+    acceptedRows += parseResult.acceptedRows;
+    parseErrorCount += parseResult.parseErrorCount;
+    for (const [reason, count] of Object.entries(parseResult.rejectionReasons)) {
+      rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + count;
+    }
+    allValidatedRows.push(...parseResult.rows);
+  }
+
+  if (totalRows <= 0) {
     if (dataQualityCache.ohlcv?.totalRows === 0) {
       dataQualityCache.ohlcv = null;
     }
@@ -816,17 +857,21 @@ async function loadOHLCVForSymbolsFromDuckDb(
     return dataMap;
   }
 
-  for (const row of parseResult.rows) {
+  for (const row of allValidatedRows) {
     if (!dataMap.has(row.symbol)) {
       dataMap.set(row.symbol, []);
     }
     dataMap.get(row.symbol)!.push(row);
   }
-  for (const series of dataMap.values()) {
-    series.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }
 
-  const report = buildQualityReport("ohlcv", parseResult);
+  const report = buildQualityReport("ohlcv", {
+    rows: allValidatedRows,
+    totalRows,
+    acceptedRows,
+    rejectedRows: Math.max(0, totalRows - acceptedRows),
+    rejectionReasons,
+    parseErrorCount,
+  }, { cache: false });
   if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
     logQualityReport(report);
   }
@@ -947,7 +992,7 @@ async function loadOHLCVForSymbolFromCsv(dataDir: string, symbol: string): Promi
     parseErrorCount,
   };
 
-  const report = buildQualityReport("ohlcv", parseResult);
+  const report = buildQualityReport("ohlcv", parseResult, { cache: false });
   if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
     logQualityReport(report);
   }
@@ -1083,7 +1128,7 @@ async function loadOHLCVForSymbolsFromCsv(
     rejectionReasons,
     parseErrorCount,
   };
-  const report = buildQualityReport("ohlcv", parseResult);
+  const report = buildQualityReport("ohlcv", parseResult, { cache: false });
   if (report.rejectedRows > 0 || report.parseErrorCount > 0) {
     logQualityReport(report);
   }
@@ -1180,7 +1225,7 @@ export async function loadStockMetadata(): Promise<StockMetadata[]> {
 
 export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
   await ensureRuntimeDataFreshness();
-  if (ohlcvCache) return ohlcvCache;
+  if (ohlcvCache) return cloneOHLCVMap(ohlcvCache);
 
   const backend = await ensureDataBackendReady("loadOHLCVData");
   const dataDir = getDataDir();
@@ -1189,7 +1234,7 @@ export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
   try {
     if (backend.active === "duckdb") {
       ohlcvCache = await loadOHLCVDataFromDuckDb(backend.duckdbPath);
-      return ohlcvCache;
+      return cloneOHLCVMap(ohlcvCache);
     }
 
     if (!filePath) {
@@ -1235,7 +1280,7 @@ export async function loadOHLCVData(): Promise<Map<string, OHLCV[]>> {
     logQualityReport(report);
     setDatasetStatusSuccess("ohlcv", "csv", `csv:${filePath}`);
 
-    return ohlcvCache;
+    return cloneOHLCVMap(ohlcvCache);
   } catch (error) {
     console.error("Failed to load OHLCV data:", error instanceof Error ? error.message : "Unknown error");
     emitLoadFailureReport("ohlcv", getFailureReason(error), {
@@ -1268,18 +1313,18 @@ export async function loadOHLCVForSymbol(symbol: string): Promise<OHLCV[]> {
     }
   }
   if (ohlcvCache) {
-    return ohlcvCache.get(normalizedSymbol) || [];
+    return cloneOHLCVSeries(ohlcvCache.get(normalizedSymbol));
   }
   const cachedSeries = ohlcvSymbolCache.get(normalizedSymbol);
   if (cachedSeries) {
-    return cachedSeries;
+    return cloneOHLCVSeries(cachedSeries);
   }
 
   const series = await loadOHLCVForSymbolFromCsv(getDataDir(), normalizedSymbol);
   if (series.length > 0) {
     ohlcvSymbolCache.set(normalizedSymbol, series);
   }
-  return series;
+  return cloneOHLCVSeries(series);
 }
 
 export async function loadOHLCVForSymbols(symbols: string[]): Promise<Map<string, OHLCV[]>> {
@@ -1298,7 +1343,7 @@ export async function loadOHLCVForSymbols(symbols: string[]): Promise<Map<string
 
   if (ohlcvCache) {
     for (const symbol of normalized) {
-      result.set(symbol, ohlcvCache.get(symbol) || []);
+      result.set(symbol, cloneOHLCVSeries(ohlcvCache.get(symbol)));
     }
     return result;
   }
@@ -1306,7 +1351,7 @@ export async function loadOHLCVForSymbols(symbols: string[]): Promise<Map<string
   const missingSymbols = normalized.filter((symbol) => !ohlcvSymbolCache.has(symbol));
   if (missingSymbols.length === 0) {
     for (const symbol of normalized) {
-      result.set(symbol, ohlcvSymbolCache.get(symbol) || []);
+      result.set(symbol, cloneOHLCVSeries(ohlcvSymbolCache.get(symbol)));
     }
     return result;
   }
@@ -1336,7 +1381,9 @@ export async function loadOHLCVForSymbols(symbols: string[]): Promise<Map<string
   }
 
   for (const symbol of normalized) {
-    result.set(symbol, ohlcvSymbolCache.get(symbol) || loadedMap.get(symbol) || []);
+    const cached = ohlcvSymbolCache.get(symbol);
+    const loaded = loadedMap.get(symbol);
+    result.set(symbol, cloneOHLCVSeries(cached ?? loaded));
   }
 
   return result;
