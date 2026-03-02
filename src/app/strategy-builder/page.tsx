@@ -103,6 +103,7 @@ export default function StrategyBuilderPage() {
     saveStrategy,
     updateNodeData,
     addNode,
+    addEdge,
     setNodes,
     setEdges,
     deleteNode,
@@ -256,21 +257,94 @@ export default function StrategyBuilderPage() {
 
   const handleAddNodeFromPalette = useCallback(
     (nodeType: string) => {
-      const existingNodes = currentStrategy?.nodes.length ?? 0;
-      const position = {
-        x: 120 + (existingNodes % 4) * 220,
-        y: 120 + Math.floor(existingNodes / 4) * 120,
+      // ── Pipeline column ordering ──
+      const pipelineOrder: Record<string, number> = {
+        dataSource: 0, indicator: 1, filter: 1, math: 1,
+        sort: 2, weighting: 2, conditional: 2, signal: 3, merge: 3,
+        risk: 4, backtest: 5, output: 5,
       };
+
+      // ── Connection rules (which source → which targets) ──
+      const connectionRules: Record<string, string[]> = {
+        dataSource: ["indicator", "filter", "math", "sort", "weighting", "signal"],
+        indicator: ["filter", "signal", "sort", "math", "conditional", "merge", "output"],
+        filter: ["signal", "output", "conditional", "merge"],
+        signal: ["output", "merge", "risk", "backtest"],
+        output: [],
+        weighting: ["signal", "output"],
+        conditional: ["signal", "output"],
+        sort: ["weighting", "signal", "output"],
+        math: ["signal", "filter", "output"],
+        merge: ["risk", "output", "backtest"],
+        risk: ["backtest", "output"],
+        backtest: [],
+      };
+
+      // ── Edge color by source type ──
+      const edgeColorBySource: Record<string, string> = {
+        dataSource: "#0d9488", indicator: "#2563eb", filter: "#e11d48",
+        signal: "#e11d48", output: "#78716c", weighting: "#059669",
+        conditional: "#059669", sort: "#0ea5e9", math: "#6366f1",
+        merge: "#14b8a6", risk: "#f59e0b", backtest: "#059669",
+      };
+
+      const existingNodes = currentStrategy?.nodes ?? [];
+      const col = pipelineOrder[nodeType] ?? 0;
+
+      // ── Auto-layout: count nodes already in this column ──
+      const nodesInSameCol = existingNodes.filter(
+        (n) => (pipelineOrder[n.type ?? ""] ?? -1) === col
+      ).length;
+
+      const COL_WIDTH = 280;
+      const ROW_HEIGHT = 160;
+      const BASE_X = 80;
+      const BASE_Y = 160;
+
+      const position = {
+        x: BASE_X + col * COL_WIDTH,
+        y: BASE_Y + nodesInSameCol * ROW_HEIGHT,
+      };
+
       const node = createStrategyNodeFromPaletteType(nodeType, position);
       if (!node) {
         toast.error("Unsupported node type.");
         return;
       }
       addNode(node);
+
+      // ── Auto-connect: find the best upstream node to connect from ──
+      // Walk backwards through pipeline columns to find a compatible source
+      const candidateSources = existingNodes
+        .filter((n) => {
+          const srcType = n.type ?? "";
+          const allowed = connectionRules[srcType] ?? [];
+          return allowed.includes(nodeType);
+        })
+        .sort((a, b) => {
+          // Prefer nodes closer in pipeline order (higher col first)
+          const colA = pipelineOrder[a.type ?? ""] ?? 0;
+          const colB = pipelineOrder[b.type ?? ""] ?? 0;
+          return colB - colA; // descending — closest upstream first
+        });
+
+      if (candidateSources.length > 0) {
+        const source = candidateSources[0];
+        const edgeColor = edgeColorBySource[source.type ?? ""] || "#a8a29e";
+        const newEdge: StrategyEdge = {
+          id: `e-${source.id}-${node.id}-${Date.now()}`,
+          source: source.id,
+          target: node.id,
+          animated: true,
+          style: { stroke: edgeColor, strokeWidth: 2 },
+        };
+        addEdge(newEdge);
+      }
+
       setSelectedNode(node.id);
       setIsPropertyPanelOpen(true);
     },
-    [addNode, currentStrategy?.nodes.length, setSelectedNode]
+    [addNode, addEdge, currentStrategy?.nodes, setSelectedNode]
   );
 
   // Handle node update
