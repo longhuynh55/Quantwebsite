@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
-import { sanitizeStrategyGraph } from '@/lib/strategy-builder/graph-guardrails';
+import {
+  sanitizeStrategyGraph,
+  type GraphValidationIssue,
+} from '@/lib/strategy-builder/graph-guardrails';
 
 // Node data types
 export interface DataSourceNodeData {
@@ -155,6 +158,16 @@ const dedupeEdges = (edges: StrategyEdge[]): StrategyEdge[] => {
   return uniqueEdges;
 };
 
+const hasOverflowGuardrailError = (issues: GraphValidationIssue[]): boolean =>
+  issues.some(
+    (issue) =>
+      issue.severity === "error" &&
+      (issue.code === "MAX_NODES_EXCEEDED" || issue.code === "MAX_EDGES_EXCEEDED")
+  );
+
+const sanitizeForStore = (nodes: StrategyNode[], edges: StrategyEdge[]) =>
+  sanitizeStrategyGraph(nodes, edges, { overflowPolicy: "reject" });
+
 export const useStrategyBuilderStore = create<StrategyBuilderState>()(
   persist(
     (set, get) => ({
@@ -174,7 +187,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       },
 
       loadStrategy: (strategy) => {
-        const sanitized = sanitizeStrategyGraph(strategy.nodes, strategy.edges);
+        const sanitized = sanitizeForStore(strategy.nodes, strategy.edges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
         set({
           currentStrategy: {
             ...strategy,
@@ -228,10 +242,11 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
-        const sanitized = sanitizeStrategyGraph(
+        const sanitized = sanitizeForStore(
           [...currentStrategy.nodes, node],
           currentStrategy.edges
         );
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -256,7 +271,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           }
           return node;
         });
-        const sanitized = sanitizeStrategyGraph(nextNodes, currentStrategy.edges);
+        const sanitized = sanitizeForStore(nextNodes, currentStrategy.edges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -276,7 +292,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const nextEdges = currentStrategy.edges.filter(
           (edge) => edge.source !== nodeId && edge.target !== nodeId
         );
-        const sanitized = sanitizeStrategyGraph(nextNodes, nextEdges);
+        const sanitized = sanitizeForStore(nextNodes, nextEdges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -302,10 +319,11 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         );
         const hasDuplicate = beforeSignatures.has(edgeSignature(edge));
         if (hasDuplicate) return;
-        const sanitized = sanitizeStrategyGraph(
+        const sanitized = sanitizeForStore(
           currentStrategy.nodes,
           [...currentStrategy.edges, edge]
         );
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
         const stillPresent = sanitized.edges.some((item) => item.id === edge.id);
         if (!stillPresent) return;
 
@@ -323,7 +341,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
         const nextEdges = currentStrategy.edges.filter((edge) => edge.id !== edgeId);
-        const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, nextEdges);
+        const sanitized = sanitizeForStore(currentStrategy.nodes, nextEdges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -339,7 +358,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       setNodes: (nodes) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
-        const sanitized = sanitizeStrategyGraph(nodes, currentStrategy.edges);
+        const sanitized = sanitizeForStore(nodes, currentStrategy.edges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -354,7 +374,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       setEdges: (edges) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
-        const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, dedupeEdges(edges));
+        const sanitized = sanitizeForStore(currentStrategy.nodes, dedupeEdges(edges));
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -369,7 +390,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       setGraph: (nodes, edges) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
-        const sanitized = sanitizeStrategyGraph(nodes, dedupeEdges(edges));
+        const sanitized = sanitizeForStore(nodes, dedupeEdges(edges));
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -397,7 +419,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           }
           return node;
         }).filter(Boolean) as StrategyNode[];
-        const sanitized = sanitizeStrategyGraph(updatedNodes, currentStrategy.edges);
+        const sanitized = sanitizeForStore(updatedNodes, currentStrategy.edges);
+        if (hasOverflowGuardrailError(sanitized.issues)) return;
 
         set({
           currentStrategy: {
@@ -421,7 +444,8 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           const nextEdges = currentStrategy.edges.filter(
             (edge) => !removedIds.includes(edge.id)
           );
-          const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, nextEdges);
+          const sanitized = sanitizeForStore(currentStrategy.nodes, nextEdges);
+          if (hasOverflowGuardrailError(sanitized.issues)) return;
           set({
             currentStrategy: {
               ...currentStrategy,

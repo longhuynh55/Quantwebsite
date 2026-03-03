@@ -56,6 +56,27 @@ function makeBaseGraph() {
   };
 }
 
+function makeOversizedGraph(nodeCount: number) {
+  const templateNode = makeBaseGraph().nodes[0];
+  return {
+    name: "Large Strategy",
+    nodes: Array.from({ length: nodeCount }, (_, index) => ({
+      ...templateNode,
+      id: `n-${index}`,
+      position: { x: 80 + index * 10, y: 120 },
+      data: {
+        ...templateNode.data,
+        label: `Node ${index}`,
+        config: {
+          ...(templateNode.data.config as Record<string, unknown>),
+          label: `Node ${index}`,
+        },
+      },
+    })),
+    edges: [],
+  };
+}
+
 describe("POST /api/ai/strategy-patch", () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -188,6 +209,57 @@ describe("POST /api/ai/strategy-patch", () => {
     expect(response.status).toBe(504);
   });
 
+  it("aborts in-flight provider call when request deadline is exceeded", async () => {
+    jest.useFakeTimers();
+    let capturedAbortSignal: AbortSignal | undefined;
+    mockGenerateWithProviderFallback.mockImplementation((_: unknown, options?: { abortSignal?: AbortSignal }) => {
+      capturedAbortSignal = options?.abortSignal;
+      return new Promise(() => undefined);
+    });
+
+    try {
+      const responsePromise = POST(
+        new Request("http://localhost/api/ai/strategy-patch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            prompt: "add a signal node",
+            mode: "preview",
+            graph: makeBaseGraph(),
+          }),
+        }) as unknown as import("next/server").NextRequest
+      );
+
+      await jest.advanceTimersByTimeAsync(31_000);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(504);
+      expect(capturedAbortSignal?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("returns 422 when current graph exceeds guardrail limits", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/ai/strategy-patch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "add a signal node",
+          mode: "preview",
+          graph: makeOversizedGraph(81),
+        }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(422);
+    const json = (await response.json()) as { success: boolean; error?: string };
+    expect(json.success).toBe(false);
+    expect(json.error).toContain("validation issues");
+    expect(mockGenerateWithProviderFallback).not.toHaveBeenCalled();
+  });
+
   it("returns patched graph in preview mode when patch is valid", async () => {
     mockGenerateWithProviderFallback.mockResolvedValue({
       success: true,
@@ -239,8 +311,9 @@ describe("POST /api/ai/strategy-patch", () => {
     expect(Array.isArray(json.diffSummary)).toBe(true);
     expect(mockGenerateWithProviderFallback).toHaveBeenCalled();
     const callOptions = mockGenerateWithProviderFallback.mock.calls[0]?.[1] as
-      | { responseFormat?: { type?: string } }
+      | { responseFormat?: { type?: string }; abortSignal?: AbortSignal }
       | undefined;
     expect(callOptions?.responseFormat?.type).toBe("json_schema");
+    expect(callOptions?.abortSignal).toBeDefined();
   });
 });

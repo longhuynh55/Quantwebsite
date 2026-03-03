@@ -80,6 +80,33 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(response.status).toBe(429);
   });
 
+  it("aborts in-flight provider call when request deadline is exceeded", async () => {
+    jest.useFakeTimers();
+    let capturedAbortSignal: AbortSignal | undefined;
+    mockGenerateWithProviderFallback.mockImplementation((_: unknown, options?: { abortSignal?: AbortSignal }) => {
+      capturedAbortSignal = options?.abortSignal;
+      return new Promise(() => undefined);
+    });
+
+    try {
+      const responsePromise = POST(
+        new Request("http://localhost/api/assistant/strategy-suggest", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt: "Build RSI strategy" }),
+        }) as unknown as import("next/server").NextRequest
+      );
+
+      await jest.advanceTimersByTimeAsync(31_000);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(504);
+      expect(capturedAbortSignal?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("returns 200 with parsed strategy", async () => {
     mockGenerateWithProviderFallback.mockResolvedValue({
       success: true,
@@ -110,8 +137,9 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(json.provider).toBe("openrouter");
     expect(mockGenerateWithProviderFallback).toHaveBeenCalled();
     const callOptions = mockGenerateWithProviderFallback.mock.calls[0]?.[1] as
-      | { responseFormat?: { type?: string } }
+      | { responseFormat?: { type?: string }; abortSignal?: AbortSignal }
       | undefined;
     expect(callOptions?.responseFormat?.type).toBe("json_schema");
+    expect(callOptions?.abortSignal).toBeDefined();
   });
 });

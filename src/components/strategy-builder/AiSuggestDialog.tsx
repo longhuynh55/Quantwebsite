@@ -42,7 +42,7 @@ interface StrategyPatchPreview {
 }
 
 interface AiSuggestDialogProps {
-  onApplyStrategy: (nodes: StrategyNode[], edges: StrategyEdge[], name: string) => void;
+  onApplyStrategy: (nodes: StrategyNode[], edges: StrategyEdge[], name: string) => boolean | Promise<boolean>;
   currentNodes: StrategyNode[];
   currentEdges: StrategyEdge[];
   strategyName: string;
@@ -89,13 +89,30 @@ export const AiSuggestDialog = memo(function AiSuggestDialog({
   );
 
   const handleApplyGenerated = useCallback(
-    (strategy: GeneratedStrategy) => {
+    async (strategy: GeneratedStrategy) => {
       const sanitized = sanitizeGeneratedStrategyForBuilder(strategy);
       const graph = generatedStrategyToBuilderGraph(sanitized.strategy);
       const warnings = Array.from(new Set([...sanitized.warnings, ...graph.warnings]));
       setLastWarnings(warnings);
 
-      onApplyStrategy(graph.nodes, graph.edges, graph.name);
+      let applied = false;
+      try {
+        applied = await Promise.resolve(onApplyStrategy(graph.nodes, graph.edges, graph.name));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to apply generated strategy.");
+        trackAiAssistEvent("generate_apply_failed", {
+          reason: error instanceof Error ? error.message : "unknown_error",
+        });
+        return;
+      }
+      if (!applied) {
+        trackAiAssistEvent("generate_apply_cancelled", {
+          nodes: graph.nodes.length,
+          edges: graph.edges.length,
+          warningCount: warnings.length,
+        });
+        return;
+      }
 
       if (warnings.length > 0) {
         const summary = (() => {
@@ -200,16 +217,37 @@ export const AiSuggestDialog = memo(function AiSuggestDialog({
     }
   }, [currentEdges, currentNodes, patchLoading, patchPrompt, strategyName, trackAiAssistEvent]);
 
-  const handleApplyPatch = useCallback(() => {
+  const handleApplyPatch = useCallback(async () => {
     if (!patchPreview || patchHasBlockingIssues) {
       return;
     }
 
-    onApplyStrategy(
-      patchPreview.patchedGraph.nodes,
-      patchPreview.patchedGraph.edges,
-      patchPreview.patchedGraph.name
-    );
+    let applied = false;
+    try {
+      applied = await Promise.resolve(
+        onApplyStrategy(
+          patchPreview.patchedGraph.nodes,
+          patchPreview.patchedGraph.edges,
+          patchPreview.patchedGraph.name
+        )
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to apply patch.");
+      trackAiAssistEvent("edit_apply_failed", {
+        reason: error instanceof Error ? error.message : "unknown_error",
+      });
+      return;
+    }
+    if (!applied) {
+      trackAiAssistEvent("edit_apply_cancelled", {
+        nodeCount: patchPreview.patchedGraph.nodes.length,
+        edgeCount: patchPreview.patchedGraph.edges.length,
+        warningCount: patchPreview.warnings.length,
+        hasBlockingIssues: patchHasBlockingIssues,
+      });
+      return;
+    }
+
     const warningCount = patchPreview.warnings.length;
     if (warningCount > 0) {
       toast.warning(`Patch applied with ${warningCount} warning(s).`);

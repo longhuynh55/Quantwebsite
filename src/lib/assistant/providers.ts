@@ -84,7 +84,7 @@ const providersLogger = createLogger('assistant.providers');
 
 export async function generateWithProviderFallback(
   messages: LlmMessage[],
-  options: { requestId?: string; responseFormat?: LlmResponseFormat } = {}
+  options: { requestId?: string; responseFormat?: LlmResponseFormat; abortSignal?: AbortSignal } = {}
 ): Promise<AssistantGenerateResult> {
   const startedAt = Date.now();
   const logger = providersLogger.child({ requestId: options.requestId ?? '' });
@@ -112,9 +112,26 @@ export async function generateWithProviderFallback(
 
   const errors: ProviderErrorInfo[] = [];
   for (let index = 0; index < providers.length; index += 1) {
+    if (options.abortSignal?.aborted) {
+      return {
+        success: false,
+        kind: "timeout",
+        statusCode: 504,
+        message: mapFailureKindToMessage("timeout"),
+        latencyMs: Date.now() - startedAt,
+        providerErrors: errors,
+      };
+    }
+
     const provider = providers[index];
     const providerStartedAt = Date.now();
-    const result = await callProviderWithRetry(provider, messages, logger, options.responseFormat);
+    const result = await callProviderWithRetry(
+      provider,
+      messages,
+      logger,
+      options.responseFormat,
+      options.abortSignal
+    );
     if (result.success) {
       logger.info('provider.success', {
         provider: provider.name,
@@ -294,7 +311,8 @@ async function callProviderWithRetry(
   provider: ProviderConfig,
   messages: LlmMessage[],
   logger: AppLogger,
-  responseFormat?: LlmResponseFormat
+  responseFormat?: LlmResponseFormat,
+  abortSignal?: AbortSignal
 ): Promise<ProviderCallResult> {
   let lastFailure: ProviderFailure = {
     success: false,
@@ -304,22 +322,37 @@ async function callProviderWithRetry(
   };
 
   for (let attempt = 0; attempt <= provider.maxRetries; attempt += 1) {
-    const result = await callProviderOnce(provider, messages, attempt + 1, responseFormat);
+    if (abortSignal?.aborted) {
+      return {
+        success: false,
+        kind: "timeout",
+        details: "request_aborted",
+        attempts: Math.max(1, attempt),
+      };
+    }
+
+    const shouldUseResponseFormat = shouldAttachResponseFormat(provider, responseFormat);
+    const result = await callProviderOnce(provider, messages, attempt + 1, responseFormat, abortSignal);
     if (result.success) {
+      if (shouldUseResponseFormat && responseFormat) {
+        markResponseFormatSupport(provider, true);
+      }
       return result;
     }
 
     lastFailure = result;
 
-    if (responseFormat && result.kind === 'upstream' && result.status === 400) {
+    if (responseFormat && shouldUseResponseFormat && isResponseFormatUnsupportedFailure(result)) {
+      markResponseFormatSupport(provider, false);
       logger.warn('provider.response_format_fallback', {
         provider: provider.name,
         source: provider.source,
         model: provider.model,
         attempt: attempt + 1,
+        status: result.status,
       });
 
-      const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined);
+      const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined, abortSignal);
       if (fallbackResult.success) {
         return fallbackResult;
       }
@@ -343,7 +376,19 @@ async function callProviderWithRetry(
       status: lastFailure.status,
       delayMs,
     });
-    await sleep(delayMs);
+    try {
+      await sleep(delayMs, abortSignal);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return {
+          success: false,
+          kind: "timeout",
+          details: "request_aborted",
+          attempts: attempt + 1,
+        };
+      }
+      throw error;
+    }
   }
 
   return lastFailure;
@@ -353,10 +398,29 @@ async function callProviderOnce(
   provider: ProviderConfig,
   messages: LlmMessage[],
   attempts: number,
-  responseFormat?: LlmResponseFormat
+  responseFormat?: LlmResponseFormat,
+  abortSignal?: AbortSignal
 ): Promise<ProviderCallResult> {
+  if (abortSignal?.aborted) {
+    return {
+      success: false,
+      kind: "timeout",
+      details: "request_aborted",
+      attempts,
+    };
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), provider.timeoutMs);
+  let abortedByTimeout = false;
+  const timeoutId = setTimeout(() => {
+    abortedByTimeout = true;
+    controller.abort();
+  }, provider.timeoutMs);
+  const onAbort = () => controller.abort();
+  if (abortSignal) {
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+  }
+
   try {
     const requestPayload: Record<string, unknown> = {
       model: provider.model,
@@ -416,6 +480,7 @@ async function callProviderOnce(
       return {
         success: false,
         kind: 'timeout',
+        details: abortedByTimeout ? "provider_timeout" : "request_aborted",
         attempts,
       };
     }
@@ -426,6 +491,9 @@ async function callProviderOnce(
       attempts,
     };
   } finally {
+    if (abortSignal) {
+      abortSignal.removeEventListener("abort", onAbort);
+    }
     clearTimeout(timeoutId);
   }
 }
@@ -490,8 +558,11 @@ function shouldAttachResponseFormat(
 ): boolean {
   if (!responseFormat) return false;
   const raw = String(process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE ?? '').trim().toLowerCase();
-  const enabled = raw === '' || raw === '1' || raw === 'true' || raw === 'yes';
+  const enabled = raw === '1' || raw === 'true' || raw === 'yes';
   if (!enabled) return false;
+  if (getResponseFormatSupport(provider) === "unsupported") {
+    return false;
+  }
   return provider.source === 'openrouter' || provider.source === 'fallback';
 }
 
@@ -557,8 +628,54 @@ function trimTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+const RESPONSE_FORMAT_UNSUPPORTED_STATUSES = new Set<number>([400, 415, 422]);
+const responseFormatSupportByProvider = new Map<string, "supported" | "unsupported">();
+
+function getResponseFormatSupport(provider: ProviderConfig): "supported" | "unsupported" | undefined {
+  return responseFormatSupportByProvider.get(buildProviderSupportKey(provider));
+}
+
+function markResponseFormatSupport(provider: ProviderConfig, supported: boolean): void {
+  responseFormatSupportByProvider.set(buildProviderSupportKey(provider), supported ? "supported" : "unsupported");
+}
+
+function buildProviderSupportKey(provider: ProviderConfig): string {
+  return `${provider.source}:${trimTrailingSlash(provider.baseUrl)}:${provider.model}`;
+}
+
+function isResponseFormatUnsupportedFailure(failure: ProviderFailure): boolean {
+  return (
+    failure.kind === "upstream" &&
+    typeof failure.status === "number" &&
+    RESPONSE_FORMAT_UNSUPPORTED_STATUSES.has(failure.status)
+  );
+}
+
+function createAbortError(): Error {
+  const error = new Error("aborted");
+  error.name = "AbortError";
+  return error;
 }
 
 function summarizeProviderHttpError(status: number, rawBody: string): string {

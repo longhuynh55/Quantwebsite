@@ -42,6 +42,8 @@ export type StrategyPatchOp =
       edgeId?: string;
       source?: string;
       target?: string;
+      sourceHandle?: string;
+      targetHandle?: string;
     }
   | {
       op: "relayout";
@@ -150,18 +152,23 @@ export function sanitizeStrategyGraph(
   options?: {
     maxNodes?: number;
     maxEdges?: number;
+    overflowPolicy?: "truncate" | "reject";
   }
 ): GraphValidationResult {
   const maxNodes = options?.maxNodes ?? DEFAULT_MAX_NODES;
   const maxEdges = options?.maxEdges ?? DEFAULT_MAX_EDGES;
+  const overflowPolicy = options?.overflowPolicy ?? "truncate";
   const issues: GraphValidationIssue[] = [];
 
-  const slicedNodes = nodesInput.slice(0, maxNodes);
+  const slicedNodes = overflowPolicy === "truncate" ? nodesInput.slice(0, maxNodes) : nodesInput;
   if (nodesInput.length > maxNodes) {
     issues.push({
-      severity: "warning",
+      severity: overflowPolicy === "truncate" ? "warning" : "error",
       code: "MAX_NODES_EXCEEDED",
-      message: `Graph exceeded max nodes (${maxNodes}); extra nodes were dropped.`,
+      message:
+        overflowPolicy === "truncate"
+          ? `Graph exceeded max nodes (${maxNodes}); extra nodes were dropped.`
+          : `Graph exceeded max nodes (${maxNodes}); rejecting update to prevent silent data loss.`,
     });
   }
 
@@ -208,12 +215,15 @@ export function sanitizeStrategyGraph(
   }
 
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const slicedEdges = edgesInput.slice(0, maxEdges);
+  const slicedEdges = overflowPolicy === "truncate" ? edgesInput.slice(0, maxEdges) : edgesInput;
   if (edgesInput.length > maxEdges) {
     issues.push({
-      severity: "warning",
+      severity: overflowPolicy === "truncate" ? "warning" : "error",
       code: "MAX_EDGES_EXCEEDED",
-      message: `Graph exceeded max edges (${maxEdges}); extra edges were dropped.`,
+      message:
+        overflowPolicy === "truncate"
+          ? `Graph exceeded max edges (${maxEdges}); extra edges were dropped.`
+          : `Graph exceeded max edges (${maxEdges}); rejecting update to prevent silent data loss.`,
     });
   }
 
@@ -482,6 +492,7 @@ export function applyStrategyPatchOps(
   options?: {
     maxNodes?: number;
     maxEdges?: number;
+    overflowPolicy?: "truncate" | "reject";
   }
 ): StrategyPatchApplyResult {
   let nodes = [...baseNodes];
@@ -602,20 +613,74 @@ export function applyStrategyPatchOps(
     }
 
     if (op.op === "remove_edge") {
-      const beforeCount = edges.length;
+      let removedCount = 0;
       if (typeof op.edgeId === "string" && op.edgeId.trim().length > 0) {
-        edges = edges.filter((edge) => edge.id !== op.edgeId);
+        const edgeId = op.edgeId.trim();
+        const nextEdges = edges.filter((edge) => edge.id !== edgeId);
+        removedCount = edges.length - nextEdges.length;
+        edges = nextEdges;
       } else if (typeof op.source === "string" && typeof op.target === "string") {
-        edges = edges.filter((edge) => !(edge.source === op.source && edge.target === op.target));
+        const source = op.source.trim();
+        const target = op.target.trim();
+        if (!source || !target) {
+          issues.push({
+            severity: "error",
+            code: "PATCH_REMOVE_EDGE_INVALID",
+            message: "remove_edge requires non-empty source and target.",
+          });
+          continue;
+        }
+
+        const requestedSourceHandle = typeof op.sourceHandle === "string" ? op.sourceHandle : undefined;
+        const requestedTargetHandle = typeof op.targetHandle === "string" ? op.targetHandle : undefined;
+        const candidates = edges.filter((edge) => edge.source === source && edge.target === target);
+        const filteredCandidates = candidates.filter((edge) => {
+          if (
+            requestedSourceHandle !== undefined &&
+            (typeof edge.sourceHandle !== "string" || edge.sourceHandle !== requestedSourceHandle)
+          ) {
+            return false;
+          }
+          if (
+            requestedTargetHandle !== undefined &&
+            (typeof edge.targetHandle !== "string" || edge.targetHandle !== requestedTargetHandle)
+          ) {
+            return false;
+          }
+          return true;
+        });
+
+        if (filteredCandidates.length > 1) {
+          issues.push({
+            severity: "error",
+            code: "PATCH_REMOVE_EDGE_AMBIGUOUS",
+            message: "remove_edge matched multiple edges. Provide edgeId or explicit handles.",
+          });
+          continue;
+        }
+
+        if (filteredCandidates.length === 0) {
+          issues.push({
+            severity: "warning",
+            code: "PATCH_REMOVE_EDGE_NOT_FOUND",
+            message: "Requested edge to remove was not found.",
+          });
+          continue;
+        }
+
+        const targetEdgeId = filteredCandidates[0].id;
+        const nextEdges = edges.filter((edge) => edge.id !== targetEdgeId);
+        removedCount = edges.length - nextEdges.length;
+        edges = nextEdges;
       } else {
         issues.push({
           severity: "error",
           code: "PATCH_REMOVE_EDGE_INVALID",
-          message: "remove_edge requires edgeId or source+target.",
+          message: "remove_edge requires edgeId or source+target(+optional handles).",
         });
         continue;
       }
-      if (edges.length === beforeCount) {
+      if (removedCount === 0) {
         issues.push({
           severity: "warning",
           code: "PATCH_REMOVE_EDGE_NOT_FOUND",
@@ -643,6 +708,7 @@ export function applyStrategyPatchOps(
   const sanitized = sanitizeStrategyGraph(nodes, edges, {
     maxNodes: options?.maxNodes,
     maxEdges: options?.maxEdges,
+    overflowPolicy: options?.overflowPolicy,
   });
   const mergedIssues = [...issues, ...sanitized.issues];
 

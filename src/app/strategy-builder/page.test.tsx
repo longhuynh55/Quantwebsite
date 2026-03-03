@@ -50,8 +50,48 @@ jest.mock("@/components/strategy-builder", () => ({
   StrategyCanvas: () => <div data-testid="strategy-canvas" />,
   NodePalette: () => <div data-testid="node-palette" />,
   PropertyPanel: () => <div data-testid="property-panel" />,
-  TemplateGallery: () => <div data-testid="template-gallery" />,
-  AiSuggestDialog: () => <div data-testid="ai-suggest-dialog" />,
+  TemplateGallery: ({ onApplyTemplate }: { onApplyTemplate: (nodes: Array<Record<string, unknown>>, edges: Array<Record<string, unknown>>, name: string) => void }) => (
+    <button
+      data-testid="template-gallery"
+      onClick={() =>
+        onApplyTemplate(
+          [
+            {
+              id: "template-node-1",
+              type: "dataSource",
+              data: { label: "Template Source", type: "dataSource", config: {} },
+              position: { x: 80, y: 120 },
+            },
+          ],
+          [],
+          "Template Strategy"
+        )
+      }
+    >
+      Apply Template
+    </button>
+  ),
+  AiSuggestDialog: ({ onApplyStrategy }: { onApplyStrategy: (nodes: Array<Record<string, unknown>>, edges: Array<Record<string, unknown>>, name: string) => boolean }) => (
+    <button
+      data-testid="ai-suggest-dialog"
+      onClick={() =>
+        onApplyStrategy(
+          [
+            {
+              id: "ai-node-1",
+              type: "dataSource",
+              data: { label: "AI Source", type: "dataSource", config: {} },
+              position: { x: 80, y: 120 },
+            },
+          ],
+          [],
+          "AI Strategy"
+        )
+      }
+    >
+      Apply AI
+    </button>
+  ),
 }));
 
 jest.mock("@/lib/stores/strategyBuilderStore", () => ({
@@ -357,5 +397,49 @@ describe("strategy-builder page", () => {
     expect(
       screen.getByText(/Connections are visual only and do not change execution logic/i)
     ).toBeInTheDocument();
+  });
+
+  it("tracks ai_strategy_applied without firing template_applied", () => {
+    render(<StrategyBuilderPage />);
+    fireEvent.click(screen.getByTestId("ai-suggest-dialog"));
+
+    expect(mockTrackUiKpiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metric: "strategy_builder_interaction",
+        event: "ai_strategy_applied",
+      })
+    );
+    expect(
+      mockTrackUiKpiEvent.mock.calls.some(
+        (call) =>
+          call[0] &&
+          typeof call[0] === "object" &&
+          "event" in call[0] &&
+          (call[0] as { event?: string }).event === "template_applied"
+      )
+    ).toBe(false);
+  });
+
+  it("does not apply ai strategy when discard confirmation is cancelled", () => {
+    mockStoreState = createStoreState({ isDirty: true });
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<StrategyBuilderPage />);
+    fireEvent.click(screen.getByTestId("ai-suggest-dialog"));
+
+    expect(mockStoreState.reset).not.toHaveBeenCalled();
+    expect(mockStoreState.createNewStrategy).not.toHaveBeenCalled();
+    expect(mockStoreState.setGraph).not.toHaveBeenCalled();
+    expect(
+      mockTrackUiKpiEvent.mock.calls.some(
+        (call) =>
+          call[0] &&
+          typeof call[0] === "object" &&
+          "event" in call[0] &&
+          (call[0] as { event?: string }).event === "ai_strategy_applied"
+      )
+    ).toBe(false);
+
+    confirmSpy.mockRestore();
   });
 });

@@ -121,4 +121,66 @@ describe("graph-guardrails", () => {
     const summary = summarizeGraphDiff(nodes, [], nodes, []);
     expect(summary).toEqual(["No graph changes detected."]);
   });
+
+  test("returns error for ambiguous remove_edge by source+target", () => {
+    const nodes = [
+      makeNode("dataSource", "src", 10, 10),
+      makeNode("indicator", "ind", 200, 10),
+    ];
+    const edges: StrategyEdge[] = [
+      { id: "e1", source: "src", target: "ind", sourceHandle: "out-a", targetHandle: "in-a" },
+      { id: "e2", source: "src", target: "ind", sourceHandle: "out-b", targetHandle: "in-b" },
+    ];
+
+    const out = applyStrategyPatchOps(nodes, edges, [
+      {
+        op: "remove_edge",
+        source: "src",
+        target: "ind",
+      },
+    ]);
+
+    expect(out.isValid).toBe(false);
+    expect(out.edges).toHaveLength(2);
+    expect(out.issues.some((issue) => issue.code === "PATCH_REMOVE_EDGE_AMBIGUOUS")).toBe(true);
+  });
+
+  test("removes a specific parallel edge when handles are provided", () => {
+    const nodes = [
+      makeNode("dataSource", "src", 10, 10),
+      makeNode("indicator", "ind", 200, 10),
+    ];
+    const edges: StrategyEdge[] = [
+      { id: "e1", source: "src", target: "ind", sourceHandle: "out-a", targetHandle: "in-a" },
+      { id: "e2", source: "src", target: "ind", sourceHandle: "out-b", targetHandle: "in-b" },
+    ];
+
+    const out = applyStrategyPatchOps(nodes, edges, [
+      {
+        op: "remove_edge",
+        source: "src",
+        target: "ind",
+        sourceHandle: "out-a",
+        targetHandle: "in-a",
+      },
+    ]);
+
+    expect(out.isValid).toBe(true);
+    expect(out.edges.map((edge) => edge.id)).toEqual(["e2"]);
+  });
+
+  test("rejects overflow without dropping nodes in reject mode", () => {
+    const nodes = [
+      makeNode("dataSource", "n1", 10, 10),
+      makeNode("indicator", "n2", 200, 10),
+      makeNode("signal", "n3", 380, 10),
+    ];
+
+    const out = sanitizeStrategyGraph(nodes, [], { maxNodes: 2, overflowPolicy: "reject" });
+    expect(out.isValid).toBe(false);
+    expect(out.nodes).toHaveLength(3);
+    expect(out.issues.some((issue) => issue.code === "MAX_NODES_EXCEEDED" && issue.severity === "error")).toBe(
+      true
+    );
+  });
 });

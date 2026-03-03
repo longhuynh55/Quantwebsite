@@ -74,6 +74,11 @@ describe('strategy-generator', () => {
           type: "json_schema",
         },
       });
+      expect(callArgs[1]).toEqual(
+        expect.objectContaining({
+          abortSignal: expect.any(Object),
+        })
+      );
     });
 
     it('should return failure when provider call fails', async () => {
@@ -277,13 +282,25 @@ ${JSON.stringify(validStrategy)}
     });
 
     it('should return timeout failure when deadline is exceeded', async () => {
-      mockGenerateWithProviderFallback.mockReturnValueOnce(new Promise(() => undefined));
+      jest.useFakeTimers();
+      let capturedAbortSignal: AbortSignal | undefined;
+      mockGenerateWithProviderFallback.mockImplementationOnce((_: unknown, options?: { abortSignal?: AbortSignal }) => {
+        capturedAbortSignal = options?.abortSignal;
+        return new Promise(() => undefined);
+      });
 
-      const result = await generateStrategyFromPrompt('Test prompt', { timeoutMs: 5 });
+      try {
+        const resultPromise = generateStrategyFromPrompt('Test prompt', { timeoutMs: 5 });
+        await jest.advanceTimersByTimeAsync(10);
+        const result = await resultPromise;
 
-      expect(result.success).toBe(false);
-      expect(result.failureKind).toBe('timeout');
-      expect(result.statusCode).toBe(504);
+        expect(result.success).toBe(false);
+        expect(result.failureKind).toBe('timeout');
+        expect(result.statusCode).toBe(504);
+        expect(capturedAbortSignal?.aborted).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

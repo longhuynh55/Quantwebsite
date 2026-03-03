@@ -574,18 +574,27 @@ export default function StrategyBuilderPage() {
     trackStrategyBuilderEvent("strategy_new_created");
   }, [confirmDiscardUnsavedChanges, createNewStrategy, reset, resetRunState, trackStrategyBuilderEvent]);
 
-  const handleApplyTemplate = useCallback(
-    (templateNodes: StrategyNode[], templateEdges: StrategyEdge[], name: string) => {
-      if (!confirmDiscardUnsavedChanges("load a template")) {
-        return;
+  const applyIncomingStrategy = useCallback(
+    (
+      nextNodes: StrategyNode[],
+      nextEdges: StrategyEdge[],
+      name: string,
+      options: {
+        actionLabel: string;
+        successToast?: string;
+        trackEvent: string;
+      }
+    ): boolean => {
+      if (!confirmDiscardUnsavedChanges(options.actionLabel)) {
+        return false;
       }
 
       reset();
       createNewStrategy(name);
-      setGraph(templateNodes, templateEdges);
+      setGraph(nextNodes, nextEdges);
 
-      if (templateNodes.length > 0) {
-        setSelectedNode(templateNodes[0].id);
+      if (nextNodes.length > 0) {
+        setSelectedNode(nextNodes[0].id);
         setIsPropertyPanelOpen(true);
       } else {
         setSelectedNode(null);
@@ -594,12 +603,15 @@ export default function StrategyBuilderPage() {
       setStrategyName(name);
       updateStrategyName(name);
       resetRunState();
-      toast.success(`Strategy "${name}" loaded`);
-      trackStrategyBuilderEvent("template_applied", {
+      if (options.successToast) {
+        toast.success(options.successToast);
+      }
+      trackStrategyBuilderEvent(options.trackEvent, {
         name,
-        nodeCount: templateNodes.length,
-        edgeCount: templateEdges.length,
+        nodeCount: nextNodes.length,
+        edgeCount: nextEdges.length,
       });
+      return true;
     },
     [
       confirmDiscardUnsavedChanges,
@@ -611,6 +623,25 @@ export default function StrategyBuilderPage() {
       trackStrategyBuilderEvent,
       updateStrategyName,
     ]
+  );
+
+  const handleApplyTemplate = useCallback(
+    (templateNodes: StrategyNode[], templateEdges: StrategyEdge[], name: string): boolean =>
+      applyIncomingStrategy(templateNodes, templateEdges, name, {
+        actionLabel: "load a template",
+        successToast: `Strategy "${name}" loaded`,
+        trackEvent: "template_applied",
+      }),
+    [applyIncomingStrategy]
+  );
+
+  const handleApplyAiStrategy = useCallback(
+    (nextNodes: StrategyNode[], nextEdges: StrategyEdge[], name: string): boolean =>
+      applyIncomingStrategy(nextNodes, nextEdges, name, {
+        actionLabel: "apply an AI strategy update",
+        trackEvent: "ai_strategy_applied",
+      }),
+    [applyIncomingStrategy]
   );
 
   // Handle name change
@@ -747,7 +778,7 @@ export default function StrategyBuilderPage() {
             {/* Right — AI + Run */}
             <div className="flex items-center gap-1.5">
               <AiSuggestDialog
-                onApplyStrategy={handleApplyTemplate}
+                onApplyStrategy={handleApplyAiStrategy}
                 currentNodes={currentStrategy?.nodes ?? []}
                 currentEdges={currentStrategy?.edges ?? []}
                 strategyName={strategyName}

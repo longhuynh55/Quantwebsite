@@ -234,20 +234,29 @@ class StrategyPatchDeadlineError extends Error {
   }
 }
 
-async function awaitWithDeadline<T>(promise: Promise<T>, deadlineAt: number | null): Promise<T> {
-  if (deadlineAt === null) return promise;
+async function awaitWithDeadline<T>(
+  promiseFactory: (abortSignal: AbortSignal) => Promise<T>,
+  deadlineAt: number | null
+): Promise<T> {
+  if (deadlineAt === null) {
+    return promiseFactory(new AbortController().signal);
+  }
 
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) {
     throw new StrategyPatchDeadlineError();
   }
 
+  const deadlineController = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race<T>([
-      promise,
+      promiseFactory(deadlineController.signal),
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new StrategyPatchDeadlineError()), remainingMs);
+        timeoutId = setTimeout(() => {
+          deadlineController.abort();
+          reject(new StrategyPatchDeadlineError());
+        }, remainingMs);
       }),
     ]);
   } finally {
@@ -336,7 +345,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyP
       );
     }
 
-    const baseSanitized = sanitizeStrategyGraph(graph.nodes, graph.edges);
+    const baseSanitized = sanitizeStrategyGraph(graph.nodes, graph.edges, {
+      overflowPolicy: "reject",
+    });
+    const baseBlockingIssues = baseSanitized.issues.filter((issue) => issue.severity === "error");
+    if (baseBlockingIssues.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Current graph contains validation issues. Resolve them before applying AI patch.",
+          issues: baseSanitized.issues,
+          warnings: baseSanitized.issues
+            .filter((issue) => issue.severity === "warning")
+            .map((issue) => issue.message),
+          requestId,
+        },
+        { status: 422 }
+      );
+    }
+
     const graphContext = buildGraphContextForPrompt(
       graph.name,
       baseSanitized.nodes,
@@ -376,10 +403,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyP
       ];
 
       const modelResult = await awaitWithDeadline(
-        generateWithProviderFallback(messages, {
-          requestId,
-          responseFormat: STRATEGY_PATCH_RESPONSE_FORMAT,
-        }),
+        (abortSignal) =>
+          generateWithProviderFallback(messages, {
+            requestId,
+            responseFormat: STRATEGY_PATCH_RESPONSE_FORMAT,
+            abortSignal,
+          }),
         deadlineAt
       );
       if (!modelResult.success) {
@@ -441,19 +470,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyP
     const applyResult = applyStrategyPatchOps(
       baseSanitized.nodes,
       baseSanitized.edges,
-      parsedPatch.ops
+      parsedPatch.ops,
+      { overflowPolicy: "reject" }
     );
+    const combinedIssues = [...baseSanitized.issues, ...applyResult.issues];
+    const combinedWarnings = combinedIssues
+      .filter((issue) => issue.severity === "warning")
+      .map((issue) => issue.message);
 
-    if (!applyResult.isValid) {
+    if (combinedIssues.some((issue) => issue.severity === "error")) {
       return NextResponse.json(
         {
           success: false,
           mode,
           error: "Patch contains invalid graph operations.",
-          issues: applyResult.issues,
+          issues: combinedIssues,
           ops: parsedPatch.ops,
           summary: parsedPatch.summary,
           diffSummary: applyResult.diffSummary,
+          warnings: combinedWarnings,
           requestId,
           providerUsed,
           latencyMs: Date.now() - startedAt,
@@ -462,15 +497,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyP
       );
     }
 
-    const warnings = applyResult.issues
-      .filter((issue) => issue.severity === "warning")
-      .map((issue) => issue.message);
-
     logger.info("patch.completed", {
       mode,
       opCount: parsedPatch.ops.length,
       appliedOps: applyResult.appliedOps,
-      warningCount: warnings.length,
+      warningCount: combinedWarnings.length,
       latencyMs: Date.now() - startedAt,
       providerUsed,
     });
@@ -486,8 +517,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyP
       ops: parsedPatch.ops,
       summary: parsedPatch.summary,
       diffSummary: applyResult.diffSummary,
-      issues: applyResult.issues,
-      warnings,
+      issues: combinedIssues,
+      warnings: combinedWarnings,
       requestId,
       providerUsed,
       latencyMs: Date.now() - startedAt,

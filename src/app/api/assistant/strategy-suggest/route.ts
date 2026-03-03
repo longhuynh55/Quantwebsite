@@ -190,7 +190,11 @@ class StrategySuggestTimeoutError extends Error {
   }
 }
 
-async function awaitWithDeadline<T>(promise: Promise<T>, deadlineAt: number): Promise<T> {
+async function awaitWithDeadline<T>(
+  promiseFactory: (abortSignal: AbortSignal) => Promise<T>,
+  deadlineAt: number
+): Promise<T> {
+  const deadlineController = new AbortController();
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) {
     throw new StrategySuggestTimeoutError();
@@ -199,9 +203,12 @@ async function awaitWithDeadline<T>(promise: Promise<T>, deadlineAt: number): Pr
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race<T>([
-      promise,
+      promiseFactory(deadlineController.signal),
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new StrategySuggestTimeoutError()), remainingMs);
+        timeoutId = setTimeout(() => {
+          deadlineController.abort();
+          reject(new StrategySuggestTimeoutError());
+        }, remainingMs);
       }),
     ]);
   } finally {
@@ -282,10 +289,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
       ];
 
       const result = await awaitWithDeadline(
-        generateWithProviderFallback(messages, {
-          requestId,
-          responseFormat: STRATEGY_SUGGEST_RESPONSE_FORMAT,
-        }),
+        (abortSignal) =>
+          generateWithProviderFallback(messages, {
+            requestId,
+            responseFormat: STRATEGY_SUGGEST_RESPONSE_FORMAT,
+            abortSignal,
+          }),
         deadlineAt
       );
 

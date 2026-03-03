@@ -215,10 +215,12 @@ export async function generateStrategyFromPrompt(
       ];
 
       const result = await awaitWithDeadline(
-        generateWithProviderFallback(messages, {
-          requestId,
-          responseFormat: STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT,
-        }),
+        (abortSignal) =>
+          generateWithProviderFallback(messages, {
+            requestId,
+            responseFormat: STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT,
+            abortSignal,
+          }),
         deadlineAt
       );
       if (!result.success) {
@@ -524,21 +526,28 @@ class StrategyGenerationTimeoutError extends Error {
   }
 }
 
-async function awaitWithDeadline<T>(promise: Promise<T>, deadlineAt: number | null): Promise<T> {
+async function awaitWithDeadline<T>(
+  promiseFactory: (abortSignal: AbortSignal) => Promise<T>,
+  deadlineAt: number | null
+): Promise<T> {
   if (deadlineAt === null) {
-    return promise;
+    return promiseFactory(new AbortController().signal);
   }
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) {
     throw new StrategyGenerationTimeoutError();
   }
 
+  const deadlineController = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race<T>([
-      promise,
+      promiseFactory(deadlineController.signal),
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new StrategyGenerationTimeoutError()), remainingMs);
+        timeoutId = setTimeout(() => {
+          deadlineController.abort();
+          reject(new StrategyGenerationTimeoutError());
+        }, remainingMs);
       }),
     ]);
   } finally {
