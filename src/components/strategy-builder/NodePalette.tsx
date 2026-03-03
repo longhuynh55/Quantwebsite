@@ -185,6 +185,7 @@ const NodePaletteItem = memo(({ item, onDragStart, onAddNode }: NodePaletteItemP
 
   return (
     <div
+      data-testid={`node-palette-item-${item.type}`}
       draggable
       onDragStart={handleDragStart}
       onClick={() => onAddNode?.(item.type)}

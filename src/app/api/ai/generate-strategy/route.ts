@@ -3,6 +3,7 @@ import {
   generateStrategyFromPrompt,
   type GeneratedStrategy,
 } from '@/lib/ai/strategy-generator';
+import { sanitizeGeneratedStrategyForBuilder } from '@/lib/ai/strategy-builder-adapter';
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { createLogger, toErrorMeta } from '@/lib/logger';
 
@@ -13,7 +14,14 @@ const RATE_LIMIT = 10;
 const RATE_LIMIT_WINDOW = 60 * 1000;
 
 const MAX_PROMPT_LENGTH = 2000;
-const PARSE_REPAIR_RETRIES = Number.parseInt(process.env.STRATEGY_PARSE_REPAIR_RETRIES ?? '1', 10) || 1;
+const parsedParseRepairRetries = Number.parseInt(process.env.STRATEGY_PARSE_REPAIR_RETRIES ?? '2', 10);
+const PARSE_REPAIR_RETRIES = Number.isFinite(parsedParseRepairRetries)
+  ? Math.max(0, parsedParseRepairRetries)
+  : 2;
+const parsedRequestTimeoutMs = Number.parseInt(process.env.STRATEGY_GENERATE_TIMEOUT_MS ?? "45000", 10);
+const REQUEST_TIMEOUT_MS = Number.isFinite(parsedRequestTimeoutMs)
+  ? Math.max(5_000, parsedRequestTimeoutMs)
+  : 45_000;
 
 interface StrategyGenerationResponse {
   success: boolean;
@@ -123,37 +131,69 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
 
     // Generate strategy
     const result = await generateStrategyFromPrompt(prompt, {
-      requestId: clientRequestId || requestId,
+      requestId,
+      timeoutMs: REQUEST_TIMEOUT_MS,
       parseRepairRetries: Math.max(0, PARSE_REPAIR_RETRIES),
     });
 
     if (!result.success) {
+      const errorMessage = result.error || 'Failed to generate strategy. Please try again.';
+      const status =
+        result.statusCode ??
+        (result.failureKind === "parse"
+          ? 422
+          : result.failureKind === "timeout"
+            ? 504
+            : result.failureKind === "rate_limit"
+              ? 429
+              : result.failureKind === "configuration"
+                ? 500
+                : 502);
       logger.warn('generation.failed', {
-        error: result.error,
+        error: errorMessage,
+        latencyMs: result.latencyMs,
+        status,
+        failureKind: result.failureKind,
+      });
+      return NextResponse.json<StrategyGenerationResponse>(
+        {
+          success: false,
+          error: errorMessage,
+          rawResponse: result.rawResponse,
+          latencyMs: result.latencyMs,
+          requestId,
+        },
+        { status }
+      );
+    }
+
+    if (!result.strategy) {
+      logger.warn('generation.empty_strategy', {
         latencyMs: result.latencyMs,
       });
       return NextResponse.json<StrategyGenerationResponse>(
         {
           success: false,
-          error: result.error || 'Failed to generate strategy. Please try again.',
-          rawResponse: result.rawResponse,
-          latencyMs: result.latencyMs,
+          error: 'Strategy generation returned empty payload.',
           requestId,
         },
         { status: 500 }
       );
     }
 
+    const sanitized = sanitizeGeneratedStrategyForBuilder(result.strategy);
+
     logger.info('generation.completed', {
       nodeCount: result.strategy?.nodes.length || 0,
       edgeCount: result.strategy?.edges.length || 0,
       latencyMs: result.latencyMs,
       providerUsed: result.providerUsed,
+      warningCount: sanitized.warnings.length,
     });
 
     return NextResponse.json<StrategyGenerationResponse>({
       success: true,
-      strategy: result.strategy,
+      strategy: sanitized.strategy,
       latencyMs: result.latencyMs,
       providerUsed: result.providerUsed,
       requestId,

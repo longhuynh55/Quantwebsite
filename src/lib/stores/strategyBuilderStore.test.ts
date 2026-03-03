@@ -27,6 +27,21 @@ const createTestNode = (id: string): StrategyNode => ({
   },
 });
 
+const createIndicatorNode = (id: string): StrategyNode => ({
+  id,
+  type: 'indicator',
+  position: { x: 0, y: 0 },
+  data: {
+    type: 'indicator',
+    label: 'RSI',
+    config: {
+      label: 'RSI',
+      indicatorType: 'rsi',
+      period: 14,
+    },
+  },
+});
+
 // Helper to create a test edge
 const createTestEdge = (id: string, source: string, target: string): StrategyEdge => ({
   id,
@@ -207,7 +222,7 @@ describe('strategyBuilderStore', () => {
       act(() => {
         useStrategyBuilderStore.getState().createNewStrategy('Test');
         useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
-        useStrategyBuilderStore.getState().addNode(createTestNode('node-2'));
+        useStrategyBuilderStore.getState().addNode(createIndicatorNode('node-2'));
         useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-1', 'node-1', 'node-2'));
       });
 
@@ -356,7 +371,7 @@ describe('strategyBuilderStore', () => {
       act(() => {
         useStrategyBuilderStore.getState().createNewStrategy('Test');
         useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
-        useStrategyBuilderStore.getState().addNode(createTestNode('node-2'));
+        useStrategyBuilderStore.getState().addNode(createIndicatorNode('node-2'));
         useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-1', 'node-1', 'node-2'));
       });
 
@@ -370,7 +385,7 @@ describe('strategyBuilderStore', () => {
       act(() => {
         useStrategyBuilderStore.getState().createNewStrategy('Test');
         useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
-        useStrategyBuilderStore.getState().addNode(createTestNode('node-2'));
+        useStrategyBuilderStore.getState().addNode(createIndicatorNode('node-2'));
         useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-1', 'node-1', 'node-2'));
         useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-2', 'node-1', 'node-2'));
       });

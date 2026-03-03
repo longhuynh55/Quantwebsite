@@ -48,9 +48,7 @@ describe("strategy-builder-adapter", () => {
     expect(Number.isFinite(out.strategy.nodes[0].position.x)).toBe(true);
     expect(Number.isFinite(out.strategy.nodes[0].position.y)).toBe(true);
     expect(out.strategy.nodes[1].data.config.period).toBeGreaterThan(0);
-    expect(out.strategy.edges).toHaveLength(1);
-    expect(out.strategy.edges[0].source).toBe(out.strategy.nodes[1].id);
-    expect(out.strategy.edges[0].target).toBe(out.strategy.nodes[1].id);
+    expect(out.strategy.edges).toHaveLength(0);
     expect(out.warnings.length).toBeGreaterThan(0);
   });
 
@@ -79,5 +77,6 @@ describe("strategy-builder-adapter", () => {
     expect(out.nodes.map((n) => n.id)).toEqual(["ds", "ind"]);
     expect(out.edges).toHaveLength(1);
     expect(out.edges[0].animated).toBe(true);
+    expect(Array.isArray(out.warnings)).toBe(true);
   });
 });

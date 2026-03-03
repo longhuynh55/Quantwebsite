@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
+import { sanitizeStrategyGraph } from '@/lib/strategy-builder/graph-guardrails';
 
 // Node data types
 export interface DataSourceNodeData {
@@ -114,6 +115,7 @@ interface StrategyBuilderState {
   // Bulk actions
   setNodes: (nodes: StrategyNode[]) => void;
   setEdges: (edges: StrategyEdge[]) => void;
+  setGraph: (nodes: StrategyNode[], edges: StrategyEdge[]) => void;
   onNodesChange: (changes: NodeChange<StrategyNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<StrategyEdge>[]) => void;
 
@@ -172,8 +174,13 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       },
 
       loadStrategy: (strategy) => {
+        const sanitized = sanitizeStrategyGraph(strategy.nodes, strategy.edges);
         set({
-          currentStrategy: strategy,
+          currentStrategy: {
+            ...strategy,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
+          },
           selectedNodeId: null,
           isDirty: false,
         });
@@ -221,10 +228,16 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
+        const sanitized = sanitizeStrategyGraph(
+          [...currentStrategy.nodes, node],
+          currentStrategy.edges
+        );
+
         set({
           currentStrategy: {
             ...currentStrategy,
-            nodes: [...currentStrategy.nodes, node],
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -234,18 +247,22 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
+        const nextNodes = currentStrategy.nodes.map((node) => {
+          if (node.id === nodeId) {
+            return {
+              ...node,
+              data: { ...node.data, ...data } as StrategyNodeData,
+            };
+          }
+          return node;
+        });
+        const sanitized = sanitizeStrategyGraph(nextNodes, currentStrategy.edges);
+
         set({
           currentStrategy: {
             ...currentStrategy,
-            nodes: currentStrategy.nodes.map((node) => {
-              if (node.id === nodeId) {
-                return {
-                  ...node,
-                  data: { ...node.data, ...data } as StrategyNodeData,
-                };
-              }
-              return node;
-            }),
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -255,13 +272,17 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy, selectedNodeId } = get();
         if (!currentStrategy) return;
 
+        const nextNodes = currentStrategy.nodes.filter((node) => node.id !== nodeId);
+        const nextEdges = currentStrategy.edges.filter(
+          (edge) => edge.source !== nodeId && edge.target !== nodeId
+        );
+        const sanitized = sanitizeStrategyGraph(nextNodes, nextEdges);
+
         set({
           currentStrategy: {
             ...currentStrategy,
-            nodes: currentStrategy.nodes.filter((node) => node.id !== nodeId),
-            edges: currentStrategy.edges.filter(
-              (edge) => edge.source !== nodeId && edge.target !== nodeId
-            ),
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           selectedNodeId: selectedNodeId === nodeId ? null : selectedNodeId,
           isDirty: true,
@@ -276,14 +297,23 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       addEdge: (edge) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
-
-        const nextEdges = dedupeEdges([...currentStrategy.edges, edge]);
-        if (nextEdges.length === currentStrategy.edges.length) return;
+        const beforeSignatures = new Set(
+          currentStrategy.edges.map((currentEdge) => edgeSignature(currentEdge))
+        );
+        const hasDuplicate = beforeSignatures.has(edgeSignature(edge));
+        if (hasDuplicate) return;
+        const sanitized = sanitizeStrategyGraph(
+          currentStrategy.nodes,
+          [...currentStrategy.edges, edge]
+        );
+        const stillPresent = sanitized.edges.some((item) => item.id === edge.id);
+        if (!stillPresent) return;
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            edges: nextEdges,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -292,11 +322,14 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       deleteEdge: (edgeId) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
+        const nextEdges = currentStrategy.edges.filter((edge) => edge.id !== edgeId);
+        const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, nextEdges);
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            edges: currentStrategy.edges.filter((edge) => edge.id !== edgeId),
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -306,11 +339,13 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       setNodes: (nodes) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
+        const sanitized = sanitizeStrategyGraph(nodes, currentStrategy.edges);
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            nodes,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -319,13 +354,28 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       setEdges: (edges) => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
-
-        const nextEdges = dedupeEdges(edges);
+        const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, dedupeEdges(edges));
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            edges: nextEdges,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
+          },
+          isDirty: true,
+        });
+      },
+
+      setGraph: (nodes, edges) => {
+        const { currentStrategy } = get();
+        if (!currentStrategy) return;
+        const sanitized = sanitizeStrategyGraph(nodes, dedupeEdges(edges));
+
+        set({
+          currentStrategy: {
+            ...currentStrategy,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -347,11 +397,13 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           }
           return node;
         }).filter(Boolean) as StrategyNode[];
+        const sanitized = sanitizeStrategyGraph(updatedNodes, currentStrategy.edges);
 
         set({
           currentStrategy: {
             ...currentStrategy,
-            nodes: updatedNodes,
+            nodes: sanitized.nodes,
+            edges: sanitized.edges,
           },
           isDirty: true,
         });
@@ -366,12 +418,15 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
           .map((c) => c.id);
 
         if (removedIds.length > 0) {
+          const nextEdges = currentStrategy.edges.filter(
+            (edge) => !removedIds.includes(edge.id)
+          );
+          const sanitized = sanitizeStrategyGraph(currentStrategy.nodes, nextEdges);
           set({
             currentStrategy: {
               ...currentStrategy,
-              edges: currentStrategy.edges.filter(
-                (edge) => !removedIds.includes(edge.id)
-              ),
+              nodes: sanitized.nodes,
+              edges: sanitized.edges,
             },
             isDirty: true,
           });

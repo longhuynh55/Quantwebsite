@@ -12,6 +12,7 @@ const mockCreateStrategyLabRunClient = jest.fn();
 const mockWaitForStrategyLabRunTerminal = jest.fn();
 const mockGetStrategyLabRunSummaryClient = jest.fn();
 const mockCancelStrategyLabRunClient = jest.fn();
+const mockTrackUiKpiEvent = jest.fn();
 
 type MockStoreState = {
   currentStrategy: {
@@ -27,8 +28,7 @@ type MockStoreState = {
   updateStrategyName: jest.Mock;
   updateNodeData: jest.Mock;
   addNode: jest.Mock;
-  setNodes: jest.Mock;
-  setEdges: jest.Mock;
+  setGraph: jest.Mock;
   deleteNode: jest.Mock;
   setSelectedNode: jest.Mock;
   isSaving: boolean;
@@ -76,6 +76,10 @@ jest.mock("@/lib/strategy-lab/client", () => ({
   StrategyLabClientError: class extends Error {},
 }));
 
+jest.mock("@/lib/uiKpi", () => ({
+  trackUiKpiEvent: (...args: unknown[]) => mockTrackUiKpiEvent(...args),
+}));
+
 function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
   return {
     currentStrategy: {
@@ -91,8 +95,7 @@ function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
     updateStrategyName: jest.fn(),
     updateNodeData: jest.fn(),
     addNode: jest.fn(),
-    setNodes: jest.fn(),
-    setEdges: jest.fn(),
+    setGraph: jest.fn(),
     deleteNode: jest.fn(),
     setSelectedNode: jest.fn(),
     isSaving: false,
@@ -144,6 +147,7 @@ describe("strategy-builder page", () => {
     mockWaitForStrategyLabRunTerminal.mockReset();
     mockGetStrategyLabRunSummaryClient.mockReset();
     mockCancelStrategyLabRunClient.mockReset();
+    mockTrackUiKpiEvent.mockReset();
   });
 
   it("runs a strategy and renders summary metrics on success", async () => {
@@ -220,6 +224,18 @@ describe("strategy-builder page", () => {
     expect(screen.getByText("12.34%")).toBeInTheDocument();
     expect(mockToast.success).toHaveBeenCalledWith(
       "Backtest completed successfully."
+    );
+    expect(mockTrackUiKpiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metric: "strategy_builder_interaction",
+        event: "backtest_run_requested",
+      })
+    );
+    expect(mockTrackUiKpiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metric: "strategy_builder_interaction",
+        event: "backtest_run_succeeded",
+      })
     );
   });
 

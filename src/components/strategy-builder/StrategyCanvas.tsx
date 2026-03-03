@@ -28,22 +28,7 @@ import { createStrategyNodeFromPaletteType } from "./nodeFactory";
 import { useStrategyBuilderStore } from "@/lib/stores/strategyBuilderStore";
 import type { StrategyNode, StrategyEdge } from "@/lib/stores/strategyBuilderStore";
 import { toast } from "sonner";
-
-// Connection rules: which source types can connect to which target types
-const connectionRules: Record<string, string[]> = {
-  dataSource: ["indicator", "filter", "math", "sort", "weighting", "signal"],
-  indicator: ["filter", "signal", "sort", "math", "conditional", "merge", "output"],
-  filter: ["signal", "sort", "weighting", "conditional", "merge", "output"],
-  signal: ["output", "weighting", "merge", "risk", "backtest"],
-  output: [],
-  weighting: ["signal", "output", "risk", "backtest"],
-  conditional: ["signal", "filter", "indicator", "output", "merge"],
-  sort: ["filter", "signal", "weighting", "output"],
-  math: ["filter", "indicator", "signal", "conditional", "output"],
-  merge: ["signal", "output", "risk", "weighting", "backtest"],
-  risk: ["output", "backtest"],
-  backtest: [],  // terminal node — no outgoing connections
-};
+import { isConnectionTypeAllowed } from "@/lib/strategy-builder/connectionRules";
 
 // Edge color by source node type — matches new node stripe colors
 const edgeColorBySource: Record<string, string> = {
@@ -111,6 +96,13 @@ const contextMenuStripeColors: Record<string, string> = {
   risk: "bg-amber-500",
   backtest: "bg-emerald-600",
 };
+
+function makeEdgeId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `e-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -216,18 +208,21 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
       if (connection.source === connection.target) return false;
 
       // Prevent duplicate edges between same source and target
+      const sourceHandle = connection.sourceHandle ?? undefined;
+      const targetHandle = connection.targetHandle ?? undefined;
       const existingEdge = edges.find(
-        (e) => e.source === connection.source && e.target === connection.target
+        (e) =>
+          e.source === connection.source &&
+          e.target === connection.target &&
+          (e.sourceHandle ?? undefined) === sourceHandle &&
+          (e.targetHandle ?? undefined) === targetHandle
       );
       if (existingEdge) return false;
 
       const sourceType = sourceNode.type || "";
       const targetType = targetNode.type || "";
 
-      const allowedTargets = connectionRules[sourceType];
-      if (!allowedTargets) return false;
-
-      return allowedTargets.includes(targetType);
+      return isConnectionTypeAllowed(sourceType, targetType);
     },
     [getNode, edges]
   );
@@ -242,16 +237,14 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
       const sourceType = sourceNode.type || "";
       const targetType = targetNode.type || "";
-      const allowedTargets = connectionRules[sourceType] || [];
-
-      if (!allowedTargets.includes(targetType)) {
+      if (!isConnectionTypeAllowed(sourceType, targetType)) {
         toast.error(`Cannot connect ${sourceType} → ${targetType}`);
         return;
       }
 
       const edgeColor = edgeColorBySource[sourceType] || "#a8a29e";
       const newEdge: StrategyEdge = {
-        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+        id: makeEdgeId(),
         source: connection.source,
         target: connection.target,
         sourceHandle: connection.sourceHandle ?? undefined,
@@ -610,3 +603,5 @@ export const StrategyCanvas = (props: StrategyCanvasProps) => {
     </ReactFlowProvider>
   );
 };
+
+

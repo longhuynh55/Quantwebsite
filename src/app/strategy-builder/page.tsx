@@ -31,6 +31,7 @@ import {
 } from "@/lib/strategy-lab/client";
 import { buildStrategyLabRunRequest } from "@/lib/strategy-lab/builder-mapper";
 import type { StrategyLabRunStatus } from "@/lib/strategy-lab/contracts";
+import { trackUiKpiEvent } from "@/lib/uiKpi";
 
 type StrategyBuilderPersistApi = {
   hasHydrated: () => boolean;
@@ -104,8 +105,7 @@ export default function StrategyBuilderPage() {
     updateNodeData,
     addNode,
     addEdge,
-    setNodes,
-    setEdges,
+    setGraph,
     deleteNode,
     setSelectedNode,
     isSaving,
@@ -114,6 +114,19 @@ export default function StrategyBuilderPage() {
   } = useStrategyBuilderStore();
 
   const selectedNode = useSelectedNode();
+
+  const trackStrategyBuilderEvent = useCallback(
+    (event: string, detail?: Record<string, unknown>) => {
+      trackUiKpiEvent({
+        metric: "strategy_builder_interaction",
+        event,
+        page: "strategy-builder",
+        source: "strategy-builder-page",
+        detail,
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (!persistApi) {
@@ -341,10 +354,15 @@ export default function StrategyBuilderPage() {
         addEdge(newEdge);
       }
 
+      trackStrategyBuilderEvent("node_added", {
+        nodeType,
+        autoConnected: candidateSources.length > 0,
+      });
+
       setSelectedNode(node.id);
       setIsPropertyPanelOpen(true);
     },
-    [addNode, addEdge, currentStrategy?.nodes, setSelectedNode]
+    [addNode, addEdge, currentStrategy?.nodes, setSelectedNode, trackStrategyBuilderEvent]
   );
 
   // Handle node update
@@ -361,8 +379,9 @@ export default function StrategyBuilderPage() {
       deleteNode(nodeId);
       setSelectedNode(null);
       toast.success("Node deleted");
+      trackStrategyBuilderEvent("node_deleted", { nodeId });
     },
-    [deleteNode, setSelectedNode]
+    [deleteNode, setSelectedNode, trackStrategyBuilderEvent]
   );
 
   // Handle save
@@ -376,10 +395,15 @@ export default function StrategyBuilderPage() {
     try {
       await saveStrategy();
       toast.success("Strategy saved successfully");
+      trackStrategyBuilderEvent("strategy_saved", {
+        nodeCount: currentStrategy?.nodes.length ?? 0,
+        edgeCount: currentStrategy?.edges.length ?? 0,
+      });
     } catch {
       toast.error("Failed to save strategy");
+      trackStrategyBuilderEvent("strategy_save_failed");
     }
-  }, [saveStrategy, strategyName, updateStrategyName]);
+  }, [currentStrategy?.edges.length, currentStrategy?.nodes.length, saveStrategy, strategyName, trackStrategyBuilderEvent, updateStrategyName]);
 
   // Handle run backtest
   const handleRunBacktest = useCallback(async () => {
@@ -391,8 +415,14 @@ export default function StrategyBuilderPage() {
     const payload = runPreview.payload;
     if (!payload) {
       toast.error(runPreview.error || "Invalid run configuration.");
+      trackStrategyBuilderEvent("backtest_run_invalid", {
+        reason: runPreview.error || "invalid_payload",
+      });
       return;
     }
+    trackStrategyBuilderEvent("backtest_run_requested", {
+      strategyType: payload.strategyType,
+    });
 
     const requestId = runRequestSequenceRef.current + 1;
     runRequestSequenceRef.current = requestId;
@@ -438,18 +468,27 @@ export default function StrategyBuilderPage() {
         }
         setRunSummary(summary);
         toast.success("Backtest completed successfully.");
+        trackStrategyBuilderEvent("backtest_run_succeeded", {
+          runId: created.runId,
+          totalTrades: summary.summary.totalTrades,
+        });
         return;
       }
 
       if (terminalRun.status === "cancelled") {
         setRunError("Run was cancelled.");
         toast.info("Backtest cancelled.");
+        trackStrategyBuilderEvent("backtest_run_cancelled", { runId: created.runId });
         return;
       }
 
       const failureMessage = terminalRun.error?.message || "Backtest failed.";
       setRunError(failureMessage);
       toast.error(failureMessage);
+      trackStrategyBuilderEvent("backtest_run_failed", {
+        runId: created.runId,
+        reason: failureMessage,
+      });
     } catch (error) {
       if (error instanceof StrategyLabClientError && error.code === "ABORTED") {
         return;
@@ -460,6 +499,7 @@ export default function StrategyBuilderPage() {
       const message = getClientErrorMessage(error, "Failed to execute backtest.");
       setRunError(message);
       toast.error(message);
+      trackStrategyBuilderEvent("backtest_run_failed", { reason: message });
     } finally {
       if (runRequestSequenceRef.current === requestId) {
         setIsRunSubmitting(false);
@@ -468,7 +508,7 @@ export default function StrategyBuilderPage() {
         runPollAbortRef.current = null;
       }
     }
-  }, [getClientErrorMessage, isRunActive, isRunSubmitting, runPreview]);
+  }, [getClientErrorMessage, isRunActive, isRunSubmitting, runPreview, trackStrategyBuilderEvent]);
 
   const handleCancelRun = useCallback(async () => {
     if (!activeRunId || !isRunActive) {
@@ -488,10 +528,15 @@ export default function StrategyBuilderPage() {
         setRunError("Run was cancelled.");
       }
       toast.info("Cancel request submitted.");
+      trackStrategyBuilderEvent("backtest_cancel_requested", {
+        runId: activeRunId,
+        status: run.status,
+      });
     } catch (error) {
       toast.error(getClientErrorMessage(error, "Failed to cancel run."));
+      trackStrategyBuilderEvent("backtest_cancel_failed");
     }
-  }, [activeRunId, getClientErrorMessage, isRunActive]);
+  }, [activeRunId, getClientErrorMessage, isRunActive, trackStrategyBuilderEvent]);
 
   // Handle export
   const handleExport = useCallback(() => {
@@ -509,7 +554,11 @@ export default function StrategyBuilderPage() {
     URL.revokeObjectURL(url);
 
     toast.success("Strategy exported");
-  }, [currentStrategy, strategyName]);
+    trackStrategyBuilderEvent("strategy_exported", {
+      nodeCount: currentStrategy.nodes.length,
+      edgeCount: currentStrategy.edges.length,
+    });
+  }, [currentStrategy, strategyName, trackStrategyBuilderEvent]);
 
   // Handle new strategy
   const handleNewStrategy = useCallback(() => {
@@ -522,7 +571,8 @@ export default function StrategyBuilderPage() {
     setStrategyName("Untitled Strategy");
     resetRunState();
     toast.success("New strategy created");
-  }, [confirmDiscardUnsavedChanges, createNewStrategy, reset, resetRunState]);
+    trackStrategyBuilderEvent("strategy_new_created");
+  }, [confirmDiscardUnsavedChanges, createNewStrategy, reset, resetRunState, trackStrategyBuilderEvent]);
 
   const handleApplyTemplate = useCallback(
     (templateNodes: StrategyNode[], templateEdges: StrategyEdge[], name: string) => {
@@ -532,8 +582,7 @@ export default function StrategyBuilderPage() {
 
       reset();
       createNewStrategy(name);
-      setNodes(templateNodes);
-      setEdges(templateEdges);
+      setGraph(templateNodes, templateEdges);
 
       if (templateNodes.length > 0) {
         setSelectedNode(templateNodes[0].id);
@@ -546,15 +595,20 @@ export default function StrategyBuilderPage() {
       updateStrategyName(name);
       resetRunState();
       toast.success(`Strategy "${name}" loaded`);
+      trackStrategyBuilderEvent("template_applied", {
+        name,
+        nodeCount: templateNodes.length,
+        edgeCount: templateEdges.length,
+      });
     },
     [
       confirmDiscardUnsavedChanges,
       createNewStrategy,
       reset,
       resetRunState,
-      setEdges,
-      setNodes,
+      setGraph,
       setSelectedNode,
+      trackStrategyBuilderEvent,
       updateStrategyName,
     ]
   );
@@ -692,7 +746,12 @@ export default function StrategyBuilderPage() {
 
             {/* Right — AI + Run */}
             <div className="flex items-center gap-1.5">
-              <AiSuggestDialog onApplyStrategy={handleApplyTemplate} />
+              <AiSuggestDialog
+                onApplyStrategy={handleApplyTemplate}
+                currentNodes={currentStrategy?.nodes ?? []}
+                currentEdges={currentStrategy?.edges ?? []}
+                strategyName={strategyName}
+              />
               <Button
                 size="sm"
                 onClick={handleRunBacktest}

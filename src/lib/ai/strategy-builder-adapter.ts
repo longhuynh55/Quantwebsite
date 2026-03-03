@@ -6,6 +6,8 @@ import type {
 } from "@/lib/ai/strategy-generator";
 import type { StrategyEdge, StrategyNode } from "@/lib/stores/strategyBuilderStore";
 import { createStrategyNodeFromPaletteType } from "@/components/strategy-builder/nodeFactory";
+import { isConnectionTypeAllowed } from "@/lib/strategy-builder/connectionRules";
+import { sanitizeStrategyGraph } from "@/lib/strategy-builder/graph-guardrails";
 
 type SupportedNodeType = GeneratedStrategyNode["type"];
 
@@ -167,6 +169,24 @@ function sanitizeConfigByType(type: SupportedNodeType, raw: unknown, label: stri
     config.metrics = normalizeMetrics(input.metrics);
   }
 
+  if (type === "risk") {
+    const method = coerceString(input.method).trim();
+    config.method = method || "fixed";
+    const maxPosition = coerceNumber(input.maxPosition);
+    config.maxPosition = maxPosition === null ? 10 : clamp(maxPosition, 1, 100);
+    const maxDrawdown = coerceNumber(input.maxDrawdown);
+    config.maxDrawdown = maxDrawdown === null ? 20 : clamp(maxDrawdown, 1, 95);
+  }
+
+  if (type === "backtest") {
+    const initialCapital = coerceNumber(input.initialCapital);
+    config.initialCapital = initialCapital === null ? 100000 : clamp(initialCapital, 1_000, 1_000_000_000);
+    const commission = coerceNumber(input.commission);
+    config.commission = commission === null ? 0.15 : clamp(commission, 0, 10);
+    const slippage = coerceNumber(input.slippage);
+    config.slippage = slippage === null ? 0.05 : clamp(slippage, 0, 10);
+  }
+
   if (Object.keys(config).length === 0) {
     warnings.push(`Node "${label}" had an empty/invalid config; defaults were applied.`);
   }
@@ -243,6 +263,16 @@ export function sanitizeGeneratedStrategyForBuilder(strategy: GeneratedStrategy)
       warnings.push(`Dropped an edge referencing missing node(s): ${source} -> ${target}.`);
       continue;
     }
+    if (source === target) {
+      warnings.push(`Dropped self-loop edge: ${source} -> ${target}.`);
+      continue;
+    }
+    const sourceType = fixedNodes.find((node) => node.id === source)?.type ?? "";
+    const targetType = fixedNodes.find((node) => node.id === target)?.type ?? "";
+    if (!isConnectionTypeAllowed(sourceType, targetType)) {
+      warnings.push(`Dropped invalid connection type: ${sourceType} -> ${targetType}.`);
+      continue;
+    }
     const sig = `${source}::${target}::${coerceString(edge?.sourceHandle)}::${coerceString(edge?.targetHandle)}`;
     if (edgeSeen.has(sig)) {
       continue;
@@ -278,16 +308,17 @@ const edgeColorBySource: Record<string, string> = {
   filter: "#f97316",
   signal: "#e11d48",
   output: "#10b981",
+  risk: "#f59e0b",
+  backtest: "#059669",
 };
 
 export function generatedStrategyToBuilderGraph(strategy: GeneratedStrategy): {
   nodes: StrategyNode[];
   edges: StrategyEdge[];
   name: string;
+  warnings: string[];
 } {
   const { strategy: sanitized, warnings } = sanitizeGeneratedStrategyForBuilder(strategy);
-  // Warnings are meant for UI surfaces (toasts/inline). The adapter itself never throws.
-  void warnings;
 
   const nodes: StrategyNode[] = sanitized.nodes.map((node) => {
     const base = createStrategyNodeFromPaletteType(node.type, node.position);
@@ -328,10 +359,14 @@ export function generatedStrategyToBuilderGraph(strategy: GeneratedStrategy): {
       } satisfies StrategyEdge;
     });
 
+  const graphSanitized = sanitizeStrategyGraph(nodes, edges);
+  const graphWarnings = graphSanitized.issues.map((issue) => issue.message);
+
   return {
-    nodes,
-    edges,
+    nodes: graphSanitized.nodes,
+    edges: graphSanitized.edges,
     name: sanitized.name?.trim() || "AI Strategy",
+    warnings: [...warnings, ...graphWarnings],
   };
 }
 

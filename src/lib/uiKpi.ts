@@ -4,7 +4,9 @@ import { logUiEvent } from "@/lib/frontendTelemetry";
 export type UiKpiMetric =
   | "preset_reuse"
   | "watchlist_interaction"
-  | "assistant_contextual_action_ctr";
+  | "assistant_contextual_action_ctr"
+  | "strategy_builder_interaction"
+  | "strategy_builder_ai_assist";
 
 interface UiKpiEventInput {
   metric: UiKpiMetric;

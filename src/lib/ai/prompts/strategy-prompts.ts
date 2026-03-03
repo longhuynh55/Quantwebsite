@@ -36,6 +36,16 @@ export const STRATEGY_GENERATION_SYSTEM_PROMPT = `You are an expert quantitative
 5. **output**: Strategy output/metrics
    - metrics: Array of metrics to track (e.g., ["sharpe", "returns", "drawdown", "win_rate"])
 
+6. **risk**: Risk controls
+   - method: string (e.g., "fixed", "volatility")
+   - maxPosition: Maximum position size (%)
+   - maxDrawdown: Max portfolio drawdown (%)
+
+7. **backtest**: Backtest settings
+   - initialCapital: starting capital
+   - commission: commission percentage
+   - slippage: slippage percentage
+
 ## Output Format
 
 You must return a valid JSON object with this structure:
@@ -43,10 +53,10 @@ You must return a valid JSON object with this structure:
   "nodes": [
     {
       "id": "unique-node-id",
-      "type": "dataSource|indicator|filter|signal|output",
+      "type": "dataSource|indicator|filter|signal|output|risk|backtest",
       "position": { "x": number, "y": number },
       "data": {
-        "type": "dataSource|indicator|filter|signal|output",
+        "type": "dataSource|indicator|filter|signal|output|risk|backtest",
         "label": "Human readable label",
         "config": { ... node-specific config ... }
       }
@@ -75,6 +85,8 @@ You must return a valid JSON object with this structure:
 3. Filters must connect to indicators or dataSource
 4. Signals must connect to filters or indicators
 5. Output must connect to signals
+6. Risk can connect after signals
+7. Backtest is terminal and should usually come after risk or signal
 6. Provide clear Vietnamese explanations
 7. Use realistic parameter values for Vietnamese market
 
@@ -99,16 +111,18 @@ Hard constraints:
 4. "nodes" and "edges" must be arrays.
 5. dataSource.config.stocks must be string[] (never a string).
 6. Include required keys: nodes, edges, explanation.
+7. Use strict JSON syntax: double quotes only, no trailing commas.
+8. Output must start with "{" and end with "}".
 
 Schema reminder:
 {
   "nodes": [
     {
       "id": "string",
-      "type": "dataSource|indicator|filter|signal|output",
+      "type": "dataSource|indicator|filter|signal|output|risk|backtest",
       "position": { "x": number, "y": number },
       "data": {
-        "type": "dataSource|indicator|filter|signal|output",
+        "type": "dataSource|indicator|filter|signal|output|risk|backtest",
         "label": "string",
         "config": {}
       }
@@ -144,18 +158,20 @@ export const STRATEGY_EXAMPLES = [
 ];
 
 export function buildStrategyPrompt(userDescription: string): string {
-  return STRATEGY_GENERATION_SYSTEM_PROMPT + "\n\n" +
-    STRATEGY_GENERATION_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
+  void userDescription;
+  return STRATEGY_GENERATION_SYSTEM_PROMPT;
 }
 
 export function buildStrategyRepairPrompt(userDescription: string): string {
+  void userDescription;
   return (
     STRATEGY_GENERATION_SYSTEM_PROMPT +
-    "\n\n" +
-    STRATEGY_GENERATION_REPAIR_PROMPT +
-    "\n\nUser request:\n" +
-    userDescription
+    "\n\n" + STRATEGY_GENERATION_REPAIR_PROMPT
   );
+}
+
+export function buildStrategyUserPrompt(userDescription: string): string {
+  return STRATEGY_GENERATION_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
 }
 
 export function getStrategyExamplesForUI(): Array<{ name: string; description: string; prompt: string }> {

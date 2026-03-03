@@ -3,11 +3,83 @@
  * Generates trading strategies from natural language using GLM API
  */
 
-import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/providers';
-import { buildStrategyPrompt, buildStrategyRepairPrompt } from './prompts/strategy-prompts';
+import {
+  generateWithProviderFallback,
+  type LlmMessage,
+  type LlmResponseFormat,
+} from '@/lib/assistant/providers';
+import { buildStrategyPrompt, buildStrategyRepairPrompt, buildStrategyUserPrompt } from './prompts/strategy-prompts';
 import { createLogger, hashText } from '@/lib/logger';
 
 const strategyLogger = createLogger('ai.strategy-generator');
+
+const STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT: LlmResponseFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "strategy_graph",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["nodes", "edges", "explanation"],
+      properties: {
+        name: { type: "string" },
+        strategyType: { type: "string" },
+        riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+        explanation: { type: "string" },
+        nodes: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: true,
+            required: ["id", "type", "position", "data"],
+            properties: {
+              id: { type: "string" },
+              type: { type: "string" },
+              position: {
+                type: "object",
+                additionalProperties: false,
+                required: ["x", "y"],
+                properties: {
+                  x: { type: "number" },
+                  y: { type: "number" },
+                },
+              },
+              data: {
+                type: "object",
+                additionalProperties: true,
+                required: ["type", "label", "config"],
+                properties: {
+                  type: { type: "string" },
+                  label: { type: "string" },
+                  config: {
+                    type: "object",
+                    additionalProperties: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        edges: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: true,
+            required: ["source", "target"],
+            properties: {
+              id: { type: "string" },
+              source: { type: "string" },
+              target: { type: "string" },
+              sourceHandle: { type: "string" },
+              targetHandle: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
 // Strategy node types matching Strategy Builder
 export interface StrategyNodeConfig {
@@ -35,14 +107,22 @@ export interface StrategyNodeConfig {
   takeProfit?: number;
   // Output
   metrics?: string[];
+  // Risk
+  method?: string;
+  maxPosition?: number;
+  maxDrawdown?: number;
+  // Backtest
+  initialCapital?: number;
+  commission?: number;
+  slippage?: number;
 }
 
 export interface GeneratedStrategyNode {
   id: string;
-  type: 'dataSource' | 'indicator' | 'filter' | 'signal' | 'output';
+  type: 'dataSource' | 'indicator' | 'filter' | 'signal' | 'output' | 'risk' | 'backtest';
   position: { x: number; y: number };
   data: {
-    type: 'dataSource' | 'indicator' | 'filter' | 'signal' | 'output';
+    type: 'dataSource' | 'indicator' | 'filter' | 'signal' | 'output' | 'risk' | 'backtest';
     label: string;
     config: StrategyNodeConfig;
   };
@@ -72,6 +152,8 @@ export interface StrategyGenerationResult {
   error?: string;
   latencyMs: number;
   providerUsed?: string;
+  failureKind?: 'parse' | 'timeout' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
+  statusCode?: number;
 }
 
 /**
@@ -86,6 +168,10 @@ export async function generateStrategyFromPrompt(
   } = {}
 ): Promise<StrategyGenerationResult> {
   const startedAt = Date.now();
+  const timeoutMs = typeof options.timeoutMs === "number" && Number.isFinite(options.timeoutMs)
+    ? Math.max(1, options.timeoutMs)
+    : null;
+  const deadlineAt = timeoutMs ? startedAt + timeoutMs : null;
   const requestId = options.requestId || generateRequestId();
   const logger = strategyLogger.child({ requestId });
 
@@ -103,6 +189,21 @@ export async function generateStrategyFromPrompt(
     let validatedStrategy: GeneratedStrategy | null = null;
 
     for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      if (deadlineAt !== null && Date.now() >= deadlineAt) {
+        logger.warn("strategy.generation.timeout_before_attempt", {
+          attempt,
+          totalAttempts,
+          timeoutMs,
+        });
+        return {
+          success: false,
+          error: "AI service timed out. Please try again.",
+          latencyMs: Date.now() - startedAt,
+          failureKind: "timeout",
+          statusCode: 504,
+        };
+      }
+
       const isRepairAttempt = attempt > 1;
       const systemPrompt = isRepairAttempt
         ? buildStrategyRepairPrompt(userPrompt)
@@ -110,21 +211,30 @@ export async function generateStrategyFromPrompt(
 
       const messages: LlmMessage[] = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: buildStrategyUserPrompt(userPrompt) },
       ];
 
-      const result = await generateWithProviderFallback(messages, { requestId });
+      const result = await awaitWithDeadline(
+        generateWithProviderFallback(messages, {
+          requestId,
+          responseFormat: STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT,
+        }),
+        deadlineAt
+      );
       if (!result.success) {
         logger.warn('strategy.generation.provider_failed', {
-          kind: (result as { kind: string }).kind,
+          kind: result.kind,
+          statusCode: result.statusCode,
           latencyMs: result.latencyMs,
           attempt,
           totalAttempts,
         });
         return {
           success: false,
-          error: (result as { message: string }).message || 'Failed to generate strategy',
+          error: result.message || 'Failed to generate strategy',
           latencyMs: Date.now() - startedAt,
+          failureKind: result.kind,
+          statusCode: result.statusCode,
         };
       }
 
@@ -153,6 +263,8 @@ export async function generateStrategyFromPrompt(
           ? 'Failed to parse strategy from AI response. Please try again with a clearer description.'
           : 'Failed to generate strategy.',
         latencyMs: Date.now() - startedAt,
+        failureKind: latestParseFailure ? 'parse' : 'upstream',
+        statusCode: latestParseFailure ? 422 : 502,
       };
     }
 
@@ -174,6 +286,19 @@ export async function generateStrategyFromPrompt(
       providerUsed: latestProviderUsed,
     };
   } catch (error) {
+    if (error instanceof StrategyGenerationTimeoutError) {
+      logger.warn("strategy.generation.timeout", {
+        latencyMs: Date.now() - startedAt,
+        timeoutMs,
+      });
+      return {
+        success: false,
+        error: "AI service timed out. Please try again.",
+        latencyMs: Date.now() - startedAt,
+        failureKind: "timeout",
+        statusCode: 504,
+      };
+    }
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('strategy.generation.exception', {
       error: errorMessage,
@@ -183,6 +308,8 @@ export async function generateStrategyFromPrompt(
       success: false,
       error: `An error occurred: ${errorMessage}`,
       latencyMs: Date.now() - startedAt,
+      failureKind: 'upstream',
+      statusCode: 500,
     };
   }
 }
@@ -191,40 +318,141 @@ export async function generateStrategyFromPrompt(
  * Parse the AI response into a strategy structure
  */
 function parseStrategyResponse(response: string): GeneratedStrategy | null {
-  try {
-    // Try to find JSON in the response
-    const jsonMatch = response.match(/\{[\s\S]*"nodes"[\s\S]*"edges"[\s\S]*\}/);
-    if (!jsonMatch) {
-      return null;
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as GeneratedStrategy;
-
-    // Validate required fields
-    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    // Try parsing the entire response as JSON
-    try {
-      const parsed = JSON.parse(response) as GeneratedStrategy;
-      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-        return null;
+  const candidates = collectJsonCandidates(response);
+  for (const candidate of candidates) {
+    const variants = [candidate, repairJsonText(candidate)];
+    for (const variant of variants) {
+      try {
+        const parsed = JSON.parse(variant) as unknown;
+        const normalized = unwrapGeneratedStrategy(parsed);
+        if (normalized) {
+          return normalized;
+        }
+      } catch {
+        continue;
       }
-      return parsed;
-    } catch {
-      return null;
     }
   }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isGeneratedStrategy(value: unknown): value is GeneratedStrategy {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) return false;
+  if (!value.nodes.every(isRecord)) return false;
+  if (!value.edges.every(isRecord)) return false;
+  return true;
+}
+
+function unwrapGeneratedStrategy(value: unknown): GeneratedStrategy | null {
+  if (isGeneratedStrategy(value)) {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const nestedStrategyInData = isRecord(value.data) ? value.data.strategy : undefined;
+  const directCandidates: unknown[] = [value.strategy, nestedStrategyInData, value.data];
+  for (const candidate of directCandidates) {
+    if (isGeneratedStrategy(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function collectJsonCandidates(response: string): string[] {
+  const candidates = new Set<string>();
+  const trimmed = response.trim();
+  if (trimmed) {
+    candidates.add(trimmed);
+  }
+
+  const fencedRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let fencedMatch: RegExpExecArray | null = fencedRegex.exec(response);
+  while (fencedMatch) {
+    const block = fencedMatch[1]?.trim();
+    if (block) {
+      candidates.add(block);
+    }
+    fencedMatch = fencedRegex.exec(response);
+  }
+
+  for (const objectText of extractBalancedJsonObjects(response)) {
+    candidates.add(objectText);
+  }
+
+  return [...candidates];
+}
+
+function extractBalancedJsonObjects(source: string): string[] {
+  const objects: string[] = [];
+  let depth = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      if (depth === 0) {
+        startIndex = i;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      if (depth > 0) {
+        depth -= 1;
+      }
+      if (depth === 0 && startIndex >= 0) {
+        objects.push(source.slice(startIndex, i + 1).trim());
+        startIndex = -1;
+      }
+    }
+  }
+
+  return objects;
+}
+
+function repairJsonText(source: string): string {
+  return source
+    .replace(/^\uFEFF/, '')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1')
+    .trim();
 }
 
 /**
  * Validate and fix strategy structure
  */
 function validateAndFixStrategy(strategy: GeneratedStrategy): GeneratedStrategy {
-  const validNodeTypes = ['dataSource', 'indicator', 'filter', 'signal', 'output'];
+  const validNodeTypes = ['dataSource', 'indicator', 'filter', 'signal', 'output', 'risk', 'backtest'];
   const nodeIds = new Set<string>();
 
   // Ensure all nodes have valid structure
@@ -290,6 +518,36 @@ function generateRequestId(): string {
   return `strategy-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+class StrategyGenerationTimeoutError extends Error {
+  constructor() {
+    super("strategy_generation_deadline_exceeded");
+  }
+}
+
+async function awaitWithDeadline<T>(promise: Promise<T>, deadlineAt: number | null): Promise<T> {
+  if (deadlineAt === null) {
+    return promise;
+  }
+  const remainingMs = deadlineAt - Date.now();
+  if (remainingMs <= 0) {
+    throw new StrategyGenerationTimeoutError();
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<T>([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new StrategyGenerationTimeoutError()), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 /**
  * Convert generated strategy to Strategy Builder format
  */
@@ -327,3 +585,4 @@ export function convertToStrategyBuilderFormat(
 }
 
 // Types are already exported above with `export interface`
+

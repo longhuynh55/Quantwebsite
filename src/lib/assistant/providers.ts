@@ -7,6 +7,21 @@ export interface LlmMessage {
   content: string;
 }
 
+export interface LlmJsonSchemaResponseFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+}
+
+export interface LlmJsonObjectResponseFormat {
+  type: 'json_object';
+}
+
+export type LlmResponseFormat = LlmJsonSchemaResponseFormat | LlmJsonObjectResponseFormat;
+
 type ProviderFailureKind = 'timeout' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
 
 interface ProviderConfig {
@@ -69,7 +84,7 @@ const providersLogger = createLogger('assistant.providers');
 
 export async function generateWithProviderFallback(
   messages: LlmMessage[],
-  options: { requestId?: string } = {}
+  options: { requestId?: string; responseFormat?: LlmResponseFormat } = {}
 ): Promise<AssistantGenerateResult> {
   const startedAt = Date.now();
   const logger = providersLogger.child({ requestId: options.requestId ?? '' });
@@ -99,7 +114,7 @@ export async function generateWithProviderFallback(
   for (let index = 0; index < providers.length; index += 1) {
     const provider = providers[index];
     const providerStartedAt = Date.now();
-    const result = await callProviderWithRetry(provider, messages, logger);
+    const result = await callProviderWithRetry(provider, messages, logger, options.responseFormat);
     if (result.success) {
       logger.info('provider.success', {
         provider: provider.name,
@@ -278,7 +293,8 @@ function getProviderChain(): ProviderConfig[] {
 async function callProviderWithRetry(
   provider: ProviderConfig,
   messages: LlmMessage[],
-  logger: AppLogger
+  logger: AppLogger,
+  responseFormat?: LlmResponseFormat
 ): Promise<ProviderCallResult> {
   let lastFailure: ProviderFailure = {
     success: false,
@@ -288,18 +304,34 @@ async function callProviderWithRetry(
   };
 
   for (let attempt = 0; attempt <= provider.maxRetries; attempt += 1) {
-    const result = await callProviderOnce(provider, messages, attempt + 1);
+    const result = await callProviderOnce(provider, messages, attempt + 1, responseFormat);
     if (result.success) {
       return result;
     }
 
     lastFailure = result;
-    const shouldRetry = attempt < provider.maxRetries && isRetryableFailure(result);
-    if (!shouldRetry) {
-      return result;
+
+    if (responseFormat && result.kind === 'upstream' && result.status === 400) {
+      logger.warn('provider.response_format_fallback', {
+        provider: provider.name,
+        source: provider.source,
+        model: provider.model,
+        attempt: attempt + 1,
+      });
+
+      const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined);
+      if (fallbackResult.success) {
+        return fallbackResult;
+      }
+      lastFailure = fallbackResult;
     }
 
-    const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, result.retryAfterMs);
+    const shouldRetry = attempt < provider.maxRetries && isRetryableFailure(lastFailure);
+    if (!shouldRetry) {
+      return lastFailure;
+    }
+
+    const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, lastFailure.retryAfterMs);
     logger.info('provider.retry_scheduled', {
       provider: provider.name,
       source: provider.source,
@@ -307,8 +339,8 @@ async function callProviderWithRetry(
       attempt: attempt + 1,
       nextAttempt: attempt + 2,
       maxAttempts: provider.maxRetries + 1,
-      kind: result.kind,
-      status: result.status,
+      kind: lastFailure.kind,
+      status: lastFailure.status,
       delayMs,
     });
     await sleep(delayMs);
@@ -320,11 +352,23 @@ async function callProviderWithRetry(
 async function callProviderOnce(
   provider: ProviderConfig,
   messages: LlmMessage[],
-  attempts: number
+  attempts: number,
+  responseFormat?: LlmResponseFormat
 ): Promise<ProviderCallResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), provider.timeoutMs);
   try {
+    const requestPayload: Record<string, unknown> = {
+      model: provider.model,
+      messages,
+      max_tokens: provider.maxTokens,
+      temperature: 0.4,
+      top_p: 0.9,
+    };
+    if (shouldAttachResponseFormat(provider, responseFormat)) {
+      requestPayload.response_format = responseFormat;
+    }
+
     const response = await fetch(`${trimTrailingSlash(provider.baseUrl)}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -332,13 +376,7 @@ async function callProviderOnce(
         Authorization: `Bearer ${provider.apiKey}`,
         ...(provider.extraHeaders ?? {}),
       },
-      body: JSON.stringify({
-        model: provider.model,
-        messages,
-        max_tokens: provider.maxTokens,
-        temperature: 0.4,
-        top_p: 0.9,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
 
@@ -444,6 +482,17 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function shouldAttachResponseFormat(
+  provider: ProviderConfig,
+  responseFormat: LlmResponseFormat | undefined
+): boolean {
+  if (!responseFormat) return false;
+  const raw = String(process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE ?? '').trim().toLowerCase();
+  const enabled = raw === '' || raw === '1' || raw === 'true' || raw === 'yes';
+  if (!enabled) return false;
+  return provider.source === 'openrouter' || provider.source === 'fallback';
 }
 
 function sortProvidersByPriority(providers: ProviderConfig[]): ProviderConfig[] {

@@ -18,6 +18,7 @@ jest.mock('@/lib/assistant/providers', () => ({
 jest.mock('../prompts/strategy-prompts', () => ({
   buildStrategyPrompt: jest.fn(() => 'Mocked system prompt'),
   buildStrategyRepairPrompt: jest.fn(() => 'Mocked repair system prompt'),
+  buildStrategyUserPrompt: jest.fn((prompt: string) => `User: ${prompt}`),
 }));
 
 // Import the mocked functions
@@ -66,6 +67,13 @@ describe('strategy-generator', () => {
       expect(result.strategy?.nodes).toHaveLength(1);
       expect(result.strategy?.explanation).toBe('Test strategy explanation');
       expect(result.providerUsed).toBe('test-provider');
+      expect(mockGenerateWithProviderFallback).toHaveBeenCalled();
+      const callArgs = mockGenerateWithProviderFallback.mock.calls[0];
+      expect(callArgs[1]).toMatchObject({
+        responseFormat: {
+          type: "json_schema",
+        },
+      });
     });
 
     it('should return failure when provider call fails', async () => {
@@ -82,6 +90,8 @@ describe('strategy-generator', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
+      expect(result.failureKind).toBe('network');
+      expect(result.statusCode).toBe(502);
     });
 
     it('should return failure when response cannot be parsed as JSON', async () => {
@@ -184,6 +194,79 @@ ${JSON.stringify(validStrategy)}
       expect(result.success).toBe(true);
     });
 
+    it('should parse strategy wrapped under strategy key', async () => {
+      const validStrategy: GeneratedStrategy = {
+        nodes: [],
+        edges: [],
+        explanation: 'Wrapped strategy',
+      };
+
+      mockGenerateWithProviderFallback.mockResolvedValueOnce({
+        success: true,
+        text: JSON.stringify({ strategy: validStrategy }),
+        providerUsed: 'test-provider',
+        fallbackUsed: false,
+        latencyMs: 100,
+      });
+
+      const result = await generateStrategyFromPrompt('Test prompt');
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.explanation).toBe('Wrapped strategy');
+    });
+
+    it('should repair simple trailing comma JSON', async () => {
+      const withTrailingComma = '{"nodes":[],"edges":[],"explanation":"ok",}';
+      mockGenerateWithProviderFallback.mockResolvedValueOnce({
+        success: true,
+        text: withTrailingComma,
+        providerUsed: 'test-provider',
+        fallbackUsed: false,
+        latencyMs: 100,
+      });
+
+      const result = await generateStrategyFromPrompt('Test prompt');
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.nodes).toHaveLength(0);
+    });
+
+    it('should parse the correct JSON object when response contains multiple objects', async () => {
+      const response = [
+        '{"meta":"ignore"}',
+        '{"nodes":[],"edges":[],"explanation":"Chosen strategy"}',
+      ].join('\n');
+
+      mockGenerateWithProviderFallback.mockResolvedValueOnce({
+        success: true,
+        text: response,
+        providerUsed: 'test-provider',
+        fallbackUsed: false,
+        latencyMs: 100,
+      });
+
+      const result = await generateStrategyFromPrompt('Test prompt');
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.explanation).toBe('Chosen strategy');
+    });
+
+    it('should reject strategy payloads with non-object node entries', async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce({
+        success: true,
+        text: JSON.stringify({ nodes: [null], edges: [], explanation: 'bad' }),
+        providerUsed: 'test-provider',
+        fallbackUsed: false,
+        latencyMs: 100,
+      });
+
+      const result = await generateStrategyFromPrompt('Test prompt');
+
+      expect(result.success).toBe(false);
+      expect(result.failureKind).toBe('parse');
+      expect(result.statusCode).toBe(422);
+    });
+
     it('should handle exceptions gracefully', async () => {
       mockGenerateWithProviderFallback.mockRejectedValueOnce(new Error('Unexpected error'));
 
@@ -191,6 +274,16 @@ ${JSON.stringify(validStrategy)}
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Unexpected error');
+    });
+
+    it('should return timeout failure when deadline is exceeded', async () => {
+      mockGenerateWithProviderFallback.mockReturnValueOnce(new Promise(() => undefined));
+
+      const result = await generateStrategyFromPrompt('Test prompt', { timeoutMs: 5 });
+
+      expect(result.success).toBe(false);
+      expect(result.failureKind).toBe('timeout');
+      expect(result.statusCode).toBe(504);
     });
   });
 

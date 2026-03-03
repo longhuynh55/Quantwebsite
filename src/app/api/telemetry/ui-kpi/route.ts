@@ -12,7 +12,13 @@ const MAX_SYMBOL_LENGTH = 10;
 const MAX_SOURCE_LENGTH = 40;
 const MAX_DETAIL_KEYS = 20;
 
-const ALLOWED_METRICS = new Set(["preset_reuse", "watchlist_interaction", "assistant_contextual_action_ctr"]);
+const ALLOWED_METRICS = new Set([
+  "preset_reuse",
+  "watchlist_interaction",
+  "assistant_contextual_action_ctr",
+  "strategy_builder_interaction",
+  "strategy_builder_ai_assist",
+]);
 
 interface UiKpiPayload {
   metric: string;
