@@ -514,14 +514,6 @@ const StrategyCanvasInner = ({ className, onBeforeMutate }: StrategyCanvasProps)
             {nodes.length > 0 ? `${nodes.length} nodes · ${edges.length} connections` : "Empty canvas"}
           </span>
         </div>
-        <div className="w-px h-4 bg-stone-200 dark:bg-neutral-700" />
-        <a
-          href="/backtesting"
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-full transition-colors"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-          Run Backtest
-        </a>
       </div>
       <ReactFlow
         nodes={nodes}
