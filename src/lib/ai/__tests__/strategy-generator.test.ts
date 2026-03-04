@@ -1,281 +1,362 @@
 /**
  * Unit tests for strategy-generator.ts
- * Tests for AI strategy generation, parsing, validation, and format conversion
  */
 
 import {
   generateStrategyFromPrompt,
   convertToStrategyBuilderFormat,
   type GeneratedStrategy,
-} from '../strategy-generator';
+} from "../strategy-generator";
+import { buildStrategyPrompt, buildStrategyRepairPrompt } from "../prompts/strategy-prompts";
 
-// Mock the providers module
-jest.mock('@/lib/assistant/providers', () => ({
+jest.mock("@/lib/assistant/providers", () => ({
   generateWithProviderFallback: jest.fn(),
 }));
 
-// Mock the prompts module
-jest.mock('../prompts/strategy-prompts', () => ({
-  buildStrategyPrompt: jest.fn(() => 'Mocked system prompt'),
-  buildStrategyRepairPrompt: jest.fn(() => 'Mocked repair system prompt'),
+jest.mock("../prompts/strategy-prompts", () => ({
+  STRATEGY_GENERATION_SYSTEM_PROMPT: "Mocked system prompt",
+  STRATEGY_GENERATION_REPAIR_PROMPT: "Mocked repair instruction",
+  buildStrategyPrompt: jest.fn(() => "Mocked user prompt"),
+  buildStrategyRepairPrompt: jest.fn(() => "Mocked repair user prompt"),
 }));
 
-// Import the mocked functions
-import { generateWithProviderFallback } from '@/lib/assistant/providers';
+import { generateWithProviderFallback } from "@/lib/assistant/providers";
+const mockBuildStrategyPrompt = buildStrategyPrompt as jest.MockedFunction<typeof buildStrategyPrompt>;
+const mockBuildStrategyRepairPrompt =
+  buildStrategyRepairPrompt as jest.MockedFunction<typeof buildStrategyRepairPrompt>;
 
+type ProviderResult = Awaited<ReturnType<typeof generateWithProviderFallback>>;
 const mockGenerateWithProviderFallback = generateWithProviderFallback as jest.MockedFunction<
   typeof generateWithProviderFallback
 >;
 
-describe('strategy-generator', () => {
+function buildValidStrategy(overrides: Partial<GeneratedStrategy> = {}): GeneratedStrategy {
+  return {
+    nodes: [
+      {
+        id: "node-1",
+        type: "dataSource",
+        position: { x: 50, y: 50 },
+        data: {
+          type: "dataSource",
+          label: "Data Source",
+          config: { stocks: ["VNM"], timeframe: "1d" },
+        },
+      },
+      {
+        id: "node-2",
+        type: "output",
+        position: { x: 320, y: 50 },
+        data: {
+          type: "output",
+          label: "Output",
+          config: { metrics: ["returns", "sharpe"] },
+        },
+      },
+    ],
+    edges: [{ id: "edge-1", source: "node-1", target: "node-2" }],
+    explanation: "Test strategy explanation",
+    ...overrides,
+  };
+}
+
+function providerSuccess(text: string, overrides: Partial<ProviderResult> = {}): ProviderResult {
+  return {
+    success: true,
+    text,
+    providerUsed: "test-provider",
+    fallbackUsed: false,
+    latencyMs: 100,
+    responseFormatApplied: true,
+    responseFormatFallbackUsed: false,
+    ...overrides,
+  } as ProviderResult;
+}
+
+describe("strategy-generator", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    mockBuildStrategyPrompt.mockImplementation(() => "Mocked user prompt");
+    mockBuildStrategyRepairPrompt.mockImplementation(() => "Mocked repair user prompt");
   });
 
-  describe('generateStrategyFromPrompt', () => {
-    it('should return success when provider returns valid JSON strategy', async () => {
-      const validStrategy: GeneratedStrategy = {
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'dataSource',
-            position: { x: 50, y: 50 },
-            data: {
-              type: 'dataSource',
-              label: 'Data Source',
-              config: { stocks: ['VNM'], timeframe: '1d' },
-            },
-          },
-        ],
-        edges: [],
-        explanation: 'Test strategy explanation',
-      };
+  describe("generateStrategyFromPrompt", () => {
+    it("returns success when provider returns valid strategy JSON", async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(
+        providerSuccess(JSON.stringify(buildValidStrategy()))
+      );
 
-      mockGenerateWithProviderFallback.mockResolvedValueOnce({
-        success: true,
-        text: JSON.stringify(validStrategy),
-        providerUsed: 'test-provider',
-        fallbackUsed: false,
-        latencyMs: 100,
-      });
-
-      const result = await generateStrategyFromPrompt('Test prompt');
+      const result = await generateStrategyFromPrompt("Test prompt");
 
       expect(result.success).toBe(true);
-      expect(result.strategy).toBeDefined();
-      expect(result.strategy?.nodes).toHaveLength(1);
-      expect(result.strategy?.explanation).toBe('Test strategy explanation');
-      expect(result.providerUsed).toBe('test-provider');
+      expect(result.strategy?.nodes).toHaveLength(2);
+      expect(result.strategy?.edges).toHaveLength(1);
+      expect(result.providerUsed).toBe("test-provider");
+
+      const callArgs = mockGenerateWithProviderFallback.mock.calls[0];
+      expect(callArgs[1]).toMatchObject({
+        responseFormat: { type: "json_schema" },
+      });
+      expect(callArgs[1]).toEqual(
+        expect.objectContaining({
+          abortSignal: expect.any(Object),
+        })
+      );
+      expect(callArgs[0]).toEqual([
+        { role: "system", content: "Mocked system prompt" },
+        { role: "user", content: "Mocked user prompt" },
+      ]);
     });
 
-    it('should return failure when provider call fails', async () => {
+    it("returns provider failure when provider call fails", async () => {
       mockGenerateWithProviderFallback.mockResolvedValueOnce({
         success: false,
-        kind: 'network',
+        kind: "network",
         statusCode: 502,
-        message: 'Network error',
+        message: "Network error",
         latencyMs: 100,
         providerErrors: [],
       });
 
-      const result = await generateStrategyFromPrompt('Test prompt');
+      const result = await generateStrategyFromPrompt("Test prompt");
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.failureKind).toBe("network");
+      expect(result.statusCode).toBe(502);
     });
 
-    it('should return failure when response cannot be parsed as JSON', async () => {
-      mockGenerateWithProviderFallback.mockResolvedValueOnce({
-        success: true,
-        text: 'This is not valid JSON',
-        providerUsed: 'test-provider',
-        fallbackUsed: false,
-        latencyMs: 100,
+    it("returns parse failure when response is not JSON", async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(
+        providerSuccess("This is not valid JSON")
+      );
+
+      const result = await generateStrategyFromPrompt("Test prompt");
+
+      expect(result.success).toBe(false);
+      expect(result.failureKind).toBe("parse");
+      expect(result.statusCode).toBe(422);
+    });
+
+    it("retries once with repair prompt when first parse fails", async () => {
+      mockGenerateWithProviderFallback
+        .mockResolvedValueOnce(providerSuccess("not valid json", { latencyMs: 50 }))
+        .mockResolvedValueOnce(
+          providerSuccess(JSON.stringify(buildValidStrategy({ explanation: "Recovered" })), { latencyMs: 60 })
+        );
+
+      const result = await generateStrategyFromPrompt("Test prompt", { parseRepairRetries: 1 });
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.explanation).toBe("Recovered");
+      expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(2);
+      const secondCallMessages = mockGenerateWithProviderFallback.mock.calls[1][0];
+      expect(secondCallMessages[0]).toEqual({
+        role: "system",
+        content: "Mocked system prompt\n\nMocked repair instruction",
+      });
+      expect(secondCallMessages[1]).toEqual({
+        role: "assistant",
+        content: "not valid json",
+      });
+      expect(secondCallMessages[2]).toEqual({
+        role: "user",
+        content: "Mocked repair user prompt",
+      });
+    });
+
+    it("parses JSON embedded in markdown code fences", async () => {
+      const markdownResponse = `\nHere is the strategy:\n\n\`\`\`json\n${JSON.stringify(buildValidStrategy())}\n\`\`\``;
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(providerSuccess(markdownResponse));
+
+      const result = await generateStrategyFromPrompt("Test prompt");
+
+      expect(result.success).toBe(true);
+      expect(result.strategy?.nodes).toHaveLength(2);
+    });
+
+    it("returns timeout failure when deadline is exceeded", async () => {
+      jest.useFakeTimers();
+      let capturedAbortSignal: AbortSignal | undefined;
+      mockGenerateWithProviderFallback.mockImplementationOnce((_: unknown, options?: { abortSignal?: AbortSignal }) => {
+        capturedAbortSignal = options?.abortSignal;
+        return new Promise(() => undefined);
       });
 
-      const result = await generateStrategyFromPrompt('Test prompt');
+      try {
+        const resultPromise = generateStrategyFromPrompt("Test prompt", { timeoutMs: 5 });
+        await jest.advanceTimersByTimeAsync(10);
+        const result = await resultPromise;
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to parse strategy');
-      expect(result.rawResponse).toBe('This is not valid JSON');
+        expect(result.success).toBe(false);
+        expect(result.failureKind).toBe("timeout");
+        expect(result.statusCode).toBe(504);
+        expect(capturedAbortSignal?.aborted).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
-    it('should retry once with repair prompt when parse fails', async () => {
-      const repaired: GeneratedStrategy = {
+    it("returns configuration failure when schema is required but provider does not apply response format", async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(
+        providerSuccess(JSON.stringify(buildValidStrategy()), { responseFormatApplied: false })
+      );
+
+      const result = await generateStrategyFromPrompt("Test prompt");
+
+      expect(result.success).toBe(false);
+      expect(result.failureKind).toBe("configuration");
+      expect(result.statusCode).toBe(502);
+    });
+
+    it("rejects unsupported node types as parse failure", async () => {
+      const malformed = {
         nodes: [
           {
-            id: 'node-1',
-            type: 'dataSource',
-            position: { x: 50, y: 50 },
-            data: {
-              type: 'dataSource',
-              label: 'Data Source',
-              config: { stocks: ['VNM'], timeframe: '1d' },
-            },
+            id: "node-1",
+            type: "dataSource",
+            position: { x: 0, y: 0 },
+            data: { type: "dataSource", label: "Source", config: {} },
+          },
+          {
+            id: "node-1",
+            type: "invalidType",
+            position: { x: 100, y: 0 },
+            data: { type: "invalidType", label: "Invalid", config: {} },
+          },
+          {
+            id: "node-3",
+            type: "output",
+            position: { x: 200, y: 0 },
+            data: { type: "output", label: "Output", config: {} },
           },
         ],
-        edges: [],
-        explanation: 'Recovered strategy',
+        edges: [{ source: "node-1", target: "node-3" }],
+        explanation: "Malformed",
       };
 
-      mockGenerateWithProviderFallback
-        .mockResolvedValueOnce({
-          success: true,
-          text: 'not valid json',
-          providerUsed: 'test-provider',
-          fallbackUsed: false,
-          latencyMs: 50,
-        })
-        .mockResolvedValueOnce({
-          success: true,
-          text: JSON.stringify(repaired),
-          providerUsed: 'test-provider',
-          fallbackUsed: false,
-          latencyMs: 55,
-        });
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(providerSuccess(JSON.stringify(malformed)));
 
-      const result = await generateStrategyFromPrompt('Test prompt', { parseRepairRetries: 1 });
-
-      expect(result.success).toBe(true);
-      expect(result.strategy?.nodes).toHaveLength(1);
-      expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(2);
-    });
-
-    it('should return failure when response has invalid nodes/edges structure', async () => {
-      mockGenerateWithProviderFallback.mockResolvedValueOnce({
-        success: true,
-        text: JSON.stringify({ foo: 'bar' }),
-        providerUsed: 'test-provider',
-        fallbackUsed: false,
-        latencyMs: 100,
-      });
-
-      const result = await generateStrategyFromPrompt('Test prompt');
+      const result = await generateStrategyFromPrompt("Test prompt");
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to parse strategy');
+      expect(result.failureKind).toBe("parse");
+      expect(result.statusCode).toBe(422);
     });
 
-    it('should parse JSON embedded in markdown code blocks', async () => {
-      const validStrategy: GeneratedStrategy = {
-        nodes: [],
-        edges: [],
-        explanation: 'Test',
+    it("removes invalid edges but keeps valid path", async () => {
+      const malformed = {
+        nodes: buildValidStrategy().nodes,
+        edges: [
+          { source: "node-1", target: "node-2" },
+          { source: "node-1", target: "non-existent" },
+          { source: "node-1", target: "node-1" },
+        ],
+        explanation: "Edge cleanup",
       };
 
-      const markdownResponse = `
-Here's the strategy:
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(providerSuccess(JSON.stringify(malformed)));
 
-\`\`\`json
-${JSON.stringify(validStrategy)}
-\`\`\`
-`;
-
-      mockGenerateWithProviderFallback.mockResolvedValueOnce({
-        success: true,
-        text: markdownResponse,
-        providerUsed: 'test-provider',
-        fallbackUsed: false,
-        latencyMs: 100,
-      });
-
-      const result = await generateStrategyFromPrompt('Test prompt');
+      const result = await generateStrategyFromPrompt("Test prompt");
 
       expect(result.success).toBe(true);
+      expect(result.strategy?.edges).toHaveLength(1);
+      expect(result.strategy?.edges[0]).toMatchObject({ source: "node-1", target: "node-2" });
     });
 
-    it('should handle exceptions gracefully', async () => {
-      mockGenerateWithProviderFallback.mockRejectedValueOnce(new Error('Unexpected error'));
+    it("returns parse failure when output is unreachable from data source", async () => {
+      const unreachable = {
+        nodes: [
+          {
+            id: "node-1",
+            type: "dataSource",
+            position: { x: 0, y: 0 },
+            data: { type: "dataSource", label: "Source", config: {} },
+          },
+          {
+            id: "node-2",
+            type: "indicator",
+            position: { x: 100, y: 0 },
+            data: { type: "indicator", label: "Indicator", config: {} },
+          },
+          {
+            id: "node-3",
+            type: "output",
+            position: { x: 200, y: 0 },
+            data: { type: "output", label: "Output", config: {} },
+          },
+        ],
+        edges: [{ source: "node-1", target: "node-2" }],
+        explanation: "No path to output",
+      };
 
-      const result = await generateStrategyFromPrompt('Test prompt');
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(providerSuccess(JSON.stringify(unreachable)));
+
+      const result = await generateStrategyFromPrompt("Test prompt");
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Unexpected error');
+      expect(result.failureKind).toBe("parse");
+      expect(result.statusCode).toBe(422);
     });
   });
 
-  describe('convertToStrategyBuilderFormat', () => {
-    it('should convert generated strategy to builder format correctly', () => {
+  describe("convertToStrategyBuilderFormat", () => {
+    it("converts generated strategy to builder format", () => {
       const generatedStrategy: GeneratedStrategy = {
         nodes: [
           {
-            id: 'node-1',
-            type: 'dataSource',
+            id: "node-1",
+            type: "dataSource",
             position: { x: 50, y: 50 },
             data: {
-              type: 'dataSource',
-              label: 'Data Source',
-              config: { stocks: ['VNM', 'VCB'], timeframe: '1d' },
+              type: "dataSource",
+              label: "Data Source",
+              config: { stocks: ["VNM", "VCB"], timeframe: "1d" },
             },
           },
           {
-            id: 'node-2',
-            type: 'indicator',
+            id: "node-2",
+            type: "indicator",
             position: { x: 300, y: 50 },
             data: {
-              type: 'indicator',
-              label: 'RSI',
-              config: { indicatorType: 'rsi', period: 14 },
+              type: "indicator",
+              label: "RSI",
+              config: { indicatorType: "rsi", period: 14 },
             },
           },
         ],
-        edges: [
-          { id: 'edge-1', source: 'node-1', target: 'node-2' },
-        ],
-        explanation: 'Test strategy',
+        edges: [{ id: "edge-1", source: "node-1", target: "node-2" }],
+        explanation: "Test strategy",
       };
 
       const result = convertToStrategyBuilderFormat(generatedStrategy);
 
       expect(result.nodes).toHaveLength(2);
       expect(result.edges).toHaveLength(1);
-
-      // Check node format
       expect(result.nodes[0]).toEqual({
-        id: 'node-1',
-        type: 'dataSource',
+        id: "node-1",
+        type: "dataSource",
         position: { x: 50, y: 50 },
         data: {
-          label: 'Data Source',
-          stocks: ['VNM', 'VCB'],
-          timeframe: '1d',
+          label: "Data Source",
+          stocks: ["VNM", "VCB"],
+          timeframe: "1d",
         },
       });
-
-      // Check edge format
-      expect(result.edges[0]).toEqual({
-        id: 'edge-1',
-        source: 'node-1',
-        target: 'node-2',
-      });
     });
 
-    it('should handle empty nodes and edges', () => {
-      const generatedStrategy: GeneratedStrategy = {
-        nodes: [],
-        edges: [],
-        explanation: 'Empty strategy',
-      };
-
-      const result = convertToStrategyBuilderFormat(generatedStrategy);
-
-      expect(result.nodes).toHaveLength(0);
-      expect(result.edges).toHaveLength(0);
-    });
-
-    it('should preserve all config properties in node data', () => {
+    it("preserves all config properties in node data", () => {
       const generatedStrategy: GeneratedStrategy = {
         nodes: [
           {
-            id: 'node-1',
-            type: 'signal',
+            id: "node-1",
+            type: "signal",
             position: { x: 800, y: 100 },
             data: {
-              type: 'signal',
-              label: 'Buy Signal',
+              type: "signal",
+              label: "Buy Signal",
               config: {
-                signalType: 'buy',
-                condition: 'RSI < 30',
+                signalType: "buy",
+                condition: "RSI < 30",
                 quantity: 100,
                 stopLoss: 5,
                 takeProfit: 10,
@@ -284,258 +365,19 @@ ${JSON.stringify(validStrategy)}
           },
         ],
         edges: [],
-        explanation: 'Signal test',
+        explanation: "Signal test",
       };
 
       const result = convertToStrategyBuilderFormat(generatedStrategy);
 
       expect(result.nodes[0].data).toEqual({
-        label: 'Buy Signal',
-        signalType: 'buy',
-        condition: 'RSI < 30',
+        label: "Buy Signal",
+        signalType: "buy",
+        condition: "RSI < 30",
         quantity: 100,
         stopLoss: 5,
         takeProfit: 10,
       });
     });
-  });
-});
-
-describe('parseStrategyResponse (via generateStrategyFromPrompt)', () => {
-  it('should parse valid JSON with nodes and edges', async () => {
-    const validStrategy: GeneratedStrategy = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'dataSource',
-          position: { x: 0, y: 0 },
-          data: { type: 'dataSource', label: 'Test', config: {} },
-        },
-      ],
-      edges: [],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(validStrategy),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.nodes).toHaveLength(1);
-  });
-
-  it('should handle invalid JSON', async () => {
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: 'not json at all',
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(false);
-  });
-
-  it('should handle JSON with nodes but no edges array', async () => {
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify({ nodes: [], foo: 'bar' }),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('validateAndFixStrategy (via generateStrategyFromPrompt)', () => {
-  it('should fix missing node ids', async () => {
-    const strategyWithMissingIds = {
-      nodes: [
-        {
-          type: 'dataSource',
-          position: { x: 0, y: 0 },
-          data: { type: 'dataSource', label: 'Test', config: {} },
-        },
-      ],
-      edges: [],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithMissingIds),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.nodes[0].id).toBeDefined();
-    expect(result.strategy?.nodes[0].id).toMatch(/^node-/);
-  });
-
-  it('should fix invalid node types to indicator', async () => {
-    const strategyWithInvalidType = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'invalidType',
-          position: { x: 0, y: 0 },
-          data: { type: 'invalidType', label: 'Test', config: {} },
-        },
-      ],
-      edges: [],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithInvalidType),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.nodes[0].type).toBe('indicator');
-  });
-
-  it('should remove edges referencing non-existent nodes', async () => {
-    const strategyWithInvalidEdges = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'dataSource',
-          position: { x: 0, y: 0 },
-          data: { type: 'dataSource', label: 'Test', config: {} },
-        },
-      ],
-      edges: [
-        { id: 'edge-1', source: 'node-1', target: 'non-existent' },
-        { id: 'edge-2', source: 'non-existent', target: 'node-1' },
-      ],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithInvalidEdges),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.edges).toHaveLength(0);
-  });
-
-  it('should add default explanation when missing', async () => {
-    const strategyWithoutExplanation = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'dataSource',
-          position: { x: 0, y: 0 },
-          data: { type: 'dataSource', label: 'Test', config: {} },
-        },
-      ],
-      edges: [],
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithoutExplanation),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.explanation).toBeDefined();
-    expect(result.strategy?.explanation.length).toBeGreaterThan(0);
-  });
-
-  it('should generate default position when missing', async () => {
-    const strategyWithoutPosition = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'dataSource',
-          data: { type: 'dataSource', label: 'Test', config: {} },
-        },
-      ],
-      edges: [],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithoutPosition),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.nodes[0].position).toBeDefined();
-    expect(result.strategy?.nodes[0].position.x).toBeDefined();
-    expect(result.strategy?.nodes[0].position.y).toBeDefined();
-  });
-
-  it('should generate edge ids when missing', async () => {
-    const strategyWithEdgeWithoutId = {
-      nodes: [
-        {
-          id: 'node-1',
-          type: 'dataSource',
-          position: { x: 0, y: 0 },
-          data: { type: 'dataSource', label: 'Source', config: {} },
-        },
-        {
-          id: 'node-2',
-          type: 'indicator',
-          position: { x: 300, y: 0 },
-          data: { type: 'indicator', label: 'RSI', config: {} },
-        },
-      ],
-      edges: [{ source: 'node-1', target: 'node-2' }],
-      explanation: 'Test',
-    };
-
-    mockGenerateWithProviderFallback.mockResolvedValueOnce({
-      success: true,
-      text: JSON.stringify(strategyWithEdgeWithoutId),
-      providerUsed: 'test',
-      fallbackUsed: false,
-      latencyMs: 100,
-    });
-
-    const result = await generateStrategyFromPrompt('Test');
-
-    expect(result.success).toBe(true);
-    expect(result.strategy?.edges[0].id).toBeDefined();
-    expect(result.strategy?.edges[0].id).toMatch(/^edge-/);
   });
 });

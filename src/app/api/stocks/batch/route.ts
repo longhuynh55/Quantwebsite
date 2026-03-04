@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadOHLCVForSymbols } from "@/lib/data";
+import { getDatasetLoadStatus, loadOHLCVForSymbols } from "@/lib/data";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
 
@@ -99,6 +99,21 @@ export async function GET(request: Request) {
 
   try {
     const map = await loadOHLCVForSymbols(symbols);
+    const hasAnySeries = symbols.some((symbol) => (map.get(symbol) ?? []).length > 0);
+    if (!hasAnySeries) {
+      const ohlcvStatus = getDatasetLoadStatus("ohlcv");
+      if (ohlcvStatus.status === "error") {
+        return jsonResponse(
+          traceId,
+          {
+            error: "OHLCV dataset unavailable.",
+            dataFailureReason: ohlcvStatus.reason ?? "read_failure",
+            details: ohlcvStatus.message ?? undefined,
+          },
+          { status: 503 }
+        );
+      }
+    }
     const data: Record<string, unknown[]> = {};
 
     for (const symbol of symbols) {
@@ -112,4 +127,3 @@ export async function GET(request: Request) {
     return jsonResponse(traceId, { error: "Internal server error" }, { status: 500 });
   }
 }
-

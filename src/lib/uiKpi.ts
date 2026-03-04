@@ -1,14 +1,17 @@
 import { getUiFeatureFlagSnapshot, uiFeatureFlags } from "@/lib/featureFlags";
 import { logUiEvent } from "@/lib/frontendTelemetry";
+import type {
+  StrategyBuilderAiAssistEvent,
+  StrategyBuilderInteractionEvent,
+  UiKpiMetric,
+} from "@/lib/uiKpiSchema";
 
-export type UiKpiMetric =
-  | "preset_reuse"
-  | "watchlist_interaction"
-  | "assistant_contextual_action_ctr";
+type NonStrategyBuilderMetric = Exclude<
+  UiKpiMetric,
+  "strategy_builder_interaction" | "strategy_builder_ai_assist"
+>;
 
-interface UiKpiEventInput {
-  metric: UiKpiMetric;
-  event: string;
+interface UiKpiEventInputBase {
   page?: string;
   source?: string;
   symbol?: string;
@@ -16,10 +19,24 @@ interface UiKpiEventInput {
   detail?: Record<string, unknown>;
 }
 
-interface UiKpiEventPayload extends UiKpiEventInput {
+export type UiKpiEventInput =
+  | (UiKpiEventInputBase & {
+      metric: "strategy_builder_interaction";
+      event: StrategyBuilderInteractionEvent;
+    })
+  | (UiKpiEventInputBase & {
+      metric: "strategy_builder_ai_assist";
+      event: StrategyBuilderAiAssistEvent;
+    })
+  | (UiKpiEventInputBase & {
+      metric: NonStrategyBuilderMetric;
+      event: string;
+    });
+
+type UiKpiEventPayload = UiKpiEventInput & {
   ts: string;
   featureFlags: ReturnType<typeof getUiFeatureFlagSnapshot>;
-}
+};
 
 const KPI_ENDPOINT = "/api/telemetry/ui-kpi";
 
@@ -54,7 +71,7 @@ async function sendUiKpi(payload: UiKpiEventPayload): Promise<void> {
   }
 
   try {
-    await fetch(KPI_ENDPOINT, {
+    const response = await fetch(KPI_ENDPOINT, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -63,6 +80,12 @@ async function sendUiKpi(payload: UiKpiEventPayload): Promise<void> {
       keepalive: true,
       cache: "no-store",
     });
+    if (!response.ok) {
+      logUiEvent("debug", "kpi.fetch.non_ok", {
+        status: response.status,
+        statusText: response.statusText,
+      });
+    }
   } catch (error) {
     logUiEvent("debug", "kpi.fetch.failed", {
       error: error instanceof Error ? error.message : String(error),

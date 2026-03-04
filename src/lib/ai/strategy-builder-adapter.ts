@@ -192,12 +192,17 @@ export function sanitizeGeneratedStrategyForBuilder(strategy: GeneratedStrategy)
     const rawId = coerceString(node?.id).trim() || `node-${index}`;
     let id = rawId;
     if (usedIds.has(id)) {
-      const next = generateId("node");
-      idRemap.set(rawId, next);
+      let next = generateId("node");
+      while (usedIds.has(next)) {
+        next = generateId("node");
+      }
       id = next;
       warnings.push(`Duplicate node id "${rawId}" was remapped to "${id}".`);
     }
     usedIds.add(id);
+    if (!idRemap.has(rawId)) {
+      idRemap.set(rawId, id);
+    }
 
     const type = node.type;
     const label = coerceString(node?.data?.label).trim() || coerceString(node?.data?.type).trim() || `${type} Node`;
@@ -234,6 +239,7 @@ export function sanitizeGeneratedStrategyForBuilder(strategy: GeneratedStrategy)
 
   const fixedEdges: GeneratedStrategyEdge[] = [];
   const edgeSeen = new Set<string>();
+  const edgeIds = new Set<string>();
   for (let index = 0; index < rawEdges.length; index += 1) {
     const edge = rawEdges[index];
     const source = remapNodeId(coerceString(edge?.source).trim());
@@ -243,14 +249,29 @@ export function sanitizeGeneratedStrategyForBuilder(strategy: GeneratedStrategy)
       warnings.push(`Dropped an edge referencing missing node(s): ${source} -> ${target}.`);
       continue;
     }
+    if (source === target) {
+      warnings.push(`Dropped self-loop edge: ${source} -> ${target}.`);
+      continue;
+    }
     const sig = `${source}::${target}::${coerceString(edge?.sourceHandle)}::${coerceString(edge?.targetHandle)}`;
     if (edgeSeen.has(sig)) {
+      warnings.push(`Dropped duplicate edge: ${source} -> ${target}.`);
       continue;
     }
     edgeSeen.add(sig);
+    const rawEdgeId = coerceString(edge?.id).trim() || `edge-${index}`;
+    let edgeId = rawEdgeId;
+    if (edgeIds.has(edgeId)) {
+      let suffix = 1;
+      while (edgeIds.has(`${rawEdgeId}-${suffix}`)) {
+        suffix += 1;
+      }
+      edgeId = `${rawEdgeId}-${suffix}`;
+    }
+    edgeIds.add(edgeId);
 
     fixedEdges.push({
-      id: coerceString(edge?.id).trim() || `edge-${index}`,
+      id: edgeId,
       source,
       target,
       sourceHandle: coerceString(edge?.sourceHandle).trim() || undefined,
@@ -334,4 +355,3 @@ export function generatedStrategyToBuilderGraph(strategy: GeneratedStrategy): {
     name: sanitized.name?.trim() || "AI Strategy",
   };
 }
-

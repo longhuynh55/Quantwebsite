@@ -1,7 +1,7 @@
 # Composer Agent Weekly Status (Auto)
 
 ## Week Of
-- Date range: 2026-02-26
+- Date range: 2026-03-04
 - Owner: Auto Tracker
 
 ## Milestone Status Snapshot

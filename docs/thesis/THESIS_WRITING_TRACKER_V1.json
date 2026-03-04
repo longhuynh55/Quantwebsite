@@ -1,0 +1,178 @@
+{
+  "version": "thesis-writing-tracker-v1",
+  "scope": "QuantVN Strategy Forge thesis (English, 5 chapters)",
+  "status": "active",
+  "updatedAt": "2026-02-22",
+  "milestones": [
+    {
+      "id": "THS-01",
+      "phase": "Thesis",
+      "title": "Chapter 1: Introduction (RQ/Hypotheses/Contributions)",
+      "owner": "Writing",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "RQ and hypotheses are explicit and consistent with Chapters 2-5",
+        "Claims are scoped to HOSE-only and to decision-support (not execution)",
+        "In-text citations match the Chapter 1 References section"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Scope creep (execution claims, realised trading claims)",
+        "Terminology drift across chapters"
+      ],
+      "signals": {},
+      "evidenceCommands": [
+        "Citation sanity check (manual): each (Author, Year) in-text appears in Chapter 1 References"
+      ],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-02",
+      "phase": "Thesis",
+      "title": "Chapter 2: Literature Review (traditional finance -> ML -> assistant reliability)",
+      "owner": "Writing",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Flow from traditional finance to modern assistant reliability is coherent",
+        "Synthesis clearly maps literature implications to Chapter 3 methodology",
+        "Figure 2.1 and Figure 2.2 are referenced and explained in text",
+        "In-text citations match the Chapter 2 References section"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Literature becomes a list without synthesis",
+        "Citations drift or missing in chapter References"
+      ],
+      "signals": {},
+      "evidenceCommands": [
+        "Citation sanity check (manual): each (Author, Year) in-text appears in Chapter 2 References"
+      ],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-03",
+      "phase": "Thesis",
+      "title": "Chapter 3: System Design and Methodology (thesis-polished, minimal engineering jargon)",
+      "owner": "Writing",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Methodology operationalises RQ/Hypotheses into measurable gates and artifacts",
+        "All figures referenced in Chapter 3 are consistent and thesis-level (no endpoint/HTTP/command noise)",
+        "Appendix A/B linkages are correct",
+        "In-text citations match the Chapter 3 References section"
+      ],
+      "dependsOn": [
+        "THS-02"
+      ],
+      "risks": [
+        "Reverting to implementation-level details in the main narrative",
+        "Figure drift between chapters and figures folder"
+      ],
+      "signals": {},
+      "evidenceCommands": [
+        "Citation sanity check (manual): each (Author, Year) in-text appears in Chapter 3 References"
+      ],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-04",
+      "phase": "Thesis",
+      "title": "Chapter 4: Implementation & Results (UI evidence + evaluation results)",
+      "owner": "Writing",
+      "priority": "P0",
+      "status": "todo",
+      "definitionOfDone": [
+        "Implementation is described at a thesis-appropriate level",
+        "Results are reported with acceptance gates + artifacts",
+        "UI walkthrough figures are captured and referenced (Figures 4.3-4.7)",
+        "In-text citations match the Chapter 4 References section"
+      ],
+      "dependsOn": [
+        "THS-03"
+      ],
+      "risks": [
+        "Results section remains template-only (TBD)",
+        "UI screenshots do not support the reliability claims"
+      ],
+      "signals": {},
+      "evidenceCommands": [],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-05",
+      "phase": "Thesis",
+      "title": "Chapter 5: Conclusion & Future Work",
+      "owner": "Writing",
+      "priority": "P1",
+      "status": "todo",
+      "definitionOfDone": [
+        "Conclusions answer the RQ with measured evidence",
+        "Limitations are stated clearly (no overclaiming)",
+        "Future work is concrete and tied to observed gaps"
+      ],
+      "dependsOn": [
+        "THS-04"
+      ],
+      "risks": [
+        "Conclusion repeats earlier text without synthesis"
+      ],
+      "signals": {},
+      "evidenceCommands": [],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-FIG",
+      "phase": "Thesis",
+      "title": "Figures pack (Mermaid canonical + export-ready)",
+      "owner": "Writing + Slides",
+      "priority": "P1",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Each figure has a canonical Mermaid source in docs/thesis/figures/_mmd",
+        "Each figure is referenced in the chapter text with a short explanation",
+        "PRESENTATION_FIGURES.md matches thesis-polished figures"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Presentation pack diverges from thesis figures"
+      ],
+      "signals": {},
+      "evidenceCommands": [
+        "pnpm run thesis:figures:export"
+      ],
+      "statusHistory": []
+    },
+    {
+      "id": "THS-REF",
+      "phase": "Thesis",
+      "title": "References hygiene (APA7 + registry)",
+      "owner": "Writing",
+      "priority": "P0",
+      "status": "in_progress",
+      "definitionOfDone": [
+        "Each chapter References section includes all in-text citations from that chapter",
+        "Master list docs/thesis/references_apa.md is kept up to date",
+        "New external sources are registered in docs/REFERENCE_REGISTRY.md"
+      ],
+      "dependsOn": [],
+      "risks": [
+        "Citations appear in text but missing in chapter References",
+        "URLs/DOIs missing or inconsistent formatting"
+      ],
+      "signals": {},
+      "evidenceCommands": [],
+      "statusHistory": []
+    }
+  ],
+  "qualityGates": {
+    "thesis": [
+      "No code/module path details in Chapters 1-3 main text (use appendices instead)",
+      "All in-text citations included in per-chapter References sections",
+      "Figures referenced in text and consistent with figures folder sources"
+    ]
+  }
+}
+

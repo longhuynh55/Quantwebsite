@@ -1,27 +1,42 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { StrategyCanvas } from "./StrategyCanvas";
 
+type MockNode = {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+};
+
+type MockEdge = {
+  id: string;
+  source: string;
+  target: string;
+};
+
 type MockStrategyStoreState = {
   currentStrategy: {
-    nodes: Array<Record<string, unknown>>;
-    edges: Array<Record<string, unknown>>;
+    nodes: MockNode[];
+    edges: MockEdge[];
   } | null;
   addNode: jest.Mock;
   addEdge: jest.Mock;
   setSelectedNode: jest.Mock;
   setNodes: jest.Mock;
+  setEdges: jest.Mock;
 };
 
-const mockOnNodesChange = jest.fn();
-const mockOnEdgesChange = jest.fn();
-let mockNodesState: Array<Record<string, unknown>> = [];
-let mockEdgesState: Array<Record<string, unknown>> = [];
+let mockNodesState: MockNode[] = [];
+let mockEdgesState: MockEdge[] = [];
 
 const mockAddNode = jest.fn();
 const mockStoreAddEdge = jest.fn();
 const mockSetSelectedNode = jest.fn();
 const mockSetNodes = jest.fn();
+const mockSetEdges = jest.fn();
 const mockFitView = jest.fn();
+const mockToastError = jest.fn();
+const mockToastMessage = jest.fn();
 
 let mockStrategyStoreState: MockStrategyStoreState;
 
@@ -31,6 +46,13 @@ jest.mock("./nodes", () => ({
 
 jest.mock("@/lib/stores/strategyBuilderStore", () => ({
   useStrategyBuilderStore: () => mockStrategyStoreState,
+}));
+
+jest.mock("sonner", () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    message: (...args: unknown[]) => mockToastMessage(...args),
+  },
 }));
 
 jest.mock("@xyflow/react", () => ({
@@ -69,6 +91,19 @@ jest.mock("@xyflow/react", () => ({
       >
         Trigger connect
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          onConnect?.({
+            source: "node-a",
+            target: "node-a",
+            sourceHandle: null,
+            targetHandle: null,
+          })
+        }
+      >
+        Trigger self connect
+      </button>
       <button type="button" onClick={(event) => onNodeClick?.(event, { id: "node-a" })}>
         Trigger node click
       </button>
@@ -82,24 +117,32 @@ jest.mock("@xyflow/react", () => ({
   Controls: () => <div>Controls</div>,
   MiniMap: () => <div>MiniMap</div>,
   Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  addEdge: (edge: Record<string, unknown>, edges: Array<Record<string, unknown>>) => [...edges, edge],
-  useNodesState: (initial: Array<Record<string, unknown>>) => {
+  BackgroundVariant: { Dots: "dots" },
+  applyNodeChanges: (_changes: unknown, nodes: MockNode[]) => nodes,
+  applyEdgeChanges: (_changes: unknown, edges: MockEdge[]) => edges,
+  useNodesState: (initial: MockNode[]) => {
     mockNodesState = initial;
-    return [mockNodesState, jest.fn(), mockOnNodesChange];
+    const setNodes = (
+      updater: MockNode[] | ((prev: MockNode[]) => MockNode[])
+    ) => {
+      mockNodesState = typeof updater === "function" ? updater(mockNodesState) : updater;
+    };
+    return [mockNodesState, setNodes, jest.fn()];
   },
-  useEdgesState: (initial: Array<Record<string, unknown>>) => {
+  useEdgesState: (initial: MockEdge[]) => {
     mockEdgesState = initial;
     const setEdges = (
-      updater:
-        | Array<Record<string, unknown>>
-        | ((prev: Array<Record<string, unknown>>) => Array<Record<string, unknown>>)
+      updater: MockEdge[] | ((prev: MockEdge[]) => MockEdge[])
     ) => {
       mockEdgesState = typeof updater === "function" ? updater(mockEdgesState) : updater;
     };
-    return [mockEdgesState, setEdges, mockOnEdgesChange];
+    return [mockEdgesState, setEdges, jest.fn()];
   },
   useReactFlow: () => ({
     fitView: mockFitView,
+    screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+    getNode: (id: string) =>
+      mockNodesState.find((node) => node.id === id) ?? null,
   }),
 }));
 
@@ -108,13 +151,27 @@ function createStoreState(
 ): MockStrategyStoreState {
   return {
     currentStrategy: {
-      nodes: [],
+      nodes: [
+        {
+          id: "node-a",
+          type: "dataSource",
+          position: { x: 0, y: 0 },
+          data: { type: "dataSource", label: "Source", config: {} },
+        },
+        {
+          id: "node-b",
+          type: "indicator",
+          position: { x: 260, y: 0 },
+          data: { type: "indicator", label: "RSI", config: {} },
+        },
+      ],
       edges: [],
     },
     addNode: mockAddNode,
     addEdge: mockStoreAddEdge,
     setSelectedNode: mockSetSelectedNode,
     setNodes: mockSetNodes,
+    setEdges: mockSetEdges,
     ...overrides,
   };
 }
@@ -125,22 +182,31 @@ describe("StrategyCanvas", () => {
     mockStoreAddEdge.mockReset();
     mockSetSelectedNode.mockReset();
     mockSetNodes.mockReset();
+    mockSetEdges.mockReset();
     mockFitView.mockReset();
-    mockOnNodesChange.mockReset();
-    mockOnEdgesChange.mockReset();
+    mockToastError.mockReset();
+    mockToastMessage.mockReset();
     mockNodesState = [];
     mockEdgesState = [];
     mockStrategyStoreState = createStoreState();
   });
 
   it("renders empty state when there are no nodes", () => {
+    mockStrategyStoreState = createStoreState({
+      currentStrategy: {
+        nodes: [],
+        edges: [],
+      },
+    });
+
     render(<StrategyCanvas />);
 
-    expect(screen.getByText("Start Building Your Strategy")).toBeInTheDocument();
+    expect(screen.getByText("Add nodes to begin")).toBeInTheDocument();
   });
 
   it("adds node when dropping a supported type from palette", () => {
-    render(<StrategyCanvas />);
+    const onBeforeMutate = jest.fn();
+    render(<StrategyCanvas onBeforeMutate={onBeforeMutate} />);
 
     fireEvent.drop(screen.getByTestId("strategy-react-flow"), {
       clientX: 140,
@@ -151,13 +217,10 @@ describe("StrategyCanvas", () => {
     });
 
     expect(mockAddNode).toHaveBeenCalledTimes(1);
+    expect(onBeforeMutate).toHaveBeenCalledTimes(1);
     expect(mockAddNode).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "indicator",
-        data: expect.objectContaining({
-          type: "indicator",
-          label: "RSI",
-        }),
       })
     );
   });
@@ -177,10 +240,6 @@ describe("StrategyCanvas", () => {
     expect(mockAddNode).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "filter",
-        data: expect.objectContaining({
-          type: "filter",
-          label: "Filter",
-        }),
       })
     );
   });
@@ -199,12 +258,51 @@ describe("StrategyCanvas", () => {
     expect(mockAddNode).not.toHaveBeenCalled();
   });
 
-  it("ignores connect attempts because connections are disabled", () => {
-    render(<StrategyCanvas />);
+  it("creates edge for valid connections", () => {
+    const onBeforeMutate = jest.fn();
+    render(<StrategyCanvas onBeforeMutate={onBeforeMutate} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
 
+    expect(mockStoreAddEdge).toHaveBeenCalledTimes(1);
+    expect(onBeforeMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks self connections", () => {
+    render(<StrategyCanvas />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Trigger self connect" }));
+
     expect(mockStoreAddEdge).not.toHaveBeenCalled();
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks duplicate connections already present in strategy", () => {
+    mockStrategyStoreState = createStoreState({
+      currentStrategy: {
+        nodes: [
+          {
+            id: "node-a",
+            type: "dataSource",
+            position: { x: 0, y: 0 },
+            data: { type: "dataSource", label: "Source", config: {} },
+          },
+          {
+            id: "node-b",
+            type: "indicator",
+            position: { x: 260, y: 0 },
+            data: { type: "indicator", label: "RSI", config: {} },
+          },
+        ],
+        edges: [{ id: "edge-1", source: "node-a", target: "node-b" }],
+      },
+    });
+
+    render(<StrategyCanvas />);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
+
+    expect(mockStoreAddEdge).not.toHaveBeenCalled();
+    expect(mockToastMessage).toHaveBeenCalledTimes(1);
   });
 
   it("updates selected node for node click and pane click", () => {

@@ -64,6 +64,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare .env.glm for Docker app
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          ASSISTANT_EVAL_AUTH_TOKEN: ${{ secrets.ASSISTANT_EVAL_AUTH_TOKEN }}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN: ${{ secrets.ASSISTANT_EXECUTE_APPROVAL_TOKEN }}
+        run: |
+          cat > .env.glm <<EOF
+          OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+          OPENROUTER_HTTP_REFERER=https://github.com/${GITHUB_REPOSITORY}
+          OPENROUTER_X_TITLE=QuantVN-QA-CI
+          GLM_API_KEY=${GLM_API_KEY:-}
+          ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN=${ASSISTANT_EXECUTE_APPROVAL_TOKEN:-ci-execute-token}
+          EOF
+          echo "ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}" >> "$GITHUB_ENV"
+
       - name: Deterministic CI data prepare
         env:
           TZ: UTC
@@ -83,7 +100,7 @@ jobs:
 
       - name: Dev health probe warmup and retry
         env:
-          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&includeFundamentals=false
+          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&canary=true&includeFundamentals=false
           HEALTH_LABEL: dev
           HEALTH_WARMUP_SECONDS: "5"
           HEALTH_MAX_ATTEMPTS: "30"
@@ -232,6 +249,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare .env.glm for Docker app
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          ASSISTANT_EVAL_AUTH_TOKEN: ${{ secrets.ASSISTANT_EVAL_AUTH_TOKEN }}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN: ${{ secrets.ASSISTANT_EXECUTE_APPROVAL_TOKEN }}
+        run: |
+          cat > .env.glm <<EOF
+          OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+          OPENROUTER_HTTP_REFERER=https://github.com/${GITHUB_REPOSITORY}
+          OPENROUTER_X_TITLE=QuantVN-QA-CI
+          GLM_API_KEY=${GLM_API_KEY:-}
+          ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN=${ASSISTANT_EXECUTE_APPROVAL_TOKEN:-ci-execute-token}
+          EOF
+          echo "ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}" >> "$GITHUB_ENV"
+
       - name: Deterministic CI data prepare
         env:
           TZ: UTC
@@ -251,7 +285,7 @@ jobs:
 
       - name: Prod health probe warmup and retry
         env:
-          HEALTH_URL: http://localhost:3011/api/health/data?probe=true&includeFundamentals=false
+          HEALTH_URL: http://localhost:3011/api/health/data?probe=true&canary=true&includeFundamentals=false
           HEALTH_LABEL: prod
           HEALTH_WARMUP_SECONDS: "5"
           HEALTH_MAX_ATTEMPTS: "30"

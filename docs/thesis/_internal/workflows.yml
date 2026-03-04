@@ -1,0 +1,86 @@
+version: 1
+purpose: "Workflow definitions used to keep Chapter 3 diagrams and Chapter 4 UI evidence consistent."
+
+workflows:
+  - id: wf_a_universe_to_validation
+    name: "Universe Discovery to Single-Symbol Validation"
+    steps:
+      - module: screener
+        outcome: "Candidate universe identified and optionally exported."
+        artifacts:
+          - "Filtered universe table"
+          - "CSV export (optional)"
+      - module: charts
+        outcome: "Candidate symbol validated via price series and fundamentals snapshot."
+        artifacts:
+          - "Candlestick chart"
+          - "Comparison series (optional)"
+          - "Fundamentals tables (quarterly)"
+      - module: backtesting
+        outcome: "Strategy hypothesis validated under configured execution and cost assumptions."
+        artifacts:
+          - "Summary KPIs"
+          - "Charts"
+          - "Trade log"
+          - "Diagnostics tab"
+    thesis_use:
+      - "Ch3: motivates the end-to-end research cycle (Figure 2.1 and Figure 3.6)."
+      - "Ch4: recommended screenshot set: Screener -> Charts -> Backtesting."
+
+  - id: wf_b_artifact_to_strategylab_evidence
+    name: "Strategy Artifact to Strategy Lab Run Evidence"
+    steps:
+      - module: strategy_builder
+        outcome: "User constructs a strategy artifact and prepares an execution request."
+        artifacts:
+          - "Canvas + node properties"
+          - "Run preview payload summary"
+          - "Warnings indicating visual-only connectors"
+      - module: strategy_lab
+        outcome: "Run executes asynchronously; status/events/results become available."
+        artifacts:
+          - "Run status progression"
+          - "Terminal outcome (succeeded/failed/cancelled)"
+      - module: strategy_builder
+        outcome: "Latest run result is surfaced for iteration."
+        artifacts:
+          - "Latest backtest result summary panel"
+    thesis_use:
+      - "Ch3: primary execution-methodology narrative (Figure 3.7)."
+      - "Ch4: recommended screenshot set: Strategy Builder run preview + latest result."
+
+  - id: wf_c_basket_to_portfolio_decision_support
+    name: "Symbol Basket to Portfolio Decision Support"
+    steps:
+      - module: portfolio
+        outcome: "Allocation weights and diversification diagnostics computed."
+        artifacts:
+          - "Weights table"
+          - "Correlation matrix"
+          - "Per-asset stats"
+          - "Exclusion diagnostics"
+      - module: risk
+        outcome: "Risk metrics checked for key assets relative to a benchmark."
+        artifacts:
+          - "VaR/CVaR panel"
+          - "Drawdown and volatility charts"
+    thesis_use:
+      - "Ch3: decision support narrative (portfolio + risk)."
+      - "Ch4: optional screenshot set: Portfolio optimisation -> Risk."
+
+  - id: wf_d_assisted_navigation
+    name: "Context-Aware Assistance and Navigation"
+    steps:
+      - module: assistant
+        outcome: "User requests help; assistant uses page context and quick actions to guide workflows."
+        artifacts:
+          - "Assistant panel response"
+          - "Quick action invocation"
+      - module: command_palette
+        outcome: "User performs fast navigation or symbol search."
+        artifacts:
+          - "Command palette suggestions and results"
+    thesis_use:
+      - "Ch3: assistant as a workflow accelerator with reliability cues."
+      - "Ch4: optional screenshot set: Assistant panel + quick action."
+

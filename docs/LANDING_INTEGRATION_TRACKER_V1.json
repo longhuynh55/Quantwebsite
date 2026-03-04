@@ -1,0 +1,283 @@
+{
+  "version": "landing-integration-tracker-v1",
+  "scope": "quant-website master landing integration",
+  "status": "active",
+  "updatedAt": "2026-02-22",
+  "milestones": [
+    {
+      "id": "LND-00",
+      "phase": "Phase 0",
+      "title": "Setup landing tracker and progress outputs",
+      "owner": "Docs",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Dedicated tracker/progress/weekly files exist for landing integration",
+        "Tracking scripts can sync landing status without touching docs/PROGRESS.md"
+      ],
+      "dependsOn": [],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "done",
+          "changedAt": "2026-02-22T17:40:00.000Z",
+          "note": "Created landing tracker bundle and script aliases.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-01",
+      "phase": "Phase 1",
+      "title": "Landing page at root route with app-shell separation",
+      "owner": "Frontend",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Route / renders landing experience",
+        "Route /dashboard and app pages still render sidebar/header/footer/assistant shell",
+        "Navigation links updated to use /dashboard for app home"
+      ],
+      "dependsOn": [
+        "LND-00"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "changedAt": "2026-02-22T17:41:00.000Z",
+          "note": "Root page switched to landing and shell split implemented.",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-22T10:36:16.504Z",
+          "note": "Landing root + app shell separation completed; /dashboard is app home and / is landing.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-02",
+      "phase": "Phase 1",
+      "title": "Compatibility API /api/data and /api/data/stocks/[symbol]",
+      "owner": "Backend",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Landing-compatible /api/data endpoint supports stats/stocks/latest/gainers/losers/search",
+        "Landing-compatible /api/data/stocks/[symbol] endpoint returns data and summary stats",
+        "Route tests cover success and error cases"
+      ],
+      "dependsOn": [
+        "LND-01"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "changedAt": "2026-02-22T17:42:00.000Z",
+          "note": "Implemented routes and added initial unit tests.",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-22T10:36:23.741Z",
+          "note": "Implemented /api/data and /api/data/stocks/[symbol] compatibility routes with unit tests.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-03",
+      "phase": "Phase 2",
+      "title": "Update E2E suites for landing/app split",
+      "owner": "QA",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Homepage E2E validates landing behaviors",
+        "Navigation E2E validates app shell from /dashboard",
+        "Composer E2E starts from /dashboard"
+      ],
+      "dependsOn": [
+        "LND-01"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "changedAt": "2026-02-22T17:43:00.000Z",
+          "note": "Homepage/navigation/composer specs updated for new route model.",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-22T10:36:39.156Z",
+          "note": "Updated homepage/navigation/composer E2E for landing(/) + app(/dashboard); chromium suite passed in Docker-backed prod app at :3012.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-04",
+      "phase": "Phase 3",
+      "title": "Validation gates and docker QA",
+      "owner": "QA",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "lint + tsc + unit tests pass",
+        "build passes",
+        "docker smoke/qa and assistant contract checks pass"
+      ],
+      "dependsOn": [
+        "LND-02",
+        "LND-03"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "done",
+          "changedAt": "2026-02-22T10:36:47.501Z",
+          "note": "Validation complete: lint/tsc/unit/agent-contract pass; docker smoke+qa prod API pass; chromium E2E homepage+navigation pass. Local next build may intermittently hit Windows EPERM file-lock in .next* but Docker build/runtime validation succeeded.",
+          "actor": "codex"
+        },
+        {
+          "from": "done",
+          "to": "done",
+          "changedAt": "2026-02-22T10:48:23.022Z",
+          "note": "Revalidated: lint+tsc+API unit tests passed; docker smoke/qa prod API passed; E2E homepage/navigation passed on app-prod :3014. Local next build still flaky on Windows EPERM file-lock.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-05",
+      "phase": "Phase 4",
+      "title": "Post-login handoff route normalization",
+      "owner": "Frontend",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Landing feature/navigation links point to real app routes",
+        "No deprecated /app/* handoff paths remain in landing features",
+        "Targeted landing tests cover handoff links"
+      ],
+      "dependsOn": [
+        "LND-01"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "done",
+          "changedAt": "2026-02-22T11:07:00.355Z",
+          "note": "Parallel worker normalized handoff links in FeaturesSection and added regression tests.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-06",
+      "phase": "Phase 4",
+      "title": "Dashboard shell visual refresh aligned with landing",
+      "owner": "Frontend",
+      "priority": "P1",
+      "status": "done",
+      "definitionOfDone": [
+        "Dashboard toolbar and widget wrappers use editorial stone/emerald styling",
+        "Dashboard interactions remain unchanged (add/reset/remove/layout)",
+        "DashboardLayout targeted tests pass"
+      ],
+      "dependsOn": [
+        "LND-01"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "done",
+          "changedAt": "2026-02-22T11:07:00.356Z",
+          "note": "Parallel worker refreshed dashboard shell + widget chrome without logic changes.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-07",
+      "phase": "Phase 4",
+      "title": "Metric card decoupling from legacy global CSS hooks",
+      "owner": "Frontend",
+      "priority": "P1",
+      "status": "done",
+      "definitionOfDone": [
+        "MetricCard no longer relies on metric-hero/metric-value/status-*/progress-bar-animated classes",
+        "Card-level tests assert local utility-class behavior",
+        "Targeted card tests pass"
+      ],
+      "dependsOn": [
+        "LND-06"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "done",
+          "changedAt": "2026-02-22T11:07:00.356Z",
+          "note": "Parallel worker removed legacy class dependencies in MetricCard and added focused tests.",
+          "actor": "codex"
+        }
+      ]
+    },
+    {
+      "id": "LND-08",
+      "phase": "Phase 5",
+      "title": "App pages UI convergence (screener/backtesting/assistant)",
+      "owner": "Frontend + QA",
+      "priority": "P0",
+      "status": "done",
+      "definitionOfDone": [
+        "Screener/backtesting/assistant pages visually converge with landing/dashboard style",
+        "Core workspace E2E + smoke/qa pass on Docker prod profile",
+        "No route-level UX regression after login handoff"
+      ],
+      "dependsOn": [
+        "LND-05",
+        "LND-06",
+        "LND-07"
+      ],
+      "statusHistory": [
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "changedAt": "2026-02-22T11:07:00.356Z",
+          "note": "Opened next phase after completing parallel foundation tracks.",
+          "actor": "codex"
+        },
+        {
+          "from": "in_progress",
+          "to": "done",
+          "changedAt": "2026-02-22T11:21:37.545Z",
+          "note": "Parallel UI convergence completed for screener/backtesting/assistant panel. Validation passed: lint, tsc, targeted unit tests (ScreenerClient/AiAssistantPanel), docker smoke+qa prod API, and E2E navigation on app-prod :3015 (one warm-up timeout flake rerun passed).",
+          "actor": "codex"
+        }
+      ]
+    }
+  ],
+  "qualityGates": {
+    "merge": [
+      "pnpm run lint",
+      "pnpm exec tsc --noEmit",
+      "pnpm run test",
+      "pnpm run build"
+    ],
+    "integration": [
+      "pnpm run docker:smoke",
+      "pnpm run docker:qa"
+    ],
+    "assistant": [
+      "pnpm run test:agent:contract"
+    ]
+  }
+}

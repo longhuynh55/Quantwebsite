@@ -33,15 +33,43 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate CI data
+      - name: Prepare .env.glm for Docker app
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          ASSISTANT_EVAL_AUTH_TOKEN: ${{ secrets.ASSISTANT_EVAL_AUTH_TOKEN }}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN: ${{ secrets.ASSISTANT_EXECUTE_APPROVAL_TOKEN }}
+        run: |
+          cat > .env.glm <<EOF
+          OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+          OPENROUTER_HTTP_REFERER=https://github.com/${GITHUB_REPOSITORY}
+          OPENROUTER_X_TITLE=QuantVN-Nightly-CI
+          GLM_API_KEY=${GLM_API_KEY:-}
+          ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}
+          ASSISTANT_EXECUTE_APPROVAL_TOKEN=${ASSISTANT_EXECUTE_APPROVAL_TOKEN:-ci-execute-token}
+          EOF
+          echo "ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}" >> "$GITHUB_ENV"
+
+      - name: Deterministic CI data prepare
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
         run: pnpm run data:generate:ci
+
+      - name: Deterministic fundamentals validation
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:validate:fundamentals
 
       - name: Start app container
         run: docker compose up -d --build app
 
       - name: Health probe warmup and retry
         env:
-          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&includeFundamentals=false
+          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&canary=true&includeFundamentals=false
           HEALTH_LABEL: nightly
           HEALTH_WARMUP_SECONDS: "5"
           HEALTH_MAX_ATTEMPTS: "30"

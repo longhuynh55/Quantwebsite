@@ -1,16 +1,32 @@
 import { createLogger, hashText, type AppLogger } from '@/lib/logger';
 
 type LlmRole = 'system' | 'user' | 'assistant';
+type ProviderSource = 'baseten' | 'openrouter' | 'glm' | 'fallback';
 
 export interface LlmMessage {
   role: LlmRole;
   content: string;
 }
 
+export interface LlmJsonSchemaResponseFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+}
+
+export interface LlmJsonObjectResponseFormat {
+  type: 'json_object';
+}
+
+export type LlmResponseFormat = LlmJsonSchemaResponseFormat | LlmJsonObjectResponseFormat;
+
 type ProviderFailureKind = 'timeout' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
 
 interface ProviderConfig {
-  source: 'openrouter' | 'glm' | 'fallback';
+  source: ProviderSource;
   name: string;
   baseUrl: string;
   model: string;
@@ -26,6 +42,8 @@ interface ProviderSuccess {
   success: true;
   text: string;
   attempts: number;
+  responseFormatApplied?: boolean;
+  responseFormatFallbackUsed?: boolean;
 }
 
 interface ProviderFailure {
@@ -52,6 +70,8 @@ export interface AssistantGenerateSuccess {
   providerUsed: string;
   fallbackUsed: boolean;
   latencyMs: number;
+  responseFormatApplied?: boolean;
+  responseFormatFallbackUsed?: boolean;
 }
 
 export interface AssistantGenerateFailure {
@@ -69,7 +89,7 @@ const providersLogger = createLogger('assistant.providers');
 
 export async function generateWithProviderFallback(
   messages: LlmMessage[],
-  options: { requestId?: string } = {}
+  options: { requestId?: string; responseFormat?: LlmResponseFormat; abortSignal?: AbortSignal } = {}
 ): Promise<AssistantGenerateResult> {
   const startedAt = Date.now();
   const logger = providersLogger.child({ requestId: options.requestId ?? '' });
@@ -97,9 +117,26 @@ export async function generateWithProviderFallback(
 
   const errors: ProviderErrorInfo[] = [];
   for (let index = 0; index < providers.length; index += 1) {
+    if (options.abortSignal?.aborted) {
+      return {
+        success: false,
+        kind: 'timeout',
+        statusCode: 504,
+        message: mapFailureKindToMessage('timeout'),
+        latencyMs: Date.now() - startedAt,
+        providerErrors: errors,
+      };
+    }
+
     const provider = providers[index];
     const providerStartedAt = Date.now();
-    const result = await callProviderWithRetry(provider, messages, logger);
+    const result = await callProviderWithRetry(
+      provider,
+      messages,
+      logger,
+      options.responseFormat,
+      options.abortSignal
+    );
     if (result.success) {
       logger.info('provider.success', {
         provider: provider.name,
@@ -117,6 +154,8 @@ export async function generateWithProviderFallback(
         providerUsed: provider.name,
         fallbackUsed: index > 0,
         latencyMs: Date.now() - startedAt,
+        responseFormatApplied: result.responseFormatApplied ?? false,
+        responseFormatFallbackUsed: result.responseFormatFallbackUsed ?? false,
       };
     }
 
@@ -231,9 +270,19 @@ function getProviderChain(): ProviderConfig[] {
     }
   }
 
-  const forceOpenRouterOnly = String(process.env.ASSISTANT_OPENROUTER_ONLY ?? '').trim().toLowerCase();
-  if (forceOpenRouterOnly === '1' || forceOpenRouterOnly === 'true' || forceOpenRouterOnly === 'yes') {
-    return sortProvidersByPriority(providers);
+  const basetenKey = process.env.BASETEN_API_KEY?.trim();
+  if (basetenKey) {
+    providers.push({
+      source: 'baseten',
+      name: process.env.BASETEN_PROVIDER_NAME?.trim() || 'baseten-fp4',
+      baseUrl: process.env.BASETEN_BASE_URL?.trim() || 'https://inference.baseten.co/v1',
+      model: process.env.BASETEN_MODEL?.trim() || 'gpt-oss-120b-fp4',
+      apiKey: basetenKey,
+      timeoutMs: parsePositiveInt(process.env.BASETEN_TIMEOUT_MS, timeoutMs),
+      maxRetries: parsePositiveInt(process.env.BASETEN_MAX_RETRIES, Math.max(1, maxRetries - 1)),
+      maxTokens: parsePositiveInt(process.env.BASETEN_MAX_TOKENS, maxTokens),
+      retryBaseDelayMs: parsePositiveInt(process.env.BASETEN_RETRY_BASE_DELAY_MS, retryBaseDelayMs),
+    });
   }
 
   const primaryKey = process.env.GLM_API_KEY?.trim();
@@ -272,13 +321,26 @@ function getProviderChain(): ProviderConfig[] {
     });
   }
 
-  return sortProvidersByPriority(providers);
+  const forceOpenRouterOnly = parseBooleanFlag(process.env.ASSISTANT_OPENROUTER_ONLY, false);
+  const forcedProvider = parseProviderSource(process.env.ASSISTANT_PROVIDER_FORCE);
+
+  let chain = sortProvidersByPriority(providers);
+  if (forcedProvider) {
+    chain = chain.filter((provider) => provider.source === forcedProvider);
+    return chain;
+  }
+  if (forceOpenRouterOnly) {
+    chain = chain.filter((provider) => provider.source === 'openrouter');
+  }
+  return chain;
 }
 
 async function callProviderWithRetry(
   provider: ProviderConfig,
   messages: LlmMessage[],
-  logger: AppLogger
+  logger: AppLogger,
+  responseFormat?: LlmResponseFormat,
+  abortSignal?: AbortSignal
 ): Promise<ProviderCallResult> {
   let lastFailure: ProviderFailure = {
     success: false,
@@ -288,18 +350,56 @@ async function callProviderWithRetry(
   };
 
   for (let attempt = 0; attempt <= provider.maxRetries; attempt += 1) {
-    const result = await callProviderOnce(provider, messages, attempt + 1);
+    if (abortSignal?.aborted) {
+      return {
+        success: false,
+        kind: 'timeout',
+        details: 'request_aborted',
+        attempts: Math.max(1, attempt),
+      };
+    }
+
+    const shouldUseResponseFormat = shouldAttachResponseFormat(provider, responseFormat);
+    const formatForAttempt = shouldUseResponseFormat ? responseFormat : undefined;
+    const result = await callProviderOnce(provider, messages, attempt + 1, formatForAttempt, abortSignal);
     if (result.success) {
+      if (formatForAttempt) {
+        markResponseFormatSupport(provider, true);
+      }
+      result.responseFormatApplied = Boolean(formatForAttempt);
+      result.responseFormatFallbackUsed = false;
       return result;
     }
 
     lastFailure = result;
-    const shouldRetry = attempt < provider.maxRetries && isRetryableFailure(result);
-    if (!shouldRetry) {
-      return result;
+
+    if (responseFormat && shouldUseResponseFormat && shouldFallbackWithoutResponseFormat(result)) {
+      if (isResponseFormatUnsupportedFailure(result)) {
+        markResponseFormatSupport(provider, false);
+      }
+      logger.warn('provider.response_format_fallback', {
+        provider: provider.name,
+        source: provider.source,
+        model: provider.model,
+        attempt: attempt + 1,
+        status: result.status,
+      });
+
+      const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined, abortSignal);
+      if (fallbackResult.success) {
+        fallbackResult.responseFormatApplied = false;
+        fallbackResult.responseFormatFallbackUsed = true;
+        return fallbackResult;
+      }
+      lastFailure = fallbackResult;
     }
 
-    const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, result.retryAfterMs);
+    const shouldRetry = attempt < provider.maxRetries && isRetryableFailure(lastFailure);
+    if (!shouldRetry) {
+      return lastFailure;
+    }
+
+    const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, lastFailure.retryAfterMs);
     logger.info('provider.retry_scheduled', {
       provider: provider.name,
       source: provider.source,
@@ -307,11 +407,23 @@ async function callProviderWithRetry(
       attempt: attempt + 1,
       nextAttempt: attempt + 2,
       maxAttempts: provider.maxRetries + 1,
-      kind: result.kind,
-      status: result.status,
+      kind: lastFailure.kind,
+      status: lastFailure.status,
       delayMs,
     });
-    await sleep(delayMs);
+    try {
+      await sleep(delayMs, abortSignal);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          success: false,
+          kind: 'timeout',
+          details: 'request_aborted',
+          attempts: attempt + 1,
+        };
+      }
+      throw error;
+    }
   }
 
   return lastFailure;
@@ -320,11 +432,41 @@ async function callProviderWithRetry(
 async function callProviderOnce(
   provider: ProviderConfig,
   messages: LlmMessage[],
-  attempts: number
+  attempts: number,
+  responseFormat?: LlmResponseFormat,
+  abortSignal?: AbortSignal
 ): Promise<ProviderCallResult> {
+  if (abortSignal?.aborted) {
+    return {
+      success: false,
+      kind: 'timeout',
+      details: 'request_aborted',
+      attempts,
+    };
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), provider.timeoutMs);
+  let abortedByTimeout = false;
+  const timeoutId = setTimeout(() => {
+    abortedByTimeout = true;
+    controller.abort();
+  }, provider.timeoutMs);
+  const onAbort = () => controller.abort();
+  if (abortSignal) {
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+  }
   try {
+    const requestPayload: Record<string, unknown> = {
+      model: provider.model,
+      messages,
+      max_tokens: provider.maxTokens,
+      temperature: 0.4,
+      top_p: 0.9,
+    };
+    if (shouldAttachResponseFormat(provider, responseFormat)) {
+      requestPayload.response_format = responseFormat;
+    }
+
     const response = await fetch(`${trimTrailingSlash(provider.baseUrl)}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -332,13 +474,7 @@ async function callProviderOnce(
         Authorization: `Bearer ${provider.apiKey}`,
         ...(provider.extraHeaders ?? {}),
       },
-      body: JSON.stringify({
-        model: provider.model,
-        messages,
-        max_tokens: provider.maxTokens,
-        temperature: 0.4,
-        top_p: 0.9,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
 
@@ -378,6 +514,7 @@ async function callProviderOnce(
       return {
         success: false,
         kind: 'timeout',
+        details: abortedByTimeout ? 'provider_timeout' : 'request_aborted',
         attempts,
       };
     }
@@ -388,6 +525,9 @@ async function callProviderOnce(
       attempts,
     };
   } finally {
+    if (abortSignal) {
+      abortSignal.removeEventListener('abort', onAbort);
+    }
     clearTimeout(timeoutId);
   }
 }
@@ -432,10 +572,20 @@ function computeRetryDelayMs(attempt: number, baseDelayMs: number, retryAfterMs?
 
 function parseRetryAfterHeaderMs(raw: string | null): number | undefined {
   if (!raw) return undefined;
-  const seconds = Number(raw);
+  const value = raw.trim();
+  const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds > 0) {
     return Math.floor(seconds * 1000);
   }
+
+  const retryAtMs = Date.parse(value);
+  if (Number.isFinite(retryAtMs)) {
+    const remainingMs = retryAtMs - Date.now();
+    if (remainingMs > 0) {
+      return Math.floor(remainingMs);
+    }
+  }
+
   return undefined;
 }
 
@@ -446,9 +596,23 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function shouldAttachResponseFormat(
+  provider: ProviderConfig,
+  responseFormat: LlmResponseFormat | undefined
+): boolean {
+  if (!responseFormat) return false;
+  const raw = String(process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE ?? '').trim().toLowerCase();
+  const enabled = raw === '1' || raw === 'true' || raw === 'yes';
+  if (!enabled) return false;
+  if (getResponseFormatSupport(provider) === 'unsupported') {
+    return false;
+  }
+  return provider.source === 'openrouter' || provider.source === 'fallback' || provider.source === 'baseten';
+}
+
 function sortProvidersByPriority(providers: ProviderConfig[]): ProviderConfig[] {
   const rawPriority = process.env.ASSISTANT_PROVIDER_PRIORITY?.trim().toLowerCase();
-  const priority = (rawPriority || 'openrouter,glm,fallback')
+  const priority = (rawPriority || 'baseten,openrouter,glm,fallback')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
@@ -464,6 +628,25 @@ function sortProvidersByPriority(providers: ProviderConfig[]): ProviderConfig[] 
     if (ai !== bi) return ai - bi;
     return 0;
   });
+}
+
+function parseProviderSource(raw: string | undefined): ProviderSource | null {
+  const normalized = String(raw ?? '').trim().toLowerCase();
+  if (normalized === 'baseten/fp4' || normalized === 'baseten-fp4' || normalized === 'fp4') {
+    return 'baseten';
+  }
+  if (normalized === 'baseten' || normalized === 'openrouter' || normalized === 'glm' || normalized === 'fallback') {
+    return normalized;
+  }
+  return null;
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const normalized = String(raw ?? '').trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no') return false;
+  return fallback;
 }
 
 function buildOpenRouterHeaders(): Record<string, string> | undefined {
@@ -508,8 +691,92 @@ function trimTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+const RESPONSE_FORMAT_UNSUPPORTED_STATUSES = new Set<number>([400, 415, 422]);
+const RESPONSE_FORMAT_UNSUPPORTED_SIGNALS = [
+  "response_format",
+  "json_schema",
+  "unsupported",
+];
+const RESPONSE_FORMAT_SUPPORT_TTL_MS = parsePositiveInt(
+  process.env.ASSISTANT_RESPONSE_FORMAT_SUPPORT_TTL_MS,
+  15 * 60 * 1000
+);
+const responseFormatSupportByProvider = new Map<
+  string,
+  { support: 'supported' | 'unsupported'; updatedAtMs: number }
+>();
+
+function getResponseFormatSupport(provider: ProviderConfig): 'supported' | 'unsupported' | undefined {
+  const entry = responseFormatSupportByProvider.get(buildProviderSupportKey(provider));
+  if (!entry) {
+    return undefined;
+  }
+  if (Date.now() - entry.updatedAtMs > RESPONSE_FORMAT_SUPPORT_TTL_MS) {
+    responseFormatSupportByProvider.delete(buildProviderSupportKey(provider));
+    return undefined;
+  }
+  return entry.support;
+}
+
+function markResponseFormatSupport(provider: ProviderConfig, supported: boolean): void {
+  responseFormatSupportByProvider.set(buildProviderSupportKey(provider), {
+    support: supported ? 'supported' : 'unsupported',
+    updatedAtMs: Date.now(),
+  });
+}
+
+function buildProviderSupportKey(provider: ProviderConfig): string {
+  return `${provider.source}:${trimTrailingSlash(provider.baseUrl)}:${provider.model}`;
+}
+
+function isResponseFormatUnsupportedFailure(failure: ProviderFailure): boolean {
+  return (
+    shouldFallbackWithoutResponseFormat(failure) &&
+    hasResponseFormatUnsupportedSignal(failure.details)
+  );
+}
+
+function shouldFallbackWithoutResponseFormat(failure: ProviderFailure): boolean {
+  return (
+    failure.kind === 'upstream' &&
+    typeof failure.status === 'number' &&
+    RESPONSE_FORMAT_UNSUPPORTED_STATUSES.has(failure.status)
+  );
+}
+
+function hasResponseFormatUnsupportedSignal(details: string | undefined): boolean {
+  if (!details) {
+    return false;
+  }
+  const normalized = details.toLowerCase();
+  return RESPONSE_FORMAT_UNSUPPORTED_SIGNALS.some((signal) => normalized.includes(signal));
+}
+
+function createAbortError(): Error {
+  const error = new Error('aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 function summarizeProviderHttpError(status: number, rawBody: string): string {

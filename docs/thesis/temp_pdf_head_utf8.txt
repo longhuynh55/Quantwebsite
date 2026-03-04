@@ -1,0 +1,98 @@
+--- PAGE 1 ---
+ 
+ 
+ 
+                                                     FACULTY OF FINANCE AND BANKING 
+ 
+                                             GRADUATION THESIS 
+BUILDING A PAYMENT RECONCILIATION SYSTEM 
+FOR AFFILIATE MARKETING ACTIVITIES: A CASE 
+STUDY ON THE TIKTOK SHOP E-COMMERCE 
+PLATFORM 
+ 
+Supervisor           : Assoc. Prof.  Nguyễn Anh Phong 
+Student name      : Bùi Võ Kim Ngân 
+Student ID           : K214140945 
+Class                     : K21414A 
+             Ho Chi Minh City, March 2025 
+
+--- PAGE 2 ---
+ 
+ 
+ 
+VIETNAM NATIONAL UNIVERSITY, HO CHI MINH CITY 
+UNIVERSITY OF ECONOMICS AND LAW  
+FACULTY OF FINANCE AND BANKING 
+-------------------- 
+ 
+ 
+GRADUATION THESIS 
+BUILDING A PAYMENT RECONCILIATION SYSTEM 
+FOR AFFILIATE MARKETING ACTIVITIES: A CASE 
+STUDY ON THE TIKTOK SHOP E-COMMERCE 
+PLATFORM 
+ 
+                                                             Supervisor               : Assoc. Prof.  Nguyễn Anh Phong 
+                                                  Student name          : Bùi Võ Kim Ngân 
+                                                  Student ID               : K214140945 
+                                                  Class                         : K21414A 
+ 
+ 
+Ho Chi Minh City, March 2025
+
+
+--- PAGE 3 ---
+i 
+ 
+ 
+ACKNOWLEDGEMENTS 
+The duration dedicated to my graduation thesis has enabled me to implement the 
+knowledge I have received and to acquire new abilities that  will be essential for my future 
+endeavors and academic pursuits. 
+I would like to express my heartfelt gratitude to all those who have supported me 
+throughout this journey. In particular, I wish to extend my sincere appreciation to the 
+University of Economics and Law and the Faculty of Finance and Banking. The guidance and 
+encouragement from my professors have provided significant motivation during my work. 
+I would like to express my profound gratitude to Assoc. Prof. Nguyễn Anh Phong for 
+his dedication of time and effort in mentoring and assisting me during the thesis process. 
+Although I have made every effort, there may still be shortcomings in my work. 
+Therefore, I highly value any feedback from my professors that can help me improve further. 
+Once again, I sincerely thank you! 
+ 
+  
+
+--- PAGE 4 ---
+ii 
+ 
+ 
+INSTRUCTOR’S COMMENT 
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+………………………………………………………………………………………………… 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- PAGE 5 ---

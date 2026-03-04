@@ -1,0 +1,33 @@
+{
+    "cover_template": "templates/school_cover_template.docx",
+    "cover_data": "templates/cover_lieu_hoai_phuc_v2.json",
+    "chapters": [
+        "v2_finance_rewrite/ch1_introduction.rewrite.md",
+        "v2_finance_rewrite/ch2_literature_review.rewrite.md",
+        "v2_finance_rewrite/ch3_research_methodology.rewrite.md",
+        "v2_finance_rewrite/ch4_system_design_and_results.rewrite.md",
+        "v2_finance_rewrite/ch5_conclusion_and_recommendations.rewrite.md"
+    ],
+    "references": "v2_finance_rewrite/references.md",
+    "appendices": [
+        "v2_finance_rewrite/appendix_a_hypothesis_evaluation.rewrite.md"
+    ],
+    "figures_dir": "figures",
+    "mermaid_export_dir": "figures/_export",
+    "output": "generated/thesis_v2_draft.docx",
+    "formatting": {
+        "font_name": "Times New Roman",
+        "body_font_size": 13,
+        "h1_font_size": 16,
+        "h2_font_size": 14,
+        "h3_font_size": 13,
+        "line_spacing": 1.5,
+        "first_line_indent_cm": 1.27,
+        "page_margins": {
+            "top_cm": 2.5,
+            "bottom_cm": 2.5,
+            "left_cm": 3.0,
+            "right_cm": 2.0
+        }
+    }
+}

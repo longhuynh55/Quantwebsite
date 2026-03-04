@@ -668,14 +668,15 @@ async function resolveFileMtimeMs(filePath: string | null): Promise<number> {
 }
 
 async function computeDataSourceFingerprint(): Promise<string> {
-  const dataDir = getDataDir();
+  const backendStatus = await ensureDataBackendReady("data:fingerprint");
+  const dataDir = backendStatus.dataDir;
   const [stockMetadataPath, ohlcvPath, manifestPath] = await Promise.all([
     resolveFirstExistingFile(dataDir, STOCK_METADATA_FILE_CANDIDATES),
     resolveFirstExistingFile(dataDir, OHLCV_FILE_CANDIDATES),
     resolveFirstExistingFile(dataDir, MANIFEST_FILE_CANDIDATES),
   ]);
   const indexPath = path.join(dataDir, INDEX_FILE_NAME);
-  const duckdbPath = path.join(dataDir, DUCKDB_FILE_NAME);
+  const duckdbPath = backendStatus.duckdbPath || path.join(dataDir, DUCKDB_FILE_NAME);
   const fundamentalsPaths = FUNDAMENTALS_FILE_NAMES.map((fileName) => path.join(dataDir, fileName));
 
   const [
@@ -700,8 +701,10 @@ async function computeDataSourceFingerprint(): Promise<string> {
 
   return JSON.stringify({
     dataDir,
-    dataBackend: String(process.env.DATA_BACKEND ?? "auto").trim().toLowerCase(),
-    duckdbPath: String(process.env.DATA_DUCKDB_PATH ?? "").trim().toLowerCase(),
+    dataBackendRequested: backendStatus.requested,
+    dataBackendActive: backendStatus.active,
+    dataBackendReason: backendStatus.reason,
+    duckdbPath: duckdbPath.trim().toLowerCase(),
     stockMetadataPath,
     stockMetadataMtimeMs,
     ohlcvPath,
@@ -979,6 +982,13 @@ async function loadOHLCVForSymbolFromCsv(dataDir: string, symbol: string): Promi
   }
 
   if (totalRows <= 0) {
+    datasetStatusCache.ohlcv = {
+      dataset: "ohlcv",
+      status: "unknown",
+      backend: "csv",
+      source,
+      updatedAt: new Date(),
+    };
     return [];
   }
 
@@ -1117,6 +1127,13 @@ async function loadOHLCVForSymbolsFromCsv(
   }
 
   if (totalRows <= 0) {
+    datasetStatusCache.ohlcv = {
+      dataset: "ohlcv",
+      status: "unknown",
+      backend: "csv",
+      source,
+      updatedAt: new Date(),
+    };
     return dataMap;
   }
 

@@ -21,9 +21,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Brain, Sparkles, X } from "lucide-react";
+import { trackUiKpiEvent } from "@/lib/uiKpi";
+import type { StrategyBuilderAiAssistEvent } from "@/lib/uiKpiSchema";
 
 interface AiSuggestDialogProps {
-  onApplyStrategy: (nodes: StrategyNode[], edges: StrategyEdge[], name: string) => void;
+  onApplyStrategy: (nodes: StrategyNode[], edges: StrategyEdge[], name: string) => boolean | Promise<boolean>;
   className?: string;
 }
 
@@ -34,6 +36,19 @@ export const AiSuggestDialog = memo(function AiSuggestDialog({
   const [open, setOpen] = useState(false);
   const [lastWarnings, setLastWarnings] = useState<string[]>([]);
 
+  const trackAiAssistEvent = useCallback(
+    (event: StrategyBuilderAiAssistEvent, detail?: Record<string, unknown>) => {
+      trackUiKpiEvent({
+        metric: "strategy_builder_ai_assist",
+        event,
+        page: "strategy-builder",
+        source: "ai-suggest-dialog",
+        detail,
+      });
+    },
+    []
+  );
+
   const warningSummary = useMemo(() => {
     if (lastWarnings.length === 0) return null;
     const trimmed = lastWarnings.slice(0, 3);
@@ -42,12 +57,30 @@ export const AiSuggestDialog = memo(function AiSuggestDialog({
   }, [lastWarnings]);
 
   const handleApplyGenerated = useCallback(
-    (strategy: GeneratedStrategy) => {
-      const { warnings } = sanitizeGeneratedStrategyForBuilder(strategy);
+    async (strategy: GeneratedStrategy) => {
+      const sanitized = sanitizeGeneratedStrategyForBuilder(strategy);
+      const { warnings } = sanitized;
       setLastWarnings(warnings);
 
-      const graph = generatedStrategyToBuilderGraph(strategy);
-      onApplyStrategy(graph.nodes, graph.edges, graph.name);
+      const graph = generatedStrategyToBuilderGraph(sanitized.strategy);
+      let applied = false;
+      try {
+        applied = await Promise.resolve(onApplyStrategy(graph.nodes, graph.edges, graph.name));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to apply generated strategy.");
+        trackAiAssistEvent("generate_apply_failed", {
+          reason: error instanceof Error ? error.message : "unknown_error",
+        });
+        return;
+      }
+      if (!applied) {
+        trackAiAssistEvent("generate_apply_cancelled", {
+          nodes: graph.nodes.length,
+          edges: graph.edges.length,
+          warningCount: warnings.length,
+        });
+        return;
+      }
 
       if (warnings.length > 0) {
         const summary = (() => {
@@ -61,10 +94,15 @@ export const AiSuggestDialog = memo(function AiSuggestDialog({
       } else {
         toast.success("AI strategy applied to builder");
       }
+      trackAiAssistEvent("generate_apply_success", {
+        nodes: graph.nodes.length,
+        edges: graph.edges.length,
+        warningCount: warnings.length,
+      });
 
       setOpen(false);
     },
-    [onApplyStrategy]
+    [onApplyStrategy, trackAiAssistEvent]
   );
 
   return (

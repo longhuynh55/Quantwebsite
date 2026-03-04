@@ -10,7 +10,17 @@ interface RateLimitRecord {
   resetTime: number;
 }
 
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetTime: number;
+}
+
 const rateLimitStore = new Map<string, RateLimitRecord>();
+const RATE_LIMIT_BACKEND = String(process.env.RATE_LIMIT_BACKEND ?? "").trim().toLowerCase();
+const UPSTASH_REST_URL = String(process.env.UPSTASH_REDIS_REST_URL ?? "").trim().replace(/\/+$/g, "");
+const UPSTASH_REST_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN ?? "").trim();
+const UPSTASH_TIMEOUT_MS = resolveUpstashTimeoutMs();
 const TRUST_PROXY_HEADERS = process.env.TRUST_PROXY_HEADERS === "true";
 const PLATFORM_IP_HEADERS = [
   "cf-connecting-ip",
@@ -64,7 +74,7 @@ export function checkRateLimit(
   identifier: string,
   limit: number = 100,
   windowMs: number = 60000
-): { allowed: boolean; remaining: number; resetTime: number } {
+): RateLimitResult {
   const now = Date.now();
   const record = rateLimitStore.get(identifier);
 
@@ -97,6 +107,26 @@ export function checkRateLimit(
     remaining: limit - record.count,
     resetTime: record.resetTime,
   };
+}
+
+/**
+ * Async rate-limit check.
+ * Uses Upstash Redis REST when configured, otherwise falls back to in-memory buckets.
+ */
+export async function checkRateLimitAsync(
+  identifier: string,
+  limit: number = 100,
+  windowMs: number = 60000
+): Promise<RateLimitResult> {
+  if (!shouldUseUpstashBackend()) {
+    return checkRateLimit(identifier, limit, windowMs);
+  }
+  try {
+    return await checkRateLimitViaUpstash(identifier, limit, windowMs);
+  } catch {
+    // Degrade gracefully to local limiter if Upstash is unavailable.
+    return checkRateLimit(identifier, limit, windowMs);
+  }
 }
 
 /**
@@ -312,4 +342,89 @@ export function createRateLimitHeaders(
   headers.set('X-RateLimit-Remaining', String(remaining));
   headers.set('X-RateLimit-Reset', String(Math.ceil(resetTime / 1000)));
   return headers;
+}
+
+function shouldUseUpstashBackend(): boolean {
+  const explicitMemory = RATE_LIMIT_BACKEND === "memory";
+  if (explicitMemory) return false;
+  const explicitUpstash = RATE_LIMIT_BACKEND === "upstash";
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return false;
+  if (explicitUpstash) return true;
+  // Auto mode: enable Upstash whenever credentials are provided.
+  return true;
+}
+
+function resolveUpstashTimeoutMs(): number {
+  const parsed = Number.parseInt(String(process.env.UPSTASH_REDIS_TIMEOUT_MS ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 3_000;
+  return Math.max(500, Math.min(parsed, 10_000));
+}
+
+async function checkRateLimitViaUpstash(
+  identifier: string,
+  limit: number,
+  windowMs: number
+): Promise<RateLimitResult> {
+  const now = Date.now();
+  const key = `rl:${identifier}`;
+
+  const incremented = await upstashCommand("INCR", key);
+  const count = Number(incremented ?? 0);
+  if (!Number.isFinite(count) || count < 1) {
+    return checkRateLimit(identifier, limit, windowMs);
+  }
+
+  let ttlMs: number;
+  if (count === 1) {
+    await upstashCommand("PEXPIRE", key, String(windowMs));
+    ttlMs = windowMs;
+  } else {
+    const ttlResult = await upstashCommand("PTTL", key);
+    ttlMs = Number(ttlResult ?? 0);
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+      await upstashCommand("PEXPIRE", key, String(windowMs));
+      ttlMs = windowMs;
+    }
+  }
+
+  const resetTime = now + Math.max(1, ttlMs);
+  if (count > limit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetTime,
+    };
+  }
+  return {
+    allowed: true,
+    remaining: Math.max(0, limit - count),
+    resetTime,
+  };
+}
+
+async function upstashCommand(...command: string[]): Promise<unknown> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPSTASH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${UPSTASH_REST_URL}/command`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(command),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`upstash_http_${response.status}`);
+    }
+    const payload = (await response.json()) as { result?: unknown; error?: string };
+    if (payload?.error) {
+      throw new Error(payload.error);
+    }
+    return payload?.result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

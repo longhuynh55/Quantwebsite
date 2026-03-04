@@ -422,6 +422,79 @@ describe('strategyBuilderStore', () => {
 
       expect(useStrategyBuilderStore.getState().isDirty).toBe(false);
     });
+
+    it('should keep dirty state when strategy changes during in-flight save', async () => {
+      jest.useFakeTimers();
+      try {
+        act(() => {
+          useStrategyBuilderStore.getState().createNewStrategy('Test');
+          useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
+        });
+
+        const savePromise = act(async () => {
+          return useStrategyBuilderStore.getState().saveStrategy();
+        });
+
+        act(() => {
+          useStrategyBuilderStore.getState().updateStrategyName('Edited While Saving');
+        });
+
+        await jest.advanceTimersByTimeAsync(600);
+        await savePromise;
+
+        const state = useStrategyBuilderStore.getState();
+        expect(state.currentStrategy?.name).toBe('Edited While Saving');
+        expect(state.isDirty).toBe(true);
+        expect(state.isSaving).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  describe('setNodes / setEdges invariants', () => {
+    it('should prune orphan edges when setNodes removes a node', () => {
+      act(() => {
+        useStrategyBuilderStore.getState().createNewStrategy('Test');
+        useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
+        useStrategyBuilderStore.getState().addNode(createTestNode('node-2'));
+        useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-1', 'node-1', 'node-2'));
+      });
+
+      const remainingNode = useStrategyBuilderStore.getState().currentStrategy?.nodes.find((node) => node.id === 'node-1');
+      expect(remainingNode).toBeDefined();
+
+      act(() => {
+        useStrategyBuilderStore.getState().setNodes([remainingNode as StrategyNode]);
+      });
+
+      const { currentStrategy } = useStrategyBuilderStore.getState();
+      expect(currentStrategy?.nodes).toHaveLength(1);
+      expect(currentStrategy?.edges).toHaveLength(0);
+    });
+
+    it('should not mark dirty when setEdges receives the same persisted structure', async () => {
+      act(() => {
+        useStrategyBuilderStore.getState().createNewStrategy('Test');
+        useStrategyBuilderStore.getState().addNode(createTestNode('node-1'));
+        useStrategyBuilderStore.getState().addNode(createTestNode('node-2'));
+        useStrategyBuilderStore.getState().addEdge(createTestEdge('edge-1', 'node-1', 'node-2'));
+      });
+
+      await act(async () => {
+        await useStrategyBuilderStore.getState().saveStrategy();
+      });
+      expect(useStrategyBuilderStore.getState().isDirty).toBe(false);
+
+      const existingEdges = useStrategyBuilderStore.getState().currentStrategy?.edges ?? [];
+      const equivalentEdges = existingEdges.map((edge) => ({ ...edge }));
+
+      act(() => {
+        useStrategyBuilderStore.getState().setEdges(equivalentEdges);
+      });
+
+      expect(useStrategyBuilderStore.getState().isDirty).toBe(false);
+    });
   });
 
   describe('helper hooks', () => {

@@ -1,0 +1,658 @@
+KHÓA LUẬN TỐT NGHIỆP
+QuantVN Strategy Forge: Thiết kế và triển khai nền tảng phân tích định lượng hỗ trợ xây dựng chiến lược giao dịch và kiểm định quá khứ trên thị trường cổ phiếu Việt Nam (HOSE)
+KHÓA LUẬN TỐT NGHIỆP
+QuantVN Strategy Forge: Thiết kế và triển khai nền tảng phân tích định lượng hỗ trợ xây dựng chiến lược giao dịch và kiểm định quá khứ trên thị trường cổ phiếu Việt Nam (HOSE)
+TPHCM, THÁNG, 2/2026
+TPHCM, THÁNG, 2/2026
+GVHD: PGS.TS. NGUYỄN ANH PHONG
+SVTH: LIÊU HOÀI PHÚC
+MSSV: K224141735
+LỚP: K22414C
+GVHD: PGS.TS. NGUYỄN ANH PHONG
+SVTH: LIÊU HOÀI PHÚC
+MSSV: K224141735
+LỚP: K22414C
+KHOA TÀI CHÍNH – NGÂN HÀNG
+KHOA TÀI CHÍNH – NGÂN HÀNG
+ĐẠI HỌC QUỐC GIA THÀNH PHỐ HỒ CHÍ MINH
+TRƯỜNG ĐẠI HỌC KINH TẾ - LUẬT
+KHOA TÀI CHÍNH - NGÂN HÀNG
+────────────────────
+KHÓA LUẬN TỐT NGHIỆP
+QuantVN Strategy Forge: Thiết kế và triển khai nền tảng phân tích định lượng hỗ trợ xây dựng chiến lược giao dịch và kiểm định quá khứ trên thị trường cổ phiếu Việt Nam (HOSE)
+GVHD : PGS.TS. Nguyễn Anh Phong
+SVTH : Liêu Hoài Phúc
+MSSV: K224141735<w:t xml:space="preserve">
+LỚP : K22414C
+TP. Hồ Chí Minh, tháng 02 năm 2026
+LỜI CAM ĐOAN
+Em xin cam đoan khóa luận tốt nghiệp này là công trình nghiên cứu do em thực hiện, dưới sự hướng dẫn của PGS.TS. Nguyễn Anh Phong. Các dữ liệu, kết quả và nhận định trình bày trong khóa luận là trung thực và chưa được công bố trong bất kỳ công trình nào khác.
+Em hoàn toàn chịu trách nhiệm về tính chính xác và tính liêm chính của nội dung trình bày trong khóa luận.
+TP. Hồ Chí Minh, tháng 02 năm 2026
+Liêu Hoài Phúc
+NHẬN XÉT CỦA GIẢNG VIÊN HƯỚNG DẪN
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+...........................................................................................................................................
+LỜI CẢM ƠN
+Em xin bày tỏ lòng biết ơn chân thành đến PGS.TS. Nguyễn Anh Phong, người đã tận tình hướng dẫn, góp ý sâu sắc và luôn hỗ trợ em trong suốt quá trình thực hiện khóa luận.
+Em cũng xin gửi lời cảm ơn đến quý thầy cô Khoa Tài chính - Ngân hàng, Trường Đại học Kinh tế - Luật (UEL), Đại học Quốc gia TP. Hồ Chí Minh, đã trang bị cho em nền tảng kiến thức chuyên môn về tài chính - ngân hàng để thực hiện nghiên cứu này.
+Em trân trọng cảm ơn các bạn bè  đã đưa ra những phản hồi mang tính xây dựng, góp phần cải thiện thiết kế nền tảng và chất lượng bản thảo khóa luận.
+Cuối cùng, em xin cảm ơn gia đình vì sự động viên và ủng hộ bền bỉ trong suốt chặng đường này.
+Mọi hạn chế còn lại trong khóa luận, nếu có, là trách nhiệm của riêng của chính bản than em.
+TÓM TẮT
+Nghiên cứu này phát triển QuantVN Strategy Forge, một nền tảng phân tích định lượng trên web cho cổ phiếu niêm yết HOSE, và đánh giá theo ba câu hỏi nghiên cứu: (i) liệu các quy trình định lượng cốt lõi có thể được thiết kế đủ dễ sử dụng cho nhà đầu tư cá nhân Việt Nam, (ii) liệu các kiểm định quá khứ có thể được thực hiện với các giả định minh bạch theo bối cảnh thị trường nội địa, và (iii) liệu một trợ lý có thể giải thích các kết quả tính toán mà không bịa đặt con số. Hệ thống bao phủ 412 mã với dữ liệu ngày giai đoạn 2018-2025 và hỗ trợ sàng lọc, kiểm định quá khứ, tối ưu danh mục, báo cáo rủi ro và khám phá nhân tố. Trợ lý được grounding bằng công cụ: trợ lý gọi đúng các mô-đun tính toán mà nền tảng sử dụng và từ chối trả lời khi không có bằng chứng cần thiết. Đánh giá dựa trên bằng chứng triển khai và các minh họa có thể tái lập, thay vì một nghiên cứu người dùng có kiểm soát; do đó, kết luận về mức độ tin cậy của người dùng và tác động hành vi còn bị hạn chế.
+Từ khóa: phân tích định lượng, HOSE, kiểm định quá khứ, tối ưu danh mục, trợ lý AI, cổ phiếu Việt Nam, fintech
+MỤC LỤC
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:r w:rsidRPr="00B12F53"><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:fldChar w:fldCharType="separate"/></w:r><w:hyperlink w:anchor="_Toc223025070" w:history="1"><w:r w:rsidR="00DD2EA4" w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1. Giới thiệu</w:r><w:r w:rsidR="00DD2EA4" w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidR="00DD2EA4" w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025070 \h </w:instrText></w:r><w:r w:rsidR="00DD2EA4" w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidR="00DD2EA4" w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>1
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025071" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.1 Bối cảnh và động lực</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025071 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>1
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025072" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.2 Mục tiêu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025072 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>1
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025073" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.3 Câu hỏi nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025073 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>2
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025074" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.4 Phạm vi và giả định</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025074 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>2
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025075" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.5 Đóng góp</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025075 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>3
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025076" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>1.6 Cấu trúc khóa luận</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025076 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>3
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025077" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2. Tổng quan tài liệu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025077 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>4
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025078" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.1 Lý thuyết danh mục và hiệu quả thị trường</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025078 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>4
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025079" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.2 Mô hình nhân tố và các bất thường thực nghiệm</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025079 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>4
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025080" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.3 Thiết kế chiến lược giao dịch và kiểm định quá khứ</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025080 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>5
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025081" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.4 Đo lường rủi ro</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025081 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>5
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025082" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.5 Trợ lý AI và sinh nội dung tăng cường truy hồi</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025082 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>6
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025083" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.6 Nền tảng fintech cho nhà đầu tư cá nhân tại Việt Nam</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025083 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>6
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025084" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.7 Tổng hợp</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025084 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>8
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025085" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>2.8 Giả thuyết nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025085 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>8
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025086" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3. Phương pháp nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025086 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>10
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025087" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3.1 Cách tiếp cận nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025087 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>10
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025088" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3.2 Thu thập và mô tả dữ liệu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025088 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>11
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025089" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3.3 Các phương pháp định lượng</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025089 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>13
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025090" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3.4 Thiết kế trợ lý AI</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025090 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>15
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025091" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>3.5 Cách tiếp cận đánh giá</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025091 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>15
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025092" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4. Kết quả nghiên cứu và thảo luận</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025092 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>16
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025093" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.1 Tổng quan nền tảng đã phát triển</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025093 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>16
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025094" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.2 Quy trình phân tích</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025094 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>17
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025095" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.3 Kiểm định quá khứ chiến lược với các tham số thị trường Việt Nam</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025095 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>17
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025096" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.4 Trình xây dựng chiến lược trực quan</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025096 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>19
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025097" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.5 Tối ưu hóa danh mục và đánh giá rủi ro</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025097 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>20
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025098" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.6 Phân tích có hỗ trợ AI</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025098 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>21
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025099" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7 Thảo luận</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025099 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>21
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025100" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7.1 Giải quyết khoảng trống nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025100 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>21
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025101" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7.2 Giá trị của tham số thị trường địa phương</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025101 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>22
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025102" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7.3 Nền tảng chất lượng dữ liệu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025102 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>22
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025103" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7.4 Hạn chế</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025103 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>22
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025104" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.7.5 Đánh giá giả thuyết</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025104 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>22
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025105" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>4.8 Tóm tắt chương</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025105 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>23
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025106" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>5. Kết luận và khuyến nghị</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025106 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>24
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025107" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>5.1 Kết luận</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025107 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>24
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025108" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>5.2 Khuyến nghị</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025108 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>24
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025109" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>Phụ lục A: Đánh giá giả thuyết nghiên cứu</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025109 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>30
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025110" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>A.1 Tóm tắt giả thuyết</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025110 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>30
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025111" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>A.2 Đánh giá chi tiết</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025111 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>31
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025112" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>H1: Khả năng tiếp cận các công cụ định lượng</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025112 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>31
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025113" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>H2: Tích hợp tham số thị trường Việt Nam</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025113 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>32
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025114" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>H3: Thiết kế chiến lược no-code cho nhà đầu tư cá nhân Việt Nam</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025114 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>32
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025115" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>H4: Đường ống kiểm định dữ liệu cho chất lượng dữ liệu HOSE</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025115 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>33
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025116" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>H5: Độ tin cậy của trợ lý AI</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025116 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>34
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223025117" w:history="1"><w:r w:rsidRPr="00B12F53"><w:rPr><w:rStyle w:val="Hyperlink"/><w:rFonts w:eastAsia="Times New Roman"/><w:b/><w:noProof/><w:color w:val="auto"/></w:rPr><w:t>A.3 Ảnh chụp màn hình nền tảng bổ sung</w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223025117 \h </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr></w:r><w:r w:rsidRPr="00B12F53"><w:rPr><w:noProof/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/></w:rPr><w:t>35
+DANH MỤC HÌNH
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \h \z \c "Hình" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:hyperlink w:anchor="_Toc223077824" w:history="1"><w:r w:rsidRPr="004414AC"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Hình 1: Giao diện landing page của QuantVN Strategy</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223077824 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>17
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223077825" w:history="1"><w:r w:rsidRPr="004414AC"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Hình 2: Quy trình phân tích có hệ thống trên nền tảng QuantVN</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223077825 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>17
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223077826" w:history="1"><w:r w:rsidRPr="004414AC"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Hình 3: Luồng quy trình kiểm định quá khứ (backtesting) tích hợp kiểm định chất lượng dữ liệu và các tham số chi phí thị trường Việt Nam</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223077826 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>19
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223077827" w:history="1"><w:r w:rsidRPr="004414AC"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Hình 4: Strategy Builder trực quan với canvas chiến lược dạng nút và thao tác kéo thả</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223077827 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>20
+DANH MỤC BẢNG
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:r w:rsidRPr="00B12F53"><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidRPr="00B12F53"><w:instrText xml:space="preserve"> TOC \h \z \c "Bảng" </w:instrText></w:r><w:r w:rsidRPr="00B12F53"><w:fldChar w:fldCharType="separate"/></w:r><w:hyperlink w:anchor="_Toc223078631" w:history="1"><w:r w:rsidR="00732546" w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Bảng 1: Câu hỏi nghiên cứu</w:r><w:r w:rsidR="00732546"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r w:rsidR="00732546"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078631 \h </w:instrText></w:r><w:r w:rsidR="00732546"><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r w:rsidR="00732546"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>2
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223078632" w:history="1"><w:r w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Bảng 2: So sánh tính năng các nền tảng dành cho nhà đầu tư Việt Nam</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078632 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>8
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223078633" w:history="1"><w:r w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Bảng 3: Câu hỏi nghiên cứu, giả thuyết, và phương pháp đánh giá.</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078633 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>11
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223078634" w:history="1"><w:r w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Bảng 4: Mô tả bộ dữ liệu</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078634 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>12
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223078635" w:history="1"><w:r w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t>Bảng 5: Thống kê mô tả của bộ dữ liệu OHLCV (HOSE, 2018-2025)</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078635 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>13
+<w:tab w:val="right" w:leader="dot" w:pos="9061"/></w:tabs><w:spacing w:line="360" w:lineRule="auto"/><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:noProof/><w:kern w:val="2"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="vi-VN" w:eastAsia="vi-VN"/><w14:ligatures w14:val="standardContextual"/></w:rPr></w:pPr><w:hyperlink w:anchor="_Toc223078636" w:history="1"><w:r w:rsidRPr="00CB0AC7"><w:rPr><w:rStyle w:val="Hyperlink"/><w:b/><w:bCs/><w:noProof/></w:rPr><w:t xml:space="preserve">Bảng 6: Các thước đo rủi ro chính do nền tảng cung cấp</w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:instrText xml:space="preserve"> PAGEREF _Toc223078636 \h </w:instrText></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr></w:r><w:r><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r><w:r w:rsidR="009D7220"><w:rPr><w:noProof/><w:webHidden/></w:rPr><w:t>21
+DANH MỤC TỪ VIẾT TẮT
+Viết tắt
+Ý nghĩa
+AI
+Trí tuệ nhân tạo
+API
+Giao diện lập trình ứng dụng
+ATR
+Biên độ dao động thực trung bình
+CAGR
+Tốc độ tăng trưởng kép hằng năm
+CAPM
+Mô hình định giá tài sản vốn
+CVaR
+Giá trị rủi ro có điều kiện
+EMA
+Đường trung bình động lũy thừa
+EMH
+Giả thuyết thị trường hiệu quả
+HML
+Nhân tố giá trị High Minus Low
+HNX
+Sở Giao dịch Chứng khoán Hà Nội
+HOSE
+Sở Giao dịch Chứng khoán TP. Hồ Chí Minh
+LLM
+Mô hình ngôn ngữ lớn
+MACD
+Phân kỳ/hội tụ trung bình động
+MPT
+Lý thuyết danh mục hiện đại
+NLP
+Xử lý ngôn ngữ tự nhiên
+OHLCV
+Open-High-Low-Close-Volume
+RAG
+Sinh nội dung tăng cường truy hồi
+ROE
+Tỷ suất sinh lời trên vốn chủ sở hữu
+RSI
+Chỉ số sức mạnh tương đối
+SMA
+Đường trung bình động đơn giản
+SMB
+Nhân tố quy mô Small Minus Big
+SSI
+Công ty Cổ phần Chứng khoán SSI
+TCBS
+Công ty Cổ phần Chứng khoán Kỹ Thương
+UPCoM
+Thị trường giao dịch cổ phiếu công ty đại chúng chưa niêm yết
+VaR
+Giá trị rủi ro
+VND
+Việt Nam đồng
+P/E
+Hệ số giá trên lợi nhuận mỗi cổ phiếu
+P/B
+Hệ số giá trên giá trị sổ sách
+1. Giới thiệu
+1.1 Bối cảnh và động lực
+Thị trường chứng khoán Việt Nam đã mở rộng nhanh trong thập kỷ qua. Đến năm 2024, số lượng tài khoản giao dịch đạt 9,2 triệu, vượt mục tiêu năm 2025 của Chính phủ; nhà đầu tư cá nhân chiếm hơn 80% giá trị giao dịch bình quân ngày trên Sở Giao dịch Chứng khoán TP. Hồ Chí Minh (HOSE) (FiinPro, 2024). Song song, thị trường fintech Việt Nam - ước khoảng 16,9 tỷ USD năm 2024 - được dự báo đạt 62,7 tỷ USD vào năm 2033, được hỗ trợ bởi tỷ lệ sử dụng điện thoại thông minh cao (84%) và mức độ tham gia số của người dân (IMARC Group, 2024).
+Mặc dù mức độ tham gia thị trường tăng, nhà đầu tư cá nhân Việt Nam vẫn thiếu công cụ định lượng theo chuỗi quy trình đầy đủ. TradingView được sử dụng phổ biến để xem biểu đồ, nhưng dữ liệu HOSE và các quy ước địa phương chưa được hỗ trợ đầy đủ (TradingView, n.d.). Phần lớn nền tảng giao dịch thuật toán quốc tế không hỗ trợ HOSE, trong khi các nền tảng của công ty chứng khoán trong nước như TCBS, SSI iBoard và VNDirect ưu tiên khâu giao dịch và biểu đồ cơ bản, và hỗ trợ hạn chế đối với kiểm định quá khứ có thể tái lập, tối ưu danh mục, phân tích nhân tố hoặc các thước đo rủi ro hướng tới nhà đầu tư cá nhân (TCBS, n.d.; SSI, n.d.). Vì vậy, việc áp dụng phương pháp định lượng thường đòi hỏi tự viết mã và chuẩn bị dữ liệu bên ngoài hệ sinh thái công ty chứng khoán.
+Các mô hình ngôn ngữ lớn (LLM) có thể giảm rào cản tương tác với phân tích định lượng thông qua giao diện hội thoại, nhưng dễ gặp hiện tượng ảo giác (hallucination) - tạo ra phát biểu trôi chảy nhưng sai (Lin et al., 2022). Trong tài chính, dạng sai lệch này đặc biệt nghiêm trọng vì người dùng có thể hành động dựa trên các thống kê bị bịa đặt. Sinh nội dung tăng cường truy hồi (RAG) có thể giảm rủi ro bằng cách grounding đầu ra trên bằng chứng được truy hồi (Lewis et al., 2020), nhưng hiệu quả phụ thuộc vào tính đúng đắn và cấu trúc của dữ liệu nền, cũng như các phép tính dùng để tạo ra kết quả số.
+1.2 Mục tiêu
+Nghiên cứu này thiết kế và đánh giá QuantVN Strategy Forge, một nền tảng phân tích định lượng trên web cho cổ phiếu Việt Nam, với nhà đầu tư cá nhân và sinh viên tài chính là nhóm người dùng mục tiêu chính. Nền tảng hướng tới:
+• Sàng lọc cổ phiếu bằng các chỉ báo kỹ thuật và một số chỉ tiêu cơ bản được chọn.
+• Thiết kế, kiểm định quá khứ và so sánh các chiến lược dựa trên luật với giả định khớp lệnh và chi phí được nêu rõ.
+• Xây dựng danh mục và phân tích rủi ro bằng các phương pháp định lượng đã được thừa nhận.
+• Diễn giải các đầu ra định lượng thông qua trợ lý bị ràng buộc bởi bằng chứng tính toán.
+• Học các khái niệm tài chính định lượng cốt lõi thông qua giải thích ngắn gắn với đầu ra của nền tảng.
+1.3 Câu hỏi nghiên cứu
+STT
+Câu hỏi nghiên cứu
+RQ1
+Làm thế nào có thể thiết kế một nền tảng web để cung cấp các công cụ phân tích định lượng dễ tiếp cận cho nhà đầu tư cá nhân Việt Nam trên HOSE?
+RQ2
+Nền tảng hiệu quả đến đâu trong việc giúp người dùng thiết kế, kiểm định quá khứ và đánh giá chiến lược giao dịch với các giả định minh bạch?
+RQ3
+Một trợ lý AI có thể cung cấp các giải thích đáng tin cậy, dựa trên bằng chứng, cho kết quả định lượng mà không bịa đặt các khẳng định không được hỗ trợ hay không?
+Bảng 1: Câu hỏi nghiên cứu
+1.4 Phạm vi và giả định
+Nền tảng tập trung vào phân tích cổ phiếu theo tần suất ngày cho HOSE, bao phủ 412 mã niêm yết với dữ liệu lịch sử giai đoạn 2018-2025. Phạm vi của hệ thống là hỗ trợ ra quyết định và giáo dục tài chính; không bao gồm tích hợp với công ty chứng khoán, định tuyến lệnh tự động hoặc giao dịch thời gian thực. Trợ lý AI phụ thuộc vào nhà cung cấp LLM bên ngoài, và phần đánh giá nhấn mạnh vào cơ chế grounding bằng công cụ và thực thi chính sách hơn là huấn luyện mô hình.
+1.5 Đóng góp
+Khóa luận đóng góp ba nội dung:
+1. Một nền tảng web tích hợp cho cổ phiếu HOSE kết hợp sàng lọc, kiểm định quá khứ chiến lược, tối ưu danh mục, đo lường rủi ro và phân tích nhân tố trong một quy trình thống nhất, hướng tới người dùng không lập trình.
+2. Một thiết kế trợ lý AI ràng buộc giải thích vào các đầu ra tính toán của nền tảng và từ chối trả lời khi không thể tạo ra bằng chứng hỗ trợ cần thiết.
+3. Một kho nội dung học tập liên kết các khái niệm tài chính định lượng với các công cụ tương ứng trên nền tảng, hỗ trợ tự học.
+1.6 Cấu trúc khóa luận
+Chương 2 tổng hợp các nền tảng lý thuyết trong tài chính định lượng, phương pháp kiểm định quá khứ và phân tích tài chính có trợ lý AI, đồng thời hình thành các giả thuyết nghiên cứu. Chương 3 trình bày phương pháp nghiên cứu, bao gồm thu thập dữ liệu và các phương pháp định lượng được sử dụng. Chương 4 mô tả thiết kế hệ thống, minh họa các chức năng đã triển khai và thảo luận kết quả. Chương 5 kết luận, nêu hạn chế và định hướng phát triển tiếp theo.
+2. Tổng quan tài liệu
+Chương này tổng hợp các nền tảng lý thuyết và bằng chứng thực nghiệm liên quan đến thiết kế nền tảng: lý thuyết danh mục và hiệu quả thị trường; mô hình nhân tố và các bất thường đã được ghi nhận; phương pháp kiểm định quá khứ và các giả định thực thi; đo lường rủi ro; và các ràng buộc về độ tin cậy đối với phân tích tài chính có trợ lý AI. Từ đó, chương liên hệ các mạch nội dung này với bối cảnh nhà đầu tư cá nhân tại Việt Nam.
+2.1 Lý thuyết danh mục và hiệu quả thị trường
+Lý thuyết Danh mục Hiện đại (MPT), do Markowitz (1952) đề xuất, cho rằng nhà đầu tư nên đánh giá danh mục theo lợi suất kỳ vọng và rủi ro (được đo bằng phương sai) thay vì phân tích từng chứng khoán riêng lẻ. Biên hiệu quả (efficient frontier) biểu diễn tập các danh mục đạt lợi suất kỳ vọng lớn nhất tương ứng với mỗi mức rủi ro. Mô hình Định giá Tài sản Vốn (CAPM) mở rộng khung này bằng cách liên hệ lợi suất kỳ vọng với rủi ro hệ thống thông qua beta thị trường (Sharpe, 1964; Lintner, 1965).
+Giả thuyết Thị trường Hiệu quả (EMH) phân biệt các mức hiệu quả dạng yếu, bán mạnh và mạnh tùy theo mức độ giá phản ánh đầy đủ thông tin sẵn có (Fama, 1970). Dù nhiều bằng chứng về các bất thường thách thức cách diễn giải nghiêm ngặt của EMH, khuôn khổ này vẫn hữu ích để nhấn mạnh rằng đầu ra định lượng cần được hiểu là có điều kiện theo giả định mô hình và dữ liệu, chứ không phải dự báo chắc chắn.
+Đối với thị trường Việt Nam, các nghiên cứu về hiệu quả thị trường HOSE cho thấy hiệu quả dạng yếu với những khoảng kém hiệu quả lặp lại, đặc biệt quanh các sự kiện công bố thông tin và thay đổi chính sách (Truong et al., 2010). Điều này gợi ý nhu cầu về công cụ có thể đánh giá chiến lược một cách hệ thống thay vì dựa vào nhận định không chính thức.
+2.2 Mô hình nhân tố và các bất thường thực nghiệm
+Ngoài beta thị trường, nghiên cứu thực nghiệm đã xác định các nhân tố hệ thống liên quan đến biến thiên lợi suất theo lát cắt ngang. Mô hình ba nhân tố Fama-French bổ sung các nhân tố quy mô (SMB) và giá trị (HML) (Fama &amp; French, 1993), và các nghiên cứu sau đó mở rộng thành mô hình năm nhân tố bằng cách thêm khả năng sinh lời và đầu tư (Fama &amp; French, 2015). Nhân tố động lượng (momentum) - khuynh hướng các cổ phiếu tăng tốt gần đây tiếp tục vượt trội - cũng được ghi nhận như một bất thường bền vững (Jegadeesh &amp; Titman, 1993).
+Harvey, Liu và Zhu (2016) cảnh báo rằng nhiều nhân tố được công bố không còn ý nghĩa khi điều chỉnh theo kiểm định nhiều lần, cho thấy việc khai thác dữ liệu có thể dễ dàng tạo ra kết quả giả. Vì vậy, phân tích nhân tố cung cấp cho người dùng cuối nên được trình bày theo hướng khám phá và kèm theo các lưu ý rõ ràng.
+2.3 Thiết kế chiến lược giao dịch và kiểm định quá khứ
+Các chỉ báo kỹ thuật như đường trung bình (SMA, EMA), Chỉ số Sức mạnh Tương đối (RSI), Phân kỳ/Hội tụ Trung bình Động (MACD) và Dải Bollinger biến đổi dữ liệu giá thành tín hiệu dùng cho các chiến lược giao dịch có hệ thống. Dù từng chỉ báo riêng lẻ có sức dự báo hạn chế, chúng cung cấp một khung cấu trúc cho việc thiết kế chiến lược có thể được đánh giá thông qua kiểm định quá khứ (Murphy, 1999).
+Kiểm định quá khứ - mô phỏng lịch sử một luật giao dịch - là trung tâm để đánh giá ý tưởng chiến lược, nhưng cũng có thể tạo ra bằng chứng gây hiểu lầm nếu các rào chắn phương pháp luận yếu. Bailey, Borwein, López de Prado và Zhu (2016) nêu các nguồn gây quá khớp trong kiểm định quá khứ, bao gồm thiên lệch nhìn trước (look-ahead bias), thiên lệch sống sót (survivorship bias), giả định chi phí phi thực tế và hiệu ứng lựa chọn do chỉ báo cáo kết quả tốt nhất trong rất nhiều thử nghiệm. Tương tự, Lo (2002) lập luận rằng các thước đo hiệu suất có thể bị diễn giải sai nếu thiếu bối cảnh rõ ràng về thiết kế đánh giá và các giả định.
+Vì vậy, quy trình kiểm định quá khứ trong nghiên cứu này coi thời điểm thực thi, chi phí giao dịch và các giả định về chất lượng dữ liệu là các tham số đầu vào hiển thị cho người dùng, thay vì các mặc định ngầm.
+2.4 Đo lường rủi ro
+Đánh giá rủi ro danh mục thường dựa trên các thước đo bổ trợ nhau. Các đại lượng dựa trên phương sai (ví dụ: độ biến động và beta) phản ánh mức phân tán, trong khi các thước đo rủi ro đuôi như Giá trị chịu rủi ro (VaR) và VaR có điều kiện (CVaR, hay Expected Shortfall) tập trung vào các kịch bản bất lợi (Artzner et al., 1999; Rockafellar &amp; Uryasev, 2000). Thống kê suy giảm (drawdown) cung cấp một thước đo trực quan về mức giảm vốn từ đỉnh xuống đáy. Các thước đo này nhạy với chất lượng dữ liệu (ví dụ: chuỗi lợi suất phải được căn chỉnh khi ước lượng hiệp phương sai và cần xử lý ngoại lai khi ước lượng rủi ro đuôi). Trong bối cảnh Việt Nam, biên độ giá ±7% theo quy định của HOSE (HOSE, n.d.) có thể làm cụt phân phối lợi suất, từ đó ảnh hưởng đến ước lượng biến động và rủi ro đuôi.
+2.5 Trợ lý AI và sinh nội dung tăng cường truy hồi
+Các mô hình ngôn ngữ lớn (LLM) có năng lực xử lý ngôn ngữ tự nhiên mạnh, do đó có thể đóng vai trò như giao diện hội thoại cho các công cụ tài chính; tuy nhiên, chúng có thể ảo giác, tạo ra văn bản có vẻ hợp lý nhưng sai (Lin et al., 2022). Trong tài chính, các phát biểu số bị ảo giác về lợi suất, rủi ro hoặc hiệu suất có thể trực tiếp làm sai lệch quyết định của người dùng.
+Sinh nội dung tăng cường truy hồi (RAG) giảm rủi ro này bằng cách điều kiện hóa đầu ra theo bằng chứng được truy hồi, thay vì chỉ dựa vào tri thức tham số (Lewis et al., 2020). Trong thực tế, grounding câu trả lời trên các nguồn có cấu trúc và có thể kiểm chứng có thể giảm các khẳng định không được hỗ trợ, nhưng không đảm bảo tính đúng đắn về mặt số liệu nếu các phép tính nền không đáng tin cậy. Các mô hình chuyên miền như BloombergGPT (Wu et al., 2023) và FinGPT (Yang et al., 2023) gợi ý rằng huấn luyện theo miền tài chính có thể cải thiện một số tác vụ NLP, nhưng ảo giác vẫn có thể xảy ra đối với các khẳng định số cụ thể.
+Đánh giá một câu trả lời có thực sự đáng tin cậy hay không đòi hỏi vượt qua các kiểm tra bề mặt. Min et al. (2023) đề xuất tách câu trả lời thành các mệnh đề nguyên tử và kiểm chứng từng mệnh đề. Rajpurkar et al. (2018) lập luận rằng hệ thống cần biết khi nào không thể trả lời và khi đó việc từ chối (abstain) tốt hơn là bịa đặt.
+2.6 Nền tảng fintech cho nhà đầu tư cá nhân tại Việt Nam
+Hệ sinh thái fintech dành cho nhà đầu tư cổ phiếu tại Việt Nam đang mở rộng, nhưng chuỗi công cụ vẫn rời rạc. Các nền tảng tích hợp với công ty chứng khoán do các đơn vị lớn cung cấp - như TCBS (TCBS, n.d.), SSI iBoard (SSI, n.d.) và VNDirect (VNDirect, n.d.) - thường hỗ trợ biểu đồ, đặt lệnh và sàng lọc cơ bản, nhưng hạn chế về kiểm định quá khứ chiến lược, tối ưu danh mục hoặc đo lường rủi ro hướng tới nhà đầu tư cá nhân.
+Các sản phẩm chuyên biệt trong nước cũng tồn tại nhưng thường tập trung vào nhóm người dùng hoặc quy trình hẹp. Ví dụ, Algotrade hướng tới người dùng chuyên nghiệp với giao dịch tự động và tích hợp API công ty chứng khoán (Algotrade, n.d.), trong khi Miquant đóng gói các tính năng định giá và xếp hạng dựa trên AI cho nhu cầu tiêu dùng của nhà đầu tư cá nhân (Miquant, n.d.). Cả hai không cung cấp quy trình hướng tới nhà đầu tư cá nhân cho kiểm định quá khứ chiến lược do người dùng tự định nghĩa với giả định chi phí rõ ràng, cũng như không cung cấp gói tích hợp giữa tối ưu danh mục và phân tích nhân tố.
+Ở bình diện quốc tế, TradingView là nền tảng biểu đồ được nhà đầu tư cá nhân Việt Nam sử dụng rộng rãi nhất, cung cấp phân tích kỹ thuật nâng cao với hỗ trợ dữ liệu HOSE ở mức một phần, nhưng không có kiểm định quá khứ theo các quy ước thị trường Việt Nam như chi phí giao dịch, biên độ giá và chu kỳ thanh toán (TradingView, n.d.).
+Tính năng
+TCBS / SSI
+Algotrade
+Miquant
+TradingView
+**QuantVN**
+Dữ liệu HOSE
+Có
+Có
+Có
+Một phần
+Có
+Biểu đồ và chỉ báo
+Có
+Không
+Không
+Có
+Có
+Sàng lọc cổ phiếu
+Bộ lọc cơ bản
+Không
+Xếp hạng bằng AI
+Có
+Nhiều tiêu chí
+Kiểm định quá khứ chiến lược
+Không
+Chỉ tự động hóa
+Không
+Hạn chế
+Có (5 loại)
+Trình dựng chiến lược không cần code
+Không
+Không
+Không
+Không
+Có (trực quan)
+Tối ưu danh mục
+Không
+Không
+Không
+Không
+Có (4 phương pháp)
+Phân tích rủi ro (VaR/CVaR)
+Không
+Không
+Không
+Không
+Có
+Phân tích nhân tố
+Không
+Không
+Không
+Không
+Có
+Trợ lý AI
+Không
+Không
+Chatbot
+Không
+Có (grounded bằng công cụ)
+Nội dung học tập
+-
+No
+-
+Cộng đồng
+Dự kiến
+Giá
+Miễn phí
+Trả phí
+Freemium
+Freemium
+Free
+Đối tượng mục tiêu
+Nhà đầu tư cá nhân
+Tổ chức
+Trung cấp trở lên
+Mọi đối tượng
+Nhà đầu tư cá nhân + sinh viên
+Bảng 2: So sánh tính năng các nền tảng dành cho nhà đầu tư Việt Nam
+Nguồn: Tác giả tổng hợp từ khảo sát các nền tảng (truy cập tháng 02/2026).
+2.7 Tổng hợp
+Các tài liệu được tổng hợp trong chương này cùng chỉ ra một hàm ý chung: đầu ra định lượng nhạy với các lựa chọn khi triển khai. Chẳng hạn, chi phí giao dịch có thể đảo chiều mức sinh lời tưởng như có lãi; biên độ giá trên HOSE có thể làm sai lệch ước lượng rủi ro do làm cụt lợi suất; và các giải thích hội thoại trở nên rủi ro khi các khẳng định số thiếu một chuỗi tính toán có thể kiểm chứng. Vì vậy, đối với các hệ thống hướng tới nhà đầu tư cá nhân, tính minh bạch là yêu cầu cốt lõi: các giả định cần được nêu rõ và kết quả số phải có thể tái lập.
+QuantVN Strategy Forge coi minh bạch là một ràng buộc thiết kế bằng cách liên kết sàng lọc, kiểm định quá khứ, tối ưu danh mục, phân tích rủi ro và khám phá nhân tố trong một quy trình thống nhất. Trợ lý chỉ được phép diễn giải các kết quả do chính các phép tính của nền tảng tạo ra và được thiết kế để từ chối trả lời khi không thể tạo ra bằng chứng cần thiết.
+2.8 Giả thuyết nghiên cứu
+Dựa trên các khoảng trống được tóm tắt trong Bảng 2 và các hạn chế thảo luận ở Mục 2.3-2.6, khóa luận nêu các giả thuyết sau để đánh giá thực nghiệm:
+H1: Một nền tảng phân tích định lượng tích hợp trên web có thể giúp một bộ công cụ định lượng trở nên dễ tiếp cận với nhà đầu tư cá nhân Việt Nam trên HOSE mà không đòi hỏi kiến thức lập trình hoặc cài đặt phần mềm chuyên dụng.
+H2: Việc tích hợp các tham số đặc thù của thị trường Việt Nam - bao gồm quy ước lô giao dịch, chi phí giao dịch nội địa (phí môi giới, thuế bán) và mô hình khớp lệnh tại giá mở cửa phiên kế tiếp - vào bộ máy kiểm định quá khứ sẽ cho ước lượng hiệu suất thực tế hơn so với các công cụ quốc tế tổng quát vốn bỏ qua các tham số này.
+H3: Một trình dựng chiến lược trực quan không cần code dựa trên mô hình ghép nối nút - cạnh có thể giúp nhà đầu tư cá nhân HOSE không chuyên kỹ thuật thiết kế, kiểm định quá khứ và lặp lại chiến lược giao dịch định lượng, so với các nền tảng giao dịch thuật toán không cần code hiện có (như Zerodha Streak, uTrade Algos và AlgoBulls) vốn có thiết kế chiến lược trực quan nhưng không hỗ trợ cổ phiếu Việt Nam hoặc các quy ước thị trường HOSE.
+H4: Một quy trình kiểm định dữ liệu nhiều giai đoạn, xử lý rõ ràng các vấn đề phát sinh từ việc truy cập dữ liệu nguồn mở qua vnstock - bao gồm bất nhất bản ghi giá, thiếu điều chỉnh sự kiện doanh nghiệp, tạm ngừng giao dịch và biến thiên mức độ bao phủ giữa các mã - có thể cải thiện độ tin cậy của đầu ra phân tích, dù dữ liệu truy cập miễn phí từ nguồn sở giao dịch còn hạn chế.
+H5: Một trợ lý AI có grounding bằng công cụ và chính sách từ chối trả lời có thể giải thích các đầu ra phân tích tài chính mà không tạo ra các khẳng định số không được hỗ trợ.
+Các giả thuyết này được đối chiếu với bằng chứng thực nghiệm ở Chương 4 và được tóm tắt trong Phụ lục A.
+3. Phương pháp nghiên cứu
+Chương này trình bày các quy trình được sử dụng để thiết kế, triển khai và đánh giá QuantVN Strategy Forge, nhấn mạnh cách các câu hỏi nghiên cứu được vận hành hóa và cách bằng chứng được thu thập cũng như được diễn giải.
+3.1 Cách tiếp cận nghiên cứu
+Luận văn này theo hướng nghiên cứu ứng dụng: xuất phát từ một ràng buộc thực tiễn (khả năng tiếp cận hạn chế đối với các quy trình định lượng minh bạch dành cho nhà đầu tư cá nhân Việt Nam), triển khai một nền tảng nhằm giải quyết ràng buộc đó, và đánh giá hiện vật (artefact) thu được theo các câu hỏi nghiên cứu.
+Ba phương pháp đánh giá được sử dụng để trả lời các câu hỏi nghiên cứu ở Mục 1:
+Câu hỏi nghiên cứu
+Giả thuyết liên quan
+Phương pháp đánh giá
+RQ1 (Thiết kế nền tảng nhằm tăng khả năng tiếp cận)
+H1, H3
+Thiết kế và triển khai hệ thống, so sánh tính năng với các nền tảng hiện có (Bảng 2.1)
+RQ2 (Thiết kế chiến lược và hiệu quả kiểm định quá khứ)
+H2, H3
+Trình diễn các quy trình kiểm định quá khứ (backtesting) với các giả định thực tế trên dữ liệu HOSE
+RQ3 (Độ tin cậy của trợ lý AI)
+H5
+Đánh giá phản hồi của trợ lý theo tiêu chí neo bằng chứng và hành vi từ chối trả lời
+-
+H4 (hạ tầng hỗ trợ)
+H4 (pipeline kiểm định dữ liệu) được xem là hạ tầng hỗ trợ hơn là một câu hỏi nghiên cứu độc lập. Nó hỗ trợ cả RQ1 và RQ2 vì sàng lọc và kiểm định quá khứ phụ thuộc vào tính toàn vẹn và mức độ bao phủ của các bộ dữ liệu nền; do đó, đánh giá tập trung vào các cổng chất lượng của pipeline, báo cáo mức độ bao phủ, và cơ chế xử lý lỗi cũng như các tình huống biên được tài liệu hóa.
+Bảng 3: Câu hỏi nghiên cứu, giả thuyết, và phương pháp đánh giá.
+3.2 Thu thập và mô tả dữ liệu
+Nghiên cứu sử dụng dữ liệu cổ phiếu tần suất hàng ngày từ Sở Giao dịch Chứng khoán TP. Hồ Chí Minh (HOSE), được thu thập thông qua thư viện Python mã nguồn mở vnstock (Thinh Vu, 2023).
+Bộ dữ liệu
+Phạm vi
+Tần suất
+Mô tả
+Bản ghi
+Chuỗi giá OHLCV
+2018-2025
+Hàng ngày
+Giá mở cửa, giá cao nhất, giá thấp nhất, giá đóng cửa, khối lượng theo từng mã
+768,718 dòng
+Siêu dữ liệu cổ phiếu
+Hiện tại
+Tĩnh
+Mã, tên công ty, ngành (ICB), trạng thái niêm yết
+412 mã
+Chỉ số thị trường (VN-Index)
+2020-2025
+Hàng ngày
+OHLCV của chỉ số để so sánh chuẩn (benchmark)
+~1,500 dòng
+Bảng cân đối kế toán
+2018-2025
+Hàng quý
+Tài sản, nợ phải trả, vốn chủ sở hữu theo từng mã theo từng quý
+~20,000 dòng
+Báo cáo kết quả kinh doanh
+2018-2025
+Hàng quý
+Doanh thu, lợi nhuận ròng, EPS theo từng mã theo từng quý
+~18,000 dòng
+Báo cáo lưu chuyển tiền tệ
+2018-2025
+Hàng quý
+Dòng tiền từ hoạt động kinh doanh, đầu tư, tài chính
+~16,000 dòng
+Phân loại ngành
+Hiện tại
+Tĩnh
+Mã ngành và phân ngành ICB theo từng mã
+412 mã
+Bảng 4: Mô tả bộ dữ liệu
+Các bộ dữ liệu thô được chuẩn bị ngoại tuyến trước khi được phục vụ cho ứng dụng web. Pipeline chuẩn bị thực hiện kiểm định ở mức bản ghi, loại bỏ các mục rõ ràng không hợp lệ (ví dụ: High &lt; Low hoặc Close &lt;= 0), và xuất các bộ dữ liệu runtime kèm theo một manifest tóm tắt mức độ bao phủ và các thống kê chất lượng cơ bản. Do nghiên cứu này dựa vào vnstock để thu nhận dữ liệu dễ tiếp cận, kiểm định tường minh là cần thiết nhằm giảm rủi ro các vấn đề từ nguồn dữ liệu thô lan truyền sang đầu ra sàng lọc, backtest và ước lượng rủi ro.
+Các đặc trưng chính của dữ liệu thô truy cập qua vnstock cần được xử lý tường minh bao gồm:
+• Hành động doanh nghiệp (chia tách, cổ tức, phát hành quyền mua): giá chưa điều chỉnh có thể làm sai lệch lợi suất dài hạn và các ngưỡng chỉ báo.
+• Tạm ngừng giao dịch và đình chỉ: tạo ra các khoảng trống ảnh hưởng đến các chỉ báo rolling và có thể gây thiên lệch khi so sánh nếu không được xử lý tường minh.
+• Biến thiên độ bao phủ giữa các mã: ngày niêm yết và lịch sử giao dịch khác nhau, do đó cửa sổ dữ liệu khả dụng không đồng nhất giữa các mã.
+• Giới hạn biên độ giá ngày (±7%): làm cụt lợi suất và ảnh hưởng đến ước lượng biến động cũng như rủi ro đuôi (tail-risk).
+Biến
+Số quan sát
+Trung bình
+Độ lệch chuẩn
+Nhỏ nhất
+Lớn nhất
+Giá mở cửa (nghìn VND)
+768,718
+20.28
+21.39
+0.40
+358.22
+Giá cao nhất (nghìn VND)
+768,718
+20.54
+21.62
+0.40
+358.22
+Giá thấp nhất (nghìn VND)
+768,718
+20.00
+21.14
+0.30
+334.98
+Giá đóng cửa (nghìn VND)
+768,718
+20.29
+21.40
+0.30
+334.98
+Khối lượng (cổ phiếu)
+768,718
+1,307,326
+4,290,816
+0
+249,760,712
+Lợi suất ngày (%)
+768,306
+0.066
+2.704
+-40.08
+66.67
+Bảng 5: Thống kê mô tả của bộ dữ liệu OHLCV (HOSE, 2018-2025)
+Ghi chú: Giá được vnstock lưu theo đơn vị nghìn Việt Nam đồng (VND). Các giá trị lợi suất ngày cực trị (-40% và +66%) xuất hiện ở dữ liệu giai đoạn đầu, trước khi mức giới hạn giá ngày ±7% được áp dụng đồng bộ trên HOSE, và đối với các cổ phiếu quay trở lại giao dịch sau khi bị tạm ngừng.
+3.3 Các phương pháp định lượng
+Nền tảng triển khai một tập các kỹ thuật tài chính định lượng đã được thiết lập, với các lựa chọn cấu hình và các bước xử lý dữ liệu được nêu tường minh nhằm phản ánh các ràng buộc phát sinh từ bộ dữ liệu HOSE được sử dụng trong luận văn này.
+Phân tích kỹ thuật. Các chỉ báo tiêu chuẩn bao gồm đường trung bình động đơn giản và lũy thừa (SMA, EMA), Relative Strength Index (RSI), Moving Average Convergence Divergence (MACD), Average True Range (ATR), và Bollinger Bands được tính toán một cách xác định từ dữ liệu OHLCV và được sử dụng làm bộ sinh tín hiệu cho các chiến lược giao dịch (Murphy, 1999).
+Kiểm định quá khứ (backtesting) mặc định sử dụng mô hình thực thi next-bar: các tín hiệu được tạo tại bar t sẽ được thực thi tại giá mở cửa của bar t+1 nhằm giảm look-ahead bias (Bailey et al., 2016). Chi phí giao dịch (phí môi giới, thuế bán, trượt giá - slippage) được mô hình hóa tường minh, và hệ thống báo cáo cả lợi suất ròng (sau chi phí) và lợi suất gộp (trước chi phí) để tách hành vi chiến lược khỏi tác động của chi phí.
+Các chỉ tiêu hiệu suất chính được tính như sau. Lợi suất ngày của một tài sản là:
+trong đó là giá đóng cửa đã điều chỉnh tại thời điểm t. Tỷ lệ Sharpe thường niên hóa đo lường lợi suất đã điều chỉnh theo rủi ro:
+trong đó là lợi suất danh mục trung bình theo ngày, là lãi suất phi rủi ro, và là độ lệch chuẩn của lợi suất ngày. Mức sụt giảm tối đa (maximum drawdown) phản ánh mức giảm lớn nhất từ đỉnh đến đáy:
+trong đó là giá trị danh mục tại thời điểm $t$.
+Tối ưu hóa danh mục. Bốn phương pháp được triển khai. Cách tiếp cận Mean-Variance (Markowitz, 1952) giải bài toán:
+trong đó w là vector trọng số danh mục, là ma trận hiệp phương sai của lợi suất tài sản, là vector lợi suất kỳ vọng, và là mức lợi suất mục tiêu. Danh mục Maximum Sharpe Ratio tối đa hóa (Sharpe, 1964). Danh mục Minimum Variance tối thiểu hóa  mà không đặt mục tiêu lợi suất. Risk Parity (Maillard, Roncalli, &amp; Teïletche, 2010) cân bằng đóng góp rủi ro biên của từng tài sản:
+trong đó là đóng góp rủi ro của tài sản i và n là số lượng tài sản.
+Đo lường rủi ro. Value at Risk (VaR) ở mức tin cậy biểu thị mức lỗ tối đa mà không bị vượt quá với xác suất (Artzner et al., 1999):
+Conditional VaR (CVaR), còn gọi là Expected Shortfall, đo lường mức lỗ kỳ vọng vượt quá VaR (Rockafellar &amp; Uryasev, 2000):
+Nền tảng tính VaR và CVaR ở các mức tin cậy 95% và 99% bằng mô phỏng lịch sử. Các chỉ số bổ sung bao gồm biến động thường niên hóa, mức sụt giảm tối đa và trung bình, beta tương đối so với VN-Index và tracking error.
+Phân tích nhân tố. Mức phơi nhiễm nhân tố theo lát cắt chéo được tính cho các nhân tố momentum, value, profitability, và size theo khuôn khổ của Fama và French (1993, 2015).
+3.4 Thiết kế trợ lý AI
+Trợ lý AI được triển khai như một hệ thống neo theo công cụ (tool-grounded): các phản hồi có chứa khẳng định định lượng được điều kiện hóa theo bằng chứng trả về từ các công cụ tính toán của chính nền tảng (ví dụ: backtesting, phân tích rủi ro, tính toán nhân tố và dữ liệu thị trường). Trong khi RAG thường đề cập đến việc điều kiện hóa sinh văn bản dựa trên các tài liệu được truy hồi (Lewis et al., 2020), nghiên cứu này áp dụng cùng nguyên tắc ưu tiên bằng chứng đối với các đầu ra công cụ có cấu trúc thay vì truy hồi web. Một cổng chính sách (policy gate) kiểm tra liệu các công cụ bắt buộc đã được gọi và trả về kết quả hợp lệ hay chưa; khi bằng chứng thiếu hoặc không hợp lệ, trợ lý nêu rõ hạn chế và từ chối trả lời thay vì phỏng đoán. Lựa chọn thiết kế này phù hợp với quan điểm rằng việc nhận biết khi một hệ thống không thể trả lời là một thành phần cần thiết của độ tin cậy (Rajpurkar et al., 2018).
+3.5 Cách tiếp cận đánh giá
+Nền tảng được đánh giá thông qua ba phương pháp:
+1. Mức độ đầy đủ tính năng: So sánh các tính năng đã triển khai với khoảng trống được xác định trong tổng quan tài liệu (Bảng 2)
+2. Trình diễn: Các ví dụ thực hành cho thấy quy trình end-to-end (screening → backtesting → portfolio → risk) trên dữ liệu HOSE thực
+3. Đánh giá trợ lý AI: Đánh giá mức độ neo bằng chứng của phản hồi, bao gồm tỷ lệ khẳng định không được hỗ trợ và hành vi từ chối trả lời khi bằng chứng không đủ
+Năm giả thuyết nghiên cứu (H1-H5) được xây dựng ở Mục 2 được đánh giá dựa trên bằng chứng từ quá trình phát triển và trình diễn nền tảng. Kết quả được thảo luận ở Mục 4 (đặc biệt là Mục 4.7.5) và được tóm tắt trong Phụ lục A.
+4. Kết quả nghiên cứu và thảo luận
+Chương này trình bày các đầu ra thực nghiệm từ hệ thống đã triển khai và thảo luận cách các quy trình được minh họa ánh xạ tới các khoảng trống đã xác định trước đó đối với nhà đầu tư cá nhân Việt Nam, mà không diễn giải các minh họa như bằng chứng về hiệu quả thị trường.
+4.1 Tổng quan nền tảng đã phát triển
+QuantVN Strategy Forge là một nền tảng phân tích định lượng trên nền web dành cho cổ phiếu niêm yết trên HOSE. Trong triển khai hiện tại, nền tảng bao gồm 412 mã và 768,718 bản ghi giá theo ngày trong giai đoạn 2018-2025, được bổ sung bởi báo cáo tài chính theo quý (bảng cân đối kế toán, báo cáo kết quả kinh doanh và báo cáo lưu chuyển tiền tệ). Hình 1 tóm tắt phạm vi bao phủ dữ liệu được báo cáo trên trang đích.
+Hình 1: Giao diện landing page của QuantVN Strategy
+4.2 Quy trình phân tích
+Hình 2: Quy trình phân tích có hệ thống trên nền tảng QuantVN
+4.3 Kiểm định quá khứ chiến lược với các tham số thị trường Việt Nam
+Kiểm định quá khứ (backtesting) nhạy cảm với các giả định mô hình hóa, đặc biệt trong bối cảnh các quy ước thị trường và ma sát giao dịch khác với các giá trị mặc định được dùng trong các công cụ tổng quát. Do đó, nền tảng công khai các tham số trọng yếu - chẳng hạn độ hạt của phân bổ vị thế, các thành phần chi phí giao dịch và thời điểm thực thi - để kết quả có thể được diễn giải tương ứng với các giả định đã nêu.
+• Quy mô vị thế: một tham số kích thước lô dạng số nguyên dùng để mô phỏng quy ước giao dịch lô chẵn khi cần thiết.
+• Chi phí giao dịch: phí môi giới (0.15%), thuế bán (0.1%), và trượt giá ước tính (0.05%).
+• Mô hình thực thi: khớp theo giá mở cửa phiên kế tiếp (next-open), giúp tránh giả định khớp tại giá đóng cửa tạo tín hiệu.
+Các giả định này có thể làm thay đổi đáng kể kết quả ròng. Khi kích thước lô, chi phí hoặc thời điểm thực thi bị bỏ qua hay để ngầm định, hiệu suất mô phỏng có thể phóng đại khả năng triển khai giao dịch, đặc biệt đối với các chiến lược dựa trên lợi thế nhỏ trên mỗi giao dịch. Nền tảng bao gồm năm mẫu chiến lược cơ sở dùng trong các minh họa: SMA Crossover, EMA Crossover, RSI Mean Reversion, Bollinger Band Breakout, và Momentum.
+Hình 3: Luồng quy trình kiểm định quá khứ (backtesting) tích hợp kiểm định chất lượng dữ liệu và các tham số chi phí thị trường Việt Nam
+Mỗi backtest báo cáo các thống kê hiệu suất tiêu chuẩn (ví dụ: total return, CAGR, Sharpe ratio, Sortino ratio, maximum drawdown, win rate, profit factor) cùng với các chẩn đoán chất lượng dữ liệu cơ bản: tỷ lệ bao phủ (coverage ratio), khoảng trống dữ liệu lớn nhất (largest data gap), và số dòng sử dụng được (usable rows). Việc báo cáo đồng thời hai nhóm đầu ra hỗ trợ diễn giải bằng cách tách kết quả chiến lược khỏi các hạn chế do dữ liệu thưa hoặc không đều.
+4.4 Trình xây dựng chiến lược trực quan
+Strategy Builder cung cấp một giao diện trực quan để cấu thành chiến lược bằng cách kết nối các nút chức năng (nguồn dữ liệu, chỉ báo, bộ lọc điều kiện, và đầu ra) trên một canvas tương tác. Thiết kế này nhằm cho phép người dùng đặc tả logic chiến lược mà không cần viết mã; Hình 4 trình bày một ví dụ cấu hình chiến lược dựa trên RSI.
+Hình 4: Strategy Builder trực quan với canvas chiến lược dạng nút và thao tác kéo thả
+Đặc tả trực quan làm tường minh cấu trúc chiến lược bằng cách phơi bày luồng dữ liệu và các điều kiện vào/ra lệnh được backtest sử dụng. Các chiến lược được tạo trên canvas có thể được thực thi bằng cùng động cơ backtesting và các thiết lập tham số thị trường như các chiến lược mẫu.
+4.5 Tối ưu hóa danh mục và đánh giá rủi ro
+Nền tảng cung cấp nhiều phương pháp xây dựng danh mục, bao gồm Mean-Variance (được gắn nhãn 'Markowitz' trong giao diện), Risk Parity, Minimum Variance, và Equal Weighting. Để giảm các phân bổ kém ổn định do lịch sử ngắn hoặc không nhất quán, bộ tối ưu áp đặt yêu cầu tối thiểu về độ dài lịch sử và mức chồng lắp; trong triển khai hiện tại, các ngưỡng này được đặt là 504 quan sát lợi suất ngày cho cả lịch sử theo từng tài sản và mức chồng lắp theo cặp, điều này đặc biệt hạn chế đối với các mã HOSE niêm yết mới.
+Bảng điều khiển rủi ro bổ trợ cho xây dựng danh mục bằng các thước đo rủi ro định lượng:
+Chỉ tiêu
+Mục đích
+Mức liên quan đối với nhà đầu tư Việt Nam
+VaR (95%, 99%)
+Mức lỗ kỳ vọng tối đa trong điều kiện bình thường
+Định lượng mức phơi nhiễm giảm giá theo ngày
+CVaR (Expected Shortfall)
+Mức lỗ trung bình trong các kịch bản xấu nhất
+Nắm bắt rủi ro đuôi do các cú tăng biến động đột ngột
+Beta so với VN-Index
+Mức phơi nhiễm rủi ro thị trường hệ thống
+Đo độ nhạy với biến động thị trường HOSE
+Sụt giảm tối đa (Maximum Drawdown)
+Mức sụt giảm tệ nhất trong lịch sử từ đỉnh đến đáy
+Thiết lập kỳ vọng về mức mất vốn tiềm năng
+Tỷ lệ Sortino (Sortino Ratio)
+Lợi nhuận điều chỉnh theo rủi ro (chỉ xét phía giảm)
+Phù hợp hơn Sharpe đối với nhà đầu tư ngại thua lỗ
+Bảng 6: Các thước đo rủi ro chính do nền tảng cung cấp
+Tổng hợp lại, các thước đo này cung cấp một cái nhìn thực dụng về rủi ro cho nhà đầu tư cá nhân và hỗ trợ so sánh minh bạch hơn giữa các chiến lược và danh mục.
+4.6 Phân tích có hỗ trợ AI
+Nền tảng tích hợp một trợ lý AI được thiết kế để neo các câu trả lời định lượng vào các phép tính nội bộ của nền tảng. Khi người dùng yêu cầu một chỉ tiêu cụ thể (ví dụ: Sharpe ratio của một chiến lược), trợ lý có thể gọi công cụ liên quan để lấy giá trị đã tính và báo cáo kèm theo các giả định sử dụng (chẳng hạn các tham số cấu hình). Khi không thể cung cấp bằng chứng cần thiết (ví dụ: thiếu đầu vào hoặc thực thi công cụ thất bại), trợ lý được thiết kế để từ chối trả lời (abstention) và giải thích thông tin nào không sẵn có, thay vì tạo ra một khẳng định định lượng không được hỗ trợ.
+4.7 Thảo luận
+4.7.1 Giải quyết khoảng trống nghiên cứu
+Các chương trước lập luận rằng mức độ tham gia của nhà đầu tư cá nhân tại Việt Nam tăng nhanh hơn so với mức sẵn có của các quy trình định lượng minh bạch, xuyên suốt từ đầu đến cuối. Trên thực tế, sàng lọc, kiểm định quá khứ có thể tái lập, xây dựng danh mục và chẩn đoán rủi ro thường bị phân tán trên nhiều công cụ và có thể đòi hỏi lập trình. Nền tảng triển khai tích hợp các chức năng này trong một quy trình duy nhất trên trình duyệt, xoay quanh dữ liệu HOSE và các giả định được phát biểu tường minh.
+4.7.2 Giá trị của tham số thị trường địa phương
+Việc làm rõ các ràng buộc kích thước lô, thuế bán và thời điểm thực thi làm thay đổi cách cần đọc kết quả backtest. Khi các yếu tố này không được mô hình hóa, một chiến lược có thể trông có lãi dưới các giả định lý tưởng hóa nhưng trở nên kém hấp dẫn hơn khi áp dụng các ma sát giao dịch địa phương; vì vậy, thiết kế của nền tảng xem các tham số này như một phần của định nghĩa thí nghiệm thay vì các mặc định bị ẩn.
+4.7.3 Nền tảng chất lượng dữ liệu
+Pipeline kiểm định được sử dụng để làm rõ nguồn gốc dữ liệu và các giới hạn một cách tường minh. Do nền tảng sử dụng vnstock như một nguồn dữ liệu chi phí thấp, các vấn đề như hành động doanh nghiệp, tạm ngừng giao dịch và mức độ bao phủ không đồng đều giữa các mã cần được xử lý và báo cáo; pipeline làm lộ các ràng buộc này thay vì giả định đầu vào luôn sạch đồng nhất.
+4.7.4 Hạn chế
+Kết quả backtesting mang tính lịch sử và không nên được diễn giải như dự báo cho hiệu suất tương lai. Hiện chỉ hỗ trợ các chiến lược phân tích kỹ thuật; các chiến lược cơ bản và theo sự kiện chưa khả dụng. Phạm vi bao phủ giới hạn ở HOSE; hai sàn HNX và UPCoM chưa được đưa vào.
+4.7.5 Đánh giá giả thuyết
+Dựa trên bằng chứng trình bày trong chương này, các giả thuyết nghiên cứu được đánh giá như sau:
+• H1 (Khả năng tiếp cận nền tảng không cần kiến thức lập trình) Phần lớn được hỗ trợ bởi bằng chứng triển khai: nền tảng chạy trên trình duyệt và cung cấp một tập mô-đun tương tác bao phủ các quy trình chính đã xác định trong phân tích khoảng trống (Bảng 2), dù mức độ dễ tiếp cận đối với người dùng mới chưa được định lượng thông qua một nghiên cứu khả dụng chính thức.
+• H2 (Tham số thị trường Việt Nam cải thiện tính hiện thực của backtest) Được hỗ trợ theo nghĩa hạn chế như đã minh họa ở Mục 4.3: quy trình backtesting bao gồm kích thước lô tường minh, các thành phần chi phí giao dịch và một mô hình thực thi vốn thường bị để ngầm định trong các minh họa tổng quát, và các lựa chọn này làm thay đổi các thước đo hiệu suất ròng.
+• H3 (Trình xây dựng chiến lược no-code cho nhà đầu tư không chuyên kỹ thuật) Được hỗ trợ ở mức tính năng: Mục 4.4 cho thấy đặc tả chiến lược từ đầu đến cuối thông qua một canvas trực quan mà không yêu cầu người dùng viết mã, dù hiệu quả đối với người dùng không chuyên kỹ thuật chưa được đánh giá bằng thử nghiệm người dùng có kiểm soát.
+• H4 (Kiểm định dữ liệu hỗ trợ độ tin cậy đối với dữ liệu mã nguồn mở) Được hỗ trợ bởi sự hiện diện của các cổng chất lượng (quality gates) tường minh, các manifest bộ dữ liệu và các chẩn đoán được tích hợp vào đầu ra phân tích; tuy nhiên, bằng chứng này mang tính vận hành (hành vi pipeline và báo cáo) hơn là một kiểm toán độc lập về tính đúng đắn của dữ liệu.
+• H5 (Trợ lý AI tránh các đầu ra số gây hiểu lầm thông qua grounding và abstention) Được hỗ trợ một phần. Mục 4.6 mô tả và minh họa grounding thông qua các lời gọi công cụ nội bộ và abstention khi bằng chứng không đủ; tuy nhiên, đánh giá chưa bao gồm đo lường chính thức về tỷ lệ lỗi hoặc độ tin cậy hướng tới người dùng dưới nhiều dạng prompt.
+Bằng chứng chi tiết và các hạn chế cho từng giả thuyết được trình bày trong Phụ lục A.
+4.8 Tóm tắt chương
+Chương 4 tóm tắt các năng lực đã triển khai và liên hệ từng giả thuyết với bằng chứng rút ra từ hệ thống và các minh họa. Kết quả cho thấy một quy trình tích hợp trên trình duyệt cho sàng lọc, backtesting với các giả định tường minh, xây dựng danh mục và báo cáo rủi ro là khả thi trên dữ liệu HOSE, đồng thời thừa nhận rằng mức độ suy luận bị hạn chế do thiếu các nghiên cứu người dùng chính thức và kiểm chứng thực nghiệm rộng hơn.
+5. Kết luận và khuyến nghị
+5.1 Kết luận
+Luận văn này thiết kế, triển khai và đánh giá QuantVN Strategy Forge cho cổ phiếu niêm yết trên HOSE, nhằm giải quyết khoảng trống thực tiễn giữa mức độ tham gia cao của nhà đầu tư cá nhân và sự hạn chế của các công cụ hỗ trợ kiểm định giả thuyết, giả định minh bạch và kết quả có thể tái lập.
+Nền tảng kết hợp sàng lọc cổ phiếu, đồ thị tương tác, kiểm định quá khứ (backtesting), tối ưu hóa danh mục, đánh giá rủi ro và diễn giải có hỗ trợ AI trong một giao diện chạy trên trình duyệt. Đáng chú ý, công cụ kiểm định quá khứ mã hóa các ràng buộc giao dịch của HOSE (ví dụ: quy mô lô) và làm rõ chi phí cùng các giả định thực thi (phí, thuế, trượt giá; khớp lệnh tại giá mở cửa phiên kế tiếp), vốn có thể làm thay đổi đáng kể hiệu suất ròng so với các thiết lập mặc định trong những công cụ phổ thông.
+Dựa trên bằng chứng tại Mục 4, H1-H4 được ủng hộ, trong khi H5 chỉ được ủng hộ một phần. Hệ thống có thể truy cập qua trình duyệt (H1), mô hình hóa trực tiếp các giả định của thị trường Việt Nam trong kiểm định quá khứ (H2), cung cấp một Strategy Builder no-code ở mức chức năng (H3), và áp dụng các cổng kiểm soát chất lượng dữ liệu cùng chẩn đoán đối với dữ liệu mã nguồn mở (H4); chính sách neo bằng chứng (grounding) và từ chối trả lời (abstention) của trợ lý vận hành như dự kiến, nhưng tác động của nó lên niềm tin người dùng chưa được đánh giá thực nghiệm (H5).
+Hạn chế quan trọng nhất mang tính đánh giá hơn là kỹ thuật: luận văn không báo cáo một nghiên cứu người dùng có kiểm soát. Do đó, phần đánh giá dựa trên bằng chứng triển khai và các minh chứng có thể tái lập, nhưng không thể định lượng các kết quả hành vi như hiệu chỉnh niềm tin (trust calibration) hoặc thay đổi trong chất lượng ra quyết định.
+5.2 Khuyến nghị
+Một số hướng phát triển tiếp theo từ công trình này:
+Đối với phát triển nền tảng:
+1. Mở rộng phạm vi vượt ngoài HOSE để bao gồm HNX và UPCoM, nhằm phản ánh một vũ trụ cổ phiếu niêm yết Việt Nam rộng hơn trong sàng lọc, kiểm định quá khứ và xây dựng danh mục.
+2. Bổ sung điều chỉnh theo hành động doanh nghiệp (chia tách, cổ tức tiền mặt, phát hành quyền mua) cho chuỗi giá lịch sử; nếu không điều chỉnh, các backtest dài hạn có thể sai lệch lợi suất và làm méo ước lượng rủi ro.
+3. Mở rộng hỗ trợ chiến lược vượt ngoài các quy tắc thuần kỹ thuật bằng cách bổ sung bộ lọc cơ bản (ví dụ: P/E, P/B, ROE) và các chiến lược đa nhân tố kết hợp tín hiệu giá và tín hiệu kế toán.
+4. Phát triển một lớp chia sẻ chiến lược, nơi người dùng có thể công bố chiến lược với các thiết lập được nêu rõ, so sánh kết quả backtest và thảo luận, qua đó chuyển các thử nghiệm rời rạc thành một nguồn học tập tích lũy.
+Đối với nghiên cứu học thuật:
+1. Thực hiện các nghiên cứu so sánh, căn chỉnh đầu ra backtest của nền tảng với hồ sơ giao dịch thực tế của nhà đầu tư cá nhân Việt Nam, nhằm kiểm định liệu công cụ hóa có hệ thống có cải thiện chất lượng ra quyết định trong thực tiễn hay không.
+2. Đánh giá các phương pháp tối ưu hóa danh mục dưới các ma sát của thị trường Việt Nam - đặc biệt là giới hạn thanh khoản và vi cấu trúc thị trường - để xác định các cách tiếp cận vẫn vững chắc ngoài các giả định của thị trường phát triển.
+3. Nghiên cứu thực nghiệm phản ứng của người dùng đối với chính sách từ chối trả lời của trợ lý, bao gồm liệu việc từ chối thận trọng có làm tăng mức độ tin cậy cảm nhận hay ngược lại làm giảm tính hữu ích cảm nhận trong quy trình ra quyết định của nhà đầu tư cá nhân.
+TÀI LIỆU THAM KHẢO
+Algotrade. (n.d.). Algorithmic trading platform for Vietnamese markets. Retrieved February 22, 2026, from https://algotrade.vn
+Artzner, P., Delbaen, F., Eber, J.-M., &amp; Heath, D. (1999). Coherent measures of risk. Mathematical Finance, 9(3), 203-228. https://doi.org/10.1111/1467-9965.00068
+Bailey, D. H., Borwein, J. M., López de Prado, M., &amp; Zhu, Q. J. (2016). The probability of backtest overfitting. Journal of Computational Finance, 20(4), 39-69. https://doi.org/10.21314/JCF.2016.322
+Chen, Z., Chen, W., Smiley, C., Shah, S., Borova, I., Langdon, D., Moussa, R., Beane, M., Huang, T.-H., Routledge, B. R., &amp; Wang, W. Y. (2021). FinQA: A dataset of numerical reasoning over financial data. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (pp. 3697-3711). Association for Computational Linguistics. https://doi.org/10.18653/v1/2021.emnlp-main.300
+Es, S., James, J., Espinosa-Anke, L., &amp; Schockaert, S. (2023). RAGAS: Automated evaluation of retrieval augmented generation. arXiv preprint arXiv:2309.15217. https://doi.org/10.48550/arXiv.2309.15217
+Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. The Journal of Finance, 25(2), 383-417. https://doi.org/10.2307/2325486
+Fama, E. F., &amp; French, K. R. (1993). Common risk factors in the returns on stocks and bonds. Journal of Financial Economics, 33(1), 3-56. https://doi.org/10.1016/0304-405X(93)90023-5
+Fama, E. F., &amp; French, K. R. (2015). A five-factor asset pricing model. Journal of Financial Economics, 116(1), 1-22. https://doi.org/10.1016/j.jfineco.2014.10.010
+FiinPro. (2024). Vietnam securities market overview 2024. FiinGroup. https://fiinpro.com
+Harvey, C. R., Liu, Y., &amp; Zhu, H. (2016). …and the cross-section of expected returns. The Review of Financial Studies, 29(1), 5-68. https://doi.org/10.1093/rfs/hhv059
+HOSE. (n.d.). Quy chế giao dịch chứng khoán tại Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh. Retrieved February 22, 2026, from https://www.hsx.vn
+IMARC Group. (2024). Vietnam fintech market size, share, growth, forecast 2025-2033. IMARC Group. https://www.imarcgroup.com/vietnam-fintech-market
+Jegadeesh, N., &amp; Titman, S. (1993). Returns to buying winners and selling losers: Implications for stock market efficiency. The Journal of Finance, 48(1), 65-91. https://doi.org/10.1111/j.1540-6261.1993.tb04702.x
+Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Küttler, H., Lewis, M., Yih, W., Rocktäschel, T., Riedel, S., &amp; Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. In Advances in Neural Information Processing Systems (Vol. 33, pp. 9459-9474). Curran Associates. https://doi.org/10.48550/arXiv.2005.11401
+Lin, S., Hilton, J., &amp; Evans, O. (2022). TruthfulQA: Measuring how models mimic human falsehoods. In Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (pp. 3214-3252). Association for Computational Linguistics. https://doi.org/10.18653/v1/2022.acl-long.229
+Lintner, J. (1965). The valuation of risk assets and the selection of risky investments in stock portfolios and capital budgets. The Review of Economics and Statistics, 47(1), 13-37. https://doi.org/10.2307/1924119
+Lo, A. W. (2002). The statistics of Sharpe ratios. Financial Analysts Journal, 58(4), 36-52. https://doi.org/10.2469/faj.v58.n4.2453
+Maillard, S., Roncalli, T., &amp; Teïletche, J. (2010). The properties of equally weighted risk contribution portfolios. The Journal of Portfolio Management, 36(4), 60-70. https://doi.org/10.3905/jpm.2010.36.4.060
+Markowitz, H. (1952). Portfolio selection. The Journal of Finance, 7(1), 77-91. https://doi.org/10.2307/2975974
+Min, S., Krishna, K., Lyu, X., Lewis, M., Yih, W., Koh, P. W., Iyyer, M., Zettlemoyer, L., &amp; Hajishirzi, H. (2023). FActScore: Fine-grained atomic evaluation of factual precision in long form text generation. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (pp. 12076-12100). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.emnlp-main.741
+Miquant. (n.d.). Nền tảng đầu tư định lượng AI. Retrieved February 22, 2026, from https://miquant.vn
+Murphy, J. J. (1999). Technical analysis of the financial markets: A comprehensive guide to trading methods and applications. New York Institute of Finance.
+Rajpurkar, P., Jia, R., &amp; Liang, P. (2018). Know what you don't know: Unanswerable questions for SQuAD. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (pp. 784-789). Association for Computational Linguistics. https://doi.org/10.18653/v1/P18-2124
+Rockafellar, R. T., &amp; Uryasev, S. (2000). Optimization of conditional value-at-risk. Journal of Risk, 2(3), 21-42. https://doi.org/10.21314/JOR.2000.038
+Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. The Journal of Finance, 19(3), 425-442. https://doi.org/10.1111/j.1540-6261.1964.tb02865.x
+SSI. (n.d.). SSI iBoard Nền tảng giao dịch chứng khoán. Retrieved February 22, 2026, from https://iboard.ssi.com.vn
+TCBS. (n.d.). Tổng Công ty Cổ phần Chứng khoán Kỹ thương. Retrieved February 22, 2026, from https://www.tcbs.com.vn
+The Investor. (2024, March 15). Vietnamese listed firms' transparency remains a concern. The Investor. https://theinvestor.vn/vietnamese-listed-firms-transparency-remains-a-concern-d9085.html
+Thinh Vu. (2023). vnstock: Vietnamese stock market data for Python [Computer software]. https://github.com/thinh-vu/vnstock
+TradingView. (n.d.). TradingView Track all markets. Retrieved February 22, 2026, from https://www.tradingview.com
+Truong, D. L., Lanjouw, G., &amp; Lensink, R. (2010). Stock-market efficiency in thin-trading markets: The case of the Vietnamese stock market. Applied Economics, 42(27), 3519-3532. https://doi.org/10.1080/00036840802167904
+Vietnam Investment Review. (2024, June 10). Data quality challenges hinder Vietnam's banking analytics. Vietnam Investment Review. https://vir.com.vn/data-quality-challenges-hinder-vietnams-banking-analytics.html
+Vietnam Securities Depository. (n.d.). Quy trình thanh toán giao dịch chứng khoán. Retrieved February 22, 2026, from https://www.vsd.vn
+VNDirect. (n.d.). VNDirect Securities Corporation. Retrieved February 22, 2026, from https://www.vndirect.com.vn
+Wu, S., Irsoy, O., Lu, S., Dabravolski, V., Dredze, M., Gehrmann, S., Kambadur, P., Rosenberg, D., &amp; Mann, G. (2023). BloombergGPT: A large language model for finance. arXiv preprint arXiv:2303.17564. https://doi.org/10.48550/arXiv.2303.17564
+Yang, H., Liu, X.-Y., &amp; Wang, C. D. (2023). FinGPT: Open-source financial large language models. arXiv preprint arXiv:2306.06031. https://doi.org/10.48550/arXiv.2306.06031
+Phụ lục A: Đánh giá giả thuyết nghiên cứu
+Phụ lục này đánh giá các giả thuyết nghiên cứu được xây dựng tại Mục 2 dựa trên bằng chứng thu thập từ quá trình phát triển nền tảng và các kết quả minh họa.
+A.1 Tóm tắt giả thuyết
+#
+Giả thuyết
+Trạng thái
+Bằng chứng
+H1
+Một nền tảng dựa trên web có thể cung cấp các công cụ phân tích định lượng tích hợp cho cổ phiếu HOSE, có thể tiếp cận đối với nhà đầu tư cá nhân mà không cần kiến thức lập trình
+Được ủng hộ
+Nền tảng được triển khai với 8 mô-đun chức năng bao gồm sàng lọc, backtesting, tối ưu hóa danh mục, đánh giá rủi ro và trợ lý AI, tất cả đều truy cập qua trình duyệt mà không cần cài đặt
+H2
+Việc tích hợp các tham số đặc thù thị trường Việt Nam (quy mô lô, chi phí giao dịch, mô hình thực thi) vào backtesting làm tăng tính hiện thực của hiệu suất chiến lược được mô phỏng
+Được ủng hộ
+Công cụ backtesting hỗ trợ tường minh quy mô lô, phí/thuế/trượt giá và các tham số khớp lệnh tại giá mở cửa phiên kế tiếp, vốn thường bị bỏ qua trong các công cụ quốc tế phổ thông
+H3
+Một trình xây dựng chiến lược trực quan no-code có thể cho phép nhà đầu tư cá nhân không chuyên kỹ thuật trên HOSE thiết kế, backtest và lặp cải tiến các chiến lược định lượng, khắc phục khoảng trống do các nền tảng no-code hiện có (Zerodha Streak, AlgoBulls) không hỗ trợ HOSE.
+Được ủng hộ
+Strategy Builder cung cấp giao diện dạng nút (node) kéo-thả; người dùng xây dựng và backtest chiến lược mà không cần viết mã (được minh họa với chiến lược RSI Reversal trong Hình 4)
+H4
+Một đường ống kiểm định dữ liệu nhiều giai đoạn xử lý các vấn đề từ truy cập dữ liệu mã nguồn mở thô qua vnstock (thiếu hụt hành động doanh nghiệp, tạm ngừng giao dịch, bất nhất giá, biến thiên độ bao phủ) có thể đảm bảo độ tin cậy phân tích
+Được ủng hộ
+Đường ống kiểm định 768,718 bản ghi OHLCV bằng các kiểm tra nhất quán logic, phân loại nguyên nhân loại bỏ và các ngưỡng tỷ lệ chấp nhận tối thiểu (95% cho dữ liệu giá)
+H5
+Một trợ lý AI với cơ chế từ chối trả lời dựa trên bằng chứng có thể cung cấp phân tích tài chính đáng tin cậy đồng thời tránh tạo ra các đầu ra gây hiểu lầm
+Được ủng hộ một phần
+Trợ lý neo câu trả lời vào tính toán nội bộ và từ chối các truy vấn không có căn cứ; tuy nhiên, chưa có nghiên cứu người dùng nào được thực hiện để đo lường độ tin cậy cảm nhận hoặc chất lượng ra quyết định
+Bảng A.1: Tóm tắt đánh giá giả thuyết nghiên cứu.
+A.2 Đánh giá chi tiết
+H1: Khả năng tiếp cận các công cụ định lượng
+Bằng chứng ủng hộ:
+• Nền tảng hợp nhất tám mô-đun - Stock Screener, Charts &amp; Analysis, Backtesting, Portfolio Optimisation, Risk Management, Factor Analysis, Strategy Builder và AI Assistant - trong một giao diện web thống nhất.
+• Người dùng truy cập nền tảng trên trình duyệt mà không cần cài đặt cục bộ.
+• Các quy trình cốt lõi được hỗ trợ bởi nhãn tiếng Việt và hướng dẫn theo ngữ cảnh nhằm giảm ma sát cho người dùng cá nhân.
+• Bộ lọc cổ phiếu bao phủ 412 mã HOSE và hỗ trợ lọc theo ngành, thanh khoản và trạng thái niêm yết.
+• Điều hướng được thống nhất thông qua một thanh bên nhất quán giữa các mô-đun.
+Hạn chế: Khả năng tiếp cận được suy luận từ thiết kế giao diện và mức độ sẵn có của tính năng; nếu không có một nghiên cứu khả dụng (usability) chính thức với nhà đầu tư cá nhân, luận văn không thể ước lượng tỷ lệ hoàn thành tác vụ, thời gian học, hoặc các dạng thất bại khả dụng phổ biến.
+H2: Tích hợp tham số thị trường Việt Nam
+Bằng chứng ủng hộ:
+• Bộ backtester áp dụng ràng buộc quy mô lô trong quá trình xác định quy mô vị thế, đảm bảo khối lượng giao dịch phản ánh đơn vị giao dịch thay vì giả định lô lẻ.
+• Chi phí ở mức giao dịch (phí môi giới, thuế phía bán, trượt giá) được áp dụng tại thời điểm thực thi để báo cáo lợi suất ròng.
+• Mô hình thực thi mặc định sử dụng khớp lệnh tại giá mở cửa phiên kế tiếp để tránh giả định thực thi tại giá đóng cửa tạo tín hiệu.
+Hàm ý: Khi chi phí địa phương và ma sát thực thi được áp dụng ở mức từng giao dịch, các chiến lược có vẻ sinh lợi dưới giả định không ma sát hoặc giả định close-to-close có thể cho lợi suất ròng thấp hơn đáng kể - thậm chí âm - qua đó tác động trực tiếp đến quyết định phân bổ vốn của nhà đầu tư cá nhân.
+Hạn chế: Luận văn không báo cáo một thí nghiệm có hệ thống so sánh kết quả có và không có tham số địa phương trên một tập chiến lược được định nghĩa trước; do đó, bằng chứng cho H2 dựa trên các lựa chọn mô hình hóa đã triển khai và các minh chứng, thay vì so sánh thống kê.
+H3: Thiết kế chiến lược no-code cho nhà đầu tư cá nhân Việt Nam
+Các nền tảng no-code quốc tế như Zerodha Streak, uTrade Algos và AlgoBulls cho thấy đặc tả chiến lược trực quan có thể được cung cấp cho người dùng bán lẻ; tuy nhiên, chúng không cung cấp dữ liệu HOSE cũng như không mã hóa các quy ước giao dịch của Việt Nam. Vì vậy, nhà đầu tư Việt Nam không thể chuyển giao trực tiếp các quy trình này nếu không có bộ dữ liệu tùy biến và các mô hình thực thi - chi phí phù hợp thị trường.
+Bằng chứng ủng hộ:
+• Strategy Builder cung cấp một canvas dạng nút với các thành phần kéo-thả (Data Source, Indicator, Filter, Signal, Output), cho phép biểu diễn chiến lược như một đồ thị luồng dữ liệu tường minh.
+• Chiến lược có thể được lưu, xuất và chạy trên dữ liệu HOSE lịch sử.
+• Ví dụ RSI Reversal (Hình 4.4) minh họa một quy trình đầu-cuối từ chọn dữ liệu đến đánh giá hiệu suất mà không cần viết mã.
+• Đồ thị dạng nút làm rõ luồng dữ liệu, có thể giúp người dùng không chuyên kỹ thuật kiểm tra và chỉnh sửa logic chiến lược.
+Hạn chế: Mức hỗ trợ hiện tại mang tính dựa trên tính năng - tức là giao diện tồn tại và tạo ra kết quả backtest - nhưng luận văn không đo lường liệu người dùng không chuyên kỹ thuật có thể tự xây dựng các chiến lược đúng hoặc diễn giải kết quả hay không; do đó, khẳng định này vẫn chưa được kiểm chứng bằng đánh giá lấy người dùng làm trung tâm.
+H4: Đường ống kiểm định dữ liệu cho chất lượng dữ liệu HOSE
+Dữ liệu cổ phiếu Việt Nam có sẵn từ cả nhà cung cấp thương mại (ví dụ: FiinPro, CafeF, VietstockFinance) và nguồn miễn phí. Luận văn này sử dụng vnstock để duy trì khả năng thu thập có thể tái lập và chi phí thấp; do vnstock lấy dữ liệu từ các điểm cuối hướng sàn, đầu ra thô có thể chứa bất nhất, thiếu hành động doanh nghiệp và độ bao phủ mã không đồng đều, vì vậy cần một giai đoạn kiểm định riêng trước khi phân tích định lượng.
+Bằng chứng ủng hộ:
+• Đường ống nạp 768,718 dòng OHLCV và áp dụng các kiểm tra nhất quán (trường không rỗng, giá dương nghiêm ngặt, các ràng buộc như High &gt;= Low và giá trị số hữu hạn) trước các tính toán hạ nguồn.
+• Các bản ghi bị loại được phân loại theo nguyên nhân thất bại, hỗ trợ phân tích căn nguyên và báo cáo chất lượng dữ liệu.
+• Các cổng chất lượng thời gian chạy ngăn không cho tính toán trên các bộ dữ liệu dưới ngưỡng chấp nhận (mặc định 95%).
+• Một data manifest ghi lại thống kê độ bao phủ cho từng bộ dữ liệu, giúp tính sẵn có và cách sử dụng dữ liệu minh bạch hơn.
+• Tối ưu hóa danh mục áp dụng yêu cầu tối thiểu về độ dài lịch sử và độ chồng lấp (mặc định 504 quan sát lợi suất ngày) trước khi xây dựng ước lượng hiệp phương sai và tương quan, loại các mã không đáp ứng ngưỡng này.
+Hạn chế: Dù các quy tắc nhắm tới các bất thường thường gặp, luận văn không chứng minh độ bao phủ đầy đủ đối với các trường hợp biên đặc thù HOSE (ví dụ: điều chỉnh chia tách và quyền mua, định giá lại sau thời gian tạm ngừng); cần thẩm định lịch sử rộng hơn để đặc tả các dạng sai số còn lại.
+H5: Độ tin cậy của trợ lý AI
+Bằng chứng ủng hộ:
+• Trước khi phản hồi, trợ lý truy xuất các chỉ số cần thiết từ các mô-đun nội bộ.
+• Một chính sách gating chặn các khẳng định định lượng trừ khi các công cụ nền đã được gọi và trả về kết quả hợp lệ.
+• Khi grounding chưa đầy đủ, trợ lý chủ động từ chối và nêu rõ dạng lỗi, thay vì tạo ra các khẳng định định lượng chưa được kiểm chứng.
+• Trong các lượt QA nội bộ, chúng tôi không quan sát các đầu ra định lượng bị bịa đặt; tuy nhiên, điều này không thể thay thế cho đánh giá người dùng bên ngoài.
+Hạn chế: Chính sách từ chối chưa được đánh giá trong một nghiên cứu người dùng có kiểm soát; do đó, vẫn chưa rõ người dùng trải nghiệm việc từ chối thận trọng như một tín hiệu tin cậy hay như một ràng buộc không cần thiết, và việc đánh giá chính thức sẽ cần đầu ra được chuyên gia chấm điểm cùng các thước đo niềm tin và tính hữu ích ở mức người dùng.
+A.3 Ảnh chụp màn hình nền tảng bổ sung
+Các ảnh chụp màn hình sau minh họa thêm các mô-đun nền tảng được tham chiếu trong luận văn.
+Hình A.1: Giao diện Stock Screener với lọc đa tiêu chí trên 412 mã niêm yết HOSE.
+Hình A.2: Mô-đun Interactive Charts hiển thị phân tích cổ phiếu với dữ liệu giá, lợi suất, biến động và không gian làm việc so sánh.
+Hình A.3: Mô-đun Portfolio Optimisation với lựa chọn vũ trụ tài sản và cấu hình bộ giải Mean-Variance.
+Hình A.4: Bảng điều khiển Risk Management hiển thị VaR, Volatility, Beta, Maximum Drawdown, Sortino Ratio, lịch sử drawdown và đồ thị biến động lăn.

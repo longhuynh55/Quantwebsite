@@ -12,6 +12,7 @@ const mockCreateStrategyLabRunClient = jest.fn();
 const mockWaitForStrategyLabRunTerminal = jest.fn();
 const mockGetStrategyLabRunSummaryClient = jest.fn();
 const mockCancelStrategyLabRunClient = jest.fn();
+const mockTrackUiKpiEvent = jest.fn();
 
 type MockStoreState = {
   currentStrategy: {
@@ -27,6 +28,7 @@ type MockStoreState = {
   updateStrategyName: jest.Mock;
   updateNodeData: jest.Mock;
   addNode: jest.Mock;
+  addEdge: jest.Mock;
   setNodes: jest.Mock;
   setEdges: jest.Mock;
   deleteNode: jest.Mock;
@@ -48,10 +50,78 @@ jest.mock("sonner", () => ({
 
 jest.mock("@/components/strategy-builder", () => ({
   StrategyCanvas: () => <div data-testid="strategy-canvas" />,
-  NodePalette: () => <div data-testid="node-palette" />,
+  NodePalette: ({ onAddNode }: { onAddNode?: (type: string) => void }) => (
+    <div>
+      <div data-testid="node-palette" />
+      <button data-testid="add-indicator-node" onClick={() => onAddNode?.("indicator")}>
+        Add Indicator
+      </button>
+    </div>
+  ),
   PropertyPanel: () => <div data-testid="property-panel" />,
-  TemplateGallery: () => <div data-testid="template-gallery" />,
-  AiSuggestDialog: () => <div data-testid="ai-suggest-dialog" />,
+  BacktestResultsPanel: ({
+    result,
+  }: {
+    result: {
+      summary: {
+        metrics: {
+          totalReturn: number;
+        };
+      };
+    } | null;
+  }) => (
+    <div data-testid="backtest-results-panel">
+      {result ? (
+        <>
+          <h2>Latest Backtest</h2>
+          <div>Return</div>
+          <div>{`${(result.summary.metrics.totalReturn * 100).toFixed(2)}%`}</div>
+        </>
+      ) : null}
+    </div>
+  ),
+  TemplateGallery: ({ onApplyTemplate }: { onApplyTemplate: (nodes: Array<Record<string, unknown>>, edges: Array<Record<string, unknown>>, name: string) => void }) => (
+    <button
+      data-testid="template-gallery"
+      onClick={() =>
+        onApplyTemplate(
+          [
+            {
+              id: "template-node-1",
+              type: "dataSource",
+              data: { label: "Template Source", type: "dataSource", config: {} },
+              position: { x: 80, y: 120 },
+            },
+          ],
+          [],
+          "Template Strategy"
+        )
+      }
+    >
+      Apply Template
+    </button>
+  ),
+  AiSuggestDialog: ({ onApplyStrategy }: { onApplyStrategy: (nodes: Array<Record<string, unknown>>, edges: Array<Record<string, unknown>>, name: string) => boolean }) => (
+    <button
+      data-testid="ai-suggest-dialog"
+      onClick={() =>
+        onApplyStrategy(
+          [
+            {
+              id: "ai-node-1",
+              type: "dataSource",
+              data: { label: "AI Source", type: "dataSource", config: {} },
+              position: { x: 80, y: 120 },
+            },
+          ],
+          [],
+          "AI Strategy"
+        )
+      }
+    >
+      Apply AI
+    </button>
+  ),
 }));
 
 jest.mock("@/lib/stores/strategyBuilderStore", () => ({
@@ -76,12 +146,23 @@ jest.mock("@/lib/strategy-lab/client", () => ({
   StrategyLabClientError: class extends Error {},
 }));
 
+jest.mock("@/lib/uiKpi", () => ({
+  trackUiKpiEvent: (...args: unknown[]) => mockTrackUiKpiEvent(...args),
+}));
+
 function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
   return {
     currentStrategy: {
       id: "strategy-1",
       name: "Strategy One",
-      nodes: [{ id: "node-1" }],
+      nodes: [
+        {
+          id: "node-1",
+          type: "dataSource",
+          data: { type: "dataSource", label: "Source", config: {} },
+          position: { x: 80, y: 120 },
+        },
+      ],
       edges: [],
       createdAt: new Date("2026-02-20T00:00:00.000Z"),
       updatedAt: new Date("2026-02-20T00:00:00.000Z"),
@@ -91,6 +172,7 @@ function createStoreState(overrides?: Partial<MockStoreState>): MockStoreState {
     updateStrategyName: jest.fn(),
     updateNodeData: jest.fn(),
     addNode: jest.fn(),
+    addEdge: jest.fn(),
     setNodes: jest.fn(),
     setEdges: jest.fn(),
     deleteNode: jest.fn(),
@@ -144,6 +226,7 @@ describe("strategy-builder page", () => {
     mockWaitForStrategyLabRunTerminal.mockReset();
     mockGetStrategyLabRunSummaryClient.mockReset();
     mockCancelStrategyLabRunClient.mockReset();
+    mockTrackUiKpiEvent.mockReset();
   });
 
   it("runs a strategy and renders summary metrics on success", async () => {
@@ -341,5 +424,69 @@ describe("strategy-builder page", () => {
     expect(
       screen.getByText(/Connections are visual only and do not change execution logic/i)
     ).toBeInTheDocument();
+  });
+
+  it("tracks ai_strategy_applied without firing template_applied", () => {
+    render(<StrategyBuilderPage />);
+    fireEvent.click(screen.getByTestId("ai-suggest-dialog"));
+
+    expect(mockTrackUiKpiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metric: "strategy_builder_interaction",
+        event: "ai_strategy_applied",
+      })
+    );
+    expect(
+      mockTrackUiKpiEvent.mock.calls.some(
+        (call) =>
+          call[0] &&
+          typeof call[0] === "object" &&
+          "event" in call[0] &&
+          (call[0] as { event?: string }).event === "template_applied"
+      )
+    ).toBe(false);
+  });
+
+  it("does not apply ai strategy when discard confirmation is cancelled", () => {
+    mockStoreState = createStoreState({ isDirty: true });
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<StrategyBuilderPage />);
+    fireEvent.click(screen.getByTestId("ai-suggest-dialog"));
+
+    expect(mockStoreState.reset).not.toHaveBeenCalled();
+    expect(mockStoreState.createNewStrategy).not.toHaveBeenCalled();
+    expect(mockStoreState.setNodes).not.toHaveBeenCalled();
+    expect(mockStoreState.setEdges).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("does not trigger canvas undo shortcut when typing in input fields", () => {
+    render(<StrategyBuilderPage />);
+    const strategyNameInput = screen.getByPlaceholderText("Strategy name...");
+    strategyNameInput.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      key: "z",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    const dispatchResult = strategyNameInput.dispatchEvent(event);
+
+    expect(dispatchResult).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("clears undo history when applying a replacement strategy", () => {
+    render(<StrategyBuilderPage />);
+
+    fireEvent.click(screen.getByTestId("add-indicator-node"));
+    const undoButton = screen.getByTitle("Undo (Ctrl+Z)");
+    expect(undoButton).not.toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("template-gallery"));
+    expect(screen.getByTitle("Undo (Ctrl+Z)")).toBeDisabled();
   });
 });

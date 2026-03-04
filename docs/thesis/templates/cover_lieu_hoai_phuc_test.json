@@ -1,0 +1,13 @@
+﻿{
+  "THESIS_TYPE": "KHÓA LUẬN TỐT NGHIỆP",
+  "THESIS_TITLE": "QuantVN Strategy Forge: A Reliability-Gated AI Assistant for Trading Strategy Design and Backtesting on Vietnamese Equities (HOSE)",
+  "STUDENT_NAME": "Liêu Hoài Phúc",
+  "STUDENT_ID": "K224141735",
+  "STUDENT_CLASS": "K22414C",
+  "SUPERVISOR_NAME": "PGS.TS. Nguyễn Anh Phong",
+  "CITY": "Ho Chi Minh City",
+  "YEAR": "2026",
+  "ACKNOWLEDGEMENT_TITLE": "LỜI CẢM ƠN",
+  "ACKNOWLEDGEMENT_TEXT": "I would like to express my sincere gratitude to my supervisor, Assoc. Prof. Dr. Nguyen Anh Phong, for his guidance, insight, and continuous support throughout this graduation thesis.\nI also thank the faculty of the School of Finance and Banking, University of Economics and Law (UEL), Vietnam National University Ho Chi Minh City, for providing the academic foundation that made this work possible.\nI am grateful to my peers for their constructive feedback that improved both the system design and the writing quality.\nFinally, I would like to thank my family for their unwavering encouragement and support throughout this journey.\nAny remaining limitations in this thesis are my own responsibility.",
+  "INSTRUCTOR_COMMENT": "Instructor comment placeholder: please insert official review and evaluation notes here."
+}

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getDataQualityReport, hasSufficientDataQuality, loadOHLCVForSymbol, loadIndexData } from "@/lib/data";
+import {
+  getDataQualityReport,
+  getDatasetLoadStatus,
+  hasSufficientDataQuality,
+  loadOHLCVForSymbol,
+  loadIndexData,
+} from "@/lib/data";
 import { calculateRiskMetrics, calculateDrawdown, calculateRollingVolatility } from "@/lib/quant/risk";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import { createLogger, createTraceId, toErrorMeta } from "@/lib/logger";
@@ -19,13 +25,25 @@ function getDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getDataQualityError(dataset: "ohlcv" | "index"): string | null {
+function getDataQualityError(
+  dataset: "ohlcv" | "index",
+  options?: { allowUnknownReport?: boolean }
+): string | null {
   if (hasSufficientDataQuality(dataset, MIN_DATA_QUALITY_RATIO)) {
     return null;
   }
 
   const report = getDataQualityReport(dataset);
   if (!report) {
+    const loadStatus = getDatasetLoadStatus(dataset);
+    if (loadStatus.status === "error") {
+      return loadStatus.message
+        ? `Data quality check failed for ${dataset}: ${loadStatus.message}`
+        : `Data quality check failed for ${dataset}: load_status_error`;
+    }
+    if (options?.allowUnknownReport) {
+      return null;
+    }
     return `Data quality check failed for ${dataset}: report unavailable`;
   }
 
@@ -76,6 +94,16 @@ export async function GET(request: Request) {
   try {
     const assetData = await loadOHLCVForSymbol(symbol);
     if (assetData.length === 0) {
+      const ohlcvLoadStatus = getDatasetLoadStatus("ohlcv");
+      if (ohlcvLoadStatus.status === "error") {
+        return NextResponse.json(
+          {
+            error: ohlcvLoadStatus.message || "OHLCV dataset is unavailable",
+            dataFailureReason: ohlcvLoadStatus.reason ?? null,
+          },
+          { status: 503 }
+        );
+      }
       return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
     }
 
@@ -92,7 +120,7 @@ export async function GET(request: Request) {
 
     const indexData = await loadIndexData();
 
-    const ohlcvQualityError = getDataQualityError("ohlcv");
+    const ohlcvQualityError = getDataQualityError("ohlcv", { allowUnknownReport: true });
     if (ohlcvQualityError) {
       return NextResponse.json({ error: ohlcvQualityError }, { status: 503 });
     }

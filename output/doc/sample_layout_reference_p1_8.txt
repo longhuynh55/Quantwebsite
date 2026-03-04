@@ -1,0 +1,231 @@
+FACULTY OF FINANCE AND BANKING
+
+GRADUATION THESIS
+
+BUILDING A PAYMENT RECONCILIATION SYSTEM
+FOR AFFILIATE MARKETING ACTIVITIES: A CASE
+STUDY ON THE TIKTOK SHOP E-COMMERCE
+PLATFORM
+
+Supervisor
+
+: Assoc. Prof. Nguyễn Anh Phong
+
+Student name
+
+: Bùi Võ Kim Ngân
+
+Student ID
+
+: K214140945
+
+Class
+
+: K21414A
+
+Ho Chi Minh City, March 2025
+
+VIETNAM NATIONAL UNIVERSITY, HO CHI MINH CITY
+UNIVERSITY OF ECONOMICS AND LAW
+FACULTY OF FINANCE AND BANKING
+--------------------
+
+GRADUATION THESIS
+
+BUILDING A PAYMENT RECONCILIATION SYSTEM
+FOR AFFILIATE MARKETING ACTIVITIES: A CASE
+STUDY ON THE TIKTOK SHOP E-COMMERCE
+PLATFORM
+
+Supervisor
+
+: Assoc. Prof. Nguyễn Anh Phong
+
+Student name
+
+: Bùi Võ Kim Ngân
+
+Student ID
+
+: K214140945
+
+Class
+
+: K21414A
+
+Ho Chi Minh City, March 2025
+
+i
+ACKNOWLEDGEMENTS
+The duration dedicated to my graduation thesis has enabled me to implement the
+knowledge I have received and to acquire new abilities that will be essential for my future
+endeavors and academic pursuits.
+I would like to express my heartfelt gratitude to all those who have supported me
+throughout this journey. In particular, I wish to extend my sincere appreciation to the
+University of Economics and Law and the Faculty of Finance and Banking. The guidance and
+encouragement from my professors have provided significant motivation during my work.
+I would like to express my profound gratitude to Assoc. Prof. Nguyễn Anh Phong for
+his dedication of time and effort in mentoring and assisting me during the thesis process.
+Although I have made every effort, there may still be shortcomings in my work.
+Therefore, I highly value any feedback from my professors that can help me improve further.
+Once again, I sincerely thank you!
+
+ii
+INSTRUCTOR’S COMMENT
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+…………………………………………………………………………………………………
+
+iii
+TABLE OF CONTENT
+LIST OF TABLES, FIGURES ......................................................................................................... v
+LIST OF ABBREVIATIONS .......................................................................................................... vi
+ABSTRACT ..................................................................................................................................... vii
+1. INTRODUCTION ......................................................................................................................... 1
+1.1. Statement of the problem ....................................................................................................... 1
+1.2. Research objectives ................................................................................................................. 2
+1.2.1. General objective ............................................................................................................... 2
+1.2.2. Specific objectives ............................................................................................................. 2
+1.3. Research questions ................................................................................................................. 3
+1.4. Subject and Scope of study .................................................................................................... 3
+1.5. Research Methods ................................................................................................................... 4
+2. LITERATURE REVIEW ............................................................................................................. 5
+2.1. Theoretical Literature Review............................................................................................... 5
+2.1.1. Affiliate Marketing ............................................................................................................ 5
+2.1.2. Reconciliation .................................................................................................................... 6
+2.2. Empirical Literature Review ................................................................................................. 7
+2.2.1. Overview of Payment System Architecture ....................................................................... 7
+2.2.2. Payment reconciliation system in affiliate marketing networks ...................................... 10
+2.3. Research Hypotheses ............................................................................................................ 11
+3. RESEARCH METHODOLOGY .............................................................................................. 13
+3.1. Research process ................................................................................................................... 13
+3.2. Research methodology.......................................................................................................... 14
+3.2.1. Use Case Diagram ............................................................................................................ 14
+3.2.2. Data Flow Diagram .......................................................................................................... 14
+3.2.3. Business Process Modeling Notation (BPMN) ................................................................ 16
+3.3. Research Data ....................................................................................................................... 16
+4. RESEARCH RESULTS AND DISCUSSION .......................................................................... 18
+4.1. Data Description ................................................................................................................... 18
+4.2. Descriptive statistics ............................................................................................................. 21
+4.3. System Model Results ........................................................................................................... 22
+5. CONCLUSION AND RECOMMENDATION ........................................................................ 28
+
+iv
+5.1. Conclusion ............................................................................................................................. 28
+5.2. Recommendations ................................................................................................................. 29
+5.3. Limitations of the Study ....................................................................................................... 30
+REFERENCES ................................................................................................................................ 31
+APPENDIX ...................................................................................................................................... 35
+
+v
+LIST OF TABLES, FIGURES
+LIST OF FIGURES
+Figure 2.1. Architecture of the Payment System on E-commerce Platforms ......................... 9
+Figure 3.1. Research process……………………………………………………………….13
+Figure 3.2. The process of data collection and processing ................................................... 16
+Figure 4.1. Estimated order value in the affiliate marketing network from September 2024
+to January 2025……………………………………………………………………………...18
+Figure 4.2. Return rate from September 2024 to January 2025. ........................................... 19
+Figure 4.3. The 20 creators with the highest order values in October. ................................. 19
+Figure 4.4. The 20 creators with the highest order values in November. ............................. 20
+Figure 4.5. The proportion of affiliate marketing types in the network. .............................. 20
+Figure 4.6. A use case diagram for a payment reconciliation system................................... 23
+Figure 4.7. Data Flow Diagram for the reconciliation payment system. .............................. 24
+Figure 4.8. The BPMN model describes the commission reconciliation process. ............... 24
+Figure 4.9. The BPMN model describes the commission payment process ......................... 26
+Figure 4.10. Commission reconciliation website interface in the affiliate marketing system
+................................................................................................................................................ 27
+
+LIST OF TABLES
+Table 4.1. Descriptive Statistics Table .................................................................................. 21
+
+vi
+LIST OF ABBREVIATIONS
+Abbreviation Symbols
+
+Full Text
+
+AMNSTE
+
+Affiliate Marketing Network simulation
+and testing environment
+
+API
+
+Application Programming Interface
+
+BPMN
+
+Business Process Modeling Notation
+
+CPA
+
+Cost per action
+
+CPC
+
+Cost per click
+
+CPL
+
+Cost per lead
+
+CPS
+
+Cost per sale
+
+DFD
+
+Data flow diagram
+
+ESS
+
+Electronic Security System
+
+FAM
+
+Functional Architecture Model
+
+PPS
+
+Pay per sale
+
+RSA
+
+Rivest–Shamir–Adleman
+
+SME
+
+Small and Medium enterprises
+
+SSL
+
+Secure socket layers
+
+TAM
+
+Technology Acceptance Modal
+
+TAP
+
+Tiktok Affiliate Partner
+
+TDES/3DES
+
+Triple Data Encryption Standard
+
+TTP
+
+Trusted Third Party
+
+UML
+
+Unified Modeling Language
+
+

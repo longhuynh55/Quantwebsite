@@ -1,0 +1,3 @@
+{
+  "/api/strategy-lab/runs/[runId]/events/route": "app/api/strategy-lab/runs/[runId]/events/route.js"
+}

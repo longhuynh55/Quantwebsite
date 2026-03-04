@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
-import { StrategyCanvas, NodePalette, PropertyPanel, TemplateGallery, AiSuggestDialog } from "@/components/strategy-builder";
+import { StrategyCanvas, NodePalette, PropertyPanel, TemplateGallery, AiSuggestDialog, BacktestResultsPanel } from "@/components/strategy-builder";
 import type { StrategyNode, StrategyEdge } from "@/lib/stores/strategyBuilderStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import {
 } from "@/lib/stores/strategyBuilderStore";
 import { createStrategyNodeFromPaletteType } from "@/components/strategy-builder/nodeFactory";
 import { cn } from "@/lib/utils";
+import { useUndoRedo } from "@/lib/hooks/useUndoRedo";
+import { useNodeValidation } from "@/lib/hooks/useNodeValidation";
 import {
   Save,
   Play,
@@ -19,6 +21,11 @@ import {
   Plus,
   PanelLeft,
   PanelRight,
+  Undo2,
+  Redo2,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -31,6 +38,8 @@ import {
 } from "@/lib/strategy-lab/client";
 import { buildStrategyLabRunRequest } from "@/lib/strategy-lab/builder-mapper";
 import type { StrategyLabRunStatus } from "@/lib/strategy-lab/contracts";
+import { trackUiKpiEvent } from "@/lib/uiKpi";
+import type { StrategyBuilderInteractionEvent } from "@/lib/uiKpiSchema";
 
 type StrategyBuilderPersistApi = {
   hasHydrated: () => boolean;
@@ -79,6 +88,17 @@ function formatNumber(value: number): string {
   return value.toLocaleString();
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target.isContentEditable
+  );
+}
+
 export default function StrategyBuilderPage() {
   const persistApi = resolvePersistApi();
   const [strategyName, setStrategyName] = useState("Untitled Strategy");
@@ -114,6 +134,49 @@ export default function StrategyBuilderPage() {
   } = useStrategyBuilderStore();
 
   const selectedNode = useSelectedNode();
+
+  const trackStrategyBuilderEvent = useCallback(
+    (event: StrategyBuilderInteractionEvent, detail?: Record<string, unknown>) => {
+      trackUiKpiEvent({
+        metric: "strategy_builder_interaction",
+        event,
+        page: "strategy-builder",
+        source: "strategy-builder-page",
+        detail,
+      });
+    },
+    []
+  );
+
+  // Undo/Redo hook
+  const { undo, redo, captureSnapshot, clearHistory, canUndo, canRedo } = useUndoRedo();
+
+  // Node validation
+  const validation = useNodeValidation(
+    currentStrategy?.nodes ?? [],
+    currentStrategy?.edges ?? []
+  );
+
+  // Keyboard shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (key === "y" || (key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   useEffect(() => {
     if (!persistApi) {
@@ -311,6 +374,7 @@ export default function StrategyBuilderPage() {
         toast.error("Unsupported node type.");
         return;
       }
+      captureSnapshot();
       addNode(node);
 
       // ── Auto-connect: find the best upstream node to connect from ──
@@ -344,25 +408,27 @@ export default function StrategyBuilderPage() {
       setSelectedNode(node.id);
       setIsPropertyPanelOpen(true);
     },
-    [addNode, addEdge, currentStrategy?.nodes, setSelectedNode]
+    [addNode, addEdge, captureSnapshot, currentStrategy?.nodes, setSelectedNode]
   );
 
   // Handle node update
   const handleUpdateNode = useCallback(
     (nodeId: string, data: Record<string, unknown>) => {
+      captureSnapshot();
       updateNodeData(nodeId, data);
     },
-    [updateNodeData]
+    [captureSnapshot, updateNodeData]
   );
 
   // Handle node delete
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      captureSnapshot();
       deleteNode(nodeId);
       setSelectedNode(null);
       toast.success("Node deleted");
     },
-    [deleteNode, setSelectedNode]
+    [captureSnapshot, deleteNode, setSelectedNode]
   );
 
   // Handle save
@@ -519,24 +585,35 @@ export default function StrategyBuilderPage() {
 
     reset();
     createNewStrategy("Untitled Strategy");
+    clearHistory();
     setStrategyName("Untitled Strategy");
     resetRunState();
     toast.success("New strategy created");
-  }, [confirmDiscardUnsavedChanges, createNewStrategy, reset, resetRunState]);
+  }, [clearHistory, confirmDiscardUnsavedChanges, createNewStrategy, reset, resetRunState]);
 
-  const handleApplyTemplate = useCallback(
-    (templateNodes: StrategyNode[], templateEdges: StrategyEdge[], name: string) => {
-      if (!confirmDiscardUnsavedChanges("load a template")) {
-        return;
+  const applyIncomingStrategy = useCallback(
+    (
+      nextNodes: StrategyNode[],
+      nextEdges: StrategyEdge[],
+      name: string,
+      options: {
+        actionLabel: string;
+        successToast?: string;
+        trackEvent: StrategyBuilderInteractionEvent;
+      }
+    ): boolean => {
+      if (!confirmDiscardUnsavedChanges(options.actionLabel)) {
+        return false;
       }
 
       reset();
       createNewStrategy(name);
-      setNodes(templateNodes);
-      setEdges(templateEdges);
+      clearHistory();
+      setNodes(nextNodes);
+      setEdges(nextEdges);
 
-      if (templateNodes.length > 0) {
-        setSelectedNode(templateNodes[0].id);
+      if (nextNodes.length > 0) {
+        setSelectedNode(nextNodes[0].id);
         setIsPropertyPanelOpen(true);
       } else {
         setSelectedNode(null);
@@ -545,18 +622,47 @@ export default function StrategyBuilderPage() {
       setStrategyName(name);
       updateStrategyName(name);
       resetRunState();
-      toast.success(`Strategy "${name}" loaded`);
+      if (options.successToast) {
+        toast.success(options.successToast);
+      }
+      trackStrategyBuilderEvent(options.trackEvent, {
+        name,
+        nodeCount: nextNodes.length,
+        edgeCount: nextEdges.length,
+      });
+      return true;
     },
     [
       confirmDiscardUnsavedChanges,
       createNewStrategy,
+      clearHistory,
       reset,
       resetRunState,
       setEdges,
       setNodes,
       setSelectedNode,
+      trackStrategyBuilderEvent,
       updateStrategyName,
     ]
+  );
+
+  const handleApplyTemplate = useCallback(
+    (templateNodes: StrategyNode[], templateEdges: StrategyEdge[], name: string): boolean =>
+      applyIncomingStrategy(templateNodes, templateEdges, name, {
+        actionLabel: "load a template",
+        successToast: `Strategy "${name}" loaded`,
+        trackEvent: "template_applied",
+      }),
+    [applyIncomingStrategy]
+  );
+
+  const handleApplyAiStrategy = useCallback(
+    (nextNodes: StrategyNode[], nextEdges: StrategyEdge[], name: string): boolean =>
+      applyIncomingStrategy(nextNodes, nextEdges, name, {
+        actionLabel: "apply an AI strategy update",
+        trackEvent: "ai_strategy_applied",
+      }),
+    [applyIncomingStrategy]
   );
 
   // Handle name change
@@ -637,6 +743,52 @@ export default function StrategyBuilderPage() {
               )}
             </div>
 
+            {/* Undo/Redo + Validation */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={undo}
+                disabled={!canUndo}
+                className="h-8 w-8 p-0 border-stone-300 bg-white text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={redo}
+                disabled={!canRedo}
+                className="h-8 w-8 p-0 border-stone-300 bg-white text-stone-600 hover:border-stone-400 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </Button>
+
+              {/* Validation status */}
+              {(currentStrategy?.nodes.length ?? 0) > 0 && (
+                <div className="flex items-center gap-1.5 ml-2 px-2 py-1 border border-stone-200 dark:border-neutral-700 bg-stone-50 dark:bg-neutral-950 rounded text-[10px]">
+                  {validation.totalErrors > 0 ? (
+                    <>
+                      <AlertCircle className="w-3 h-3 text-rose-700 dark:text-rose-400" />
+                      <span className="text-rose-700 dark:text-rose-400 font-bold">{validation.totalErrors} error{validation.totalErrors !== 1 ? "s" : ""}</span>
+                    </>
+                  ) : validation.totalWarnings > 0 ? (
+                    <>
+                      <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      <span className="text-amber-600 dark:text-amber-400 font-bold">{validation.totalWarnings} warning{validation.totalWarnings !== 1 ? "s" : ""}</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">Valid</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Spacer */}
             <div className="flex-1" />
 
@@ -692,7 +844,7 @@ export default function StrategyBuilderPage() {
 
             {/* Right — AI + Run */}
             <div className="flex items-center gap-1.5">
-              <AiSuggestDialog onApplyStrategy={handleApplyTemplate} />
+              <AiSuggestDialog onApplyStrategy={handleApplyAiStrategy} />
               <Button
                 size="sm"
                 onClick={handleRunBacktest}
@@ -760,52 +912,16 @@ export default function StrategyBuilderPage() {
 
           {/* Canvas */}
           <div className="flex-1 relative min-h-0">
-            <StrategyCanvas />
+            <StrategyCanvas onBeforeMutate={captureSnapshot} />
           </div>
 
           {runSummary && (
-            <div className="border-t border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 px-4 py-2.5 flex-shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-sans uppercase tracking-wider font-semibold text-stone-900 dark:text-white">
-                  Latest Backtest
-                </h3>
-                <span className="text-[11px] text-stone-500 dark:text-neutral-400">
-                  {new Date(runSummary.generatedAt).toLocaleString()}
-                </span>
-              </div>
-              <div className="grid grid-cols-5 gap-1.5 text-xs">
-                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Return</div>
-                  <div className={cn("font-semibold", runSummary.summary.metrics.totalReturn >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
-                    {formatPercent(runSummary.summary.metrics.totalReturn)}
-                  </div>
-                </div>
-                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Sharpe</div>
-                  <div className="font-semibold text-stone-900 dark:text-white">
-                    {runSummary.summary.metrics.sharpeRatio.toFixed(2)}
-                  </div>
-                </div>
-                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Drawdown</div>
-                  <div className="font-semibold text-rose-700 dark:text-rose-400">
-                    {formatPercent(runSummary.summary.metrics.maxDrawdown)}
-                  </div>
-                </div>
-                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Trades</div>
-                  <div className="font-semibold text-stone-900 dark:text-white">
-                    {runSummary.summary.totalTrades}
-                  </div>
-                </div>
-                <div className="border border-stone-200 dark:border-neutral-700 px-2 py-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-neutral-500">Coverage</div>
-                  <div className="font-semibold text-stone-900 dark:text-white">
-                    {formatPercent(runSummary.summary.diagnostics.coverageRatio)}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BacktestResultsPanel
+              result={runSummary}
+              onClose={() => setRunSummary(null)}
+              onRerun={handleRunBacktest}
+              isRunning={isRunSubmitting || isRunActive}
+            />
           )}
 
           {/* Status Bar */}

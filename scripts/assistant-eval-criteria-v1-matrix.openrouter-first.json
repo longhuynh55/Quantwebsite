@@ -1,0 +1,56 @@
+{
+  "version": "assistant-criteria-v1",
+  "thresholds": {
+    "fidelityMinPassRate": 0.99,
+    "routingMinTurnPassRate": 0.99,
+    "routingMinEndpointPassRate": 0.99,
+    "stressMinTurnPassRate": 0.98,
+    "numbersNotInDataMax": 0
+  },
+  "suites": [
+    {
+      "id": "routing_gold",
+      "type": "node-script",
+      "script": "scripts/eval-assistant-routing-matrix.mjs",
+      "reportEnv": "ASSISTANT_EVAL_REPORT_PATH",
+      "reportPath": "artifacts/assistant-routing-matrix-report.json"
+    },
+    {
+      "id": "ohlcv_stress",
+      "type": "node-script",
+      "script": "scripts/eval-assistant-ohlcv-stress.mjs",
+      "reportEnv": "ASSISTANT_EVAL_REPORT_PATH",
+      "reportPath": "artifacts/assistant-ohlcv-stress-report.json"
+    },
+    {
+      "id": "fundamentals_stress",
+      "type": "node-script",
+      "script": "scripts/eval-assistant-fundamentals-hyper-noise-matrix.mjs",
+      "reportEnv": "ASSISTANT_EVAL_REPORT_PATH",
+      "reportPath": "artifacts/assistant-fundamentals-hyper-noise-matrix-report.json"
+    },
+    {
+      "id": "metrics_stress",
+      "type": "node-script",
+      "script": "scripts/eval-assistant-metrics-stress-matrix.mjs",
+      "reportEnv": "ASSISTANT_EVAL_REPORT_PATH",
+      "reportPath": "artifacts/assistant-metrics-stress-matrix-report.json"
+    },
+    {
+      "id": "technical_backtesting",
+      "type": "node-script",
+      "script": "scripts/eval-backtesting-kpi-matrix.mjs",
+      "reportPath": "artifacts/backtesting-kpi-matrix-report.json"
+    },
+    {
+      "id": "query_fidelity_duckdb",
+      "type": "jest",
+      "reportPath": "artifacts/assistant-query-fidelity-report.json",
+      "args": [
+        "--runInBand",
+        "src/lib/assistant/queryFidelity.test.ts",
+        "--json"
+      ]
+    }
+  ]
+}

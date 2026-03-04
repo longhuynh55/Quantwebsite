@@ -289,20 +289,34 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare CI data
+      - name: Deterministic CI data prepare
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
         run: pnpm run data:generate:ci
+
+      - name: Deterministic fundamentals validation
+        env:
+          TZ: UTC
+          LANG: C
+          LC_ALL: C
+        run: pnpm run data:validate:fundamentals
 
       - name: Prepare .env.glm for Docker app
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           ASSISTANT_EVAL_AUTH_TOKEN: ${{ secrets.ASSISTANT_EVAL_AUTH_TOKEN }}
         run: |
           cat > .env.glm <<EOF
           OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+          GLM_API_KEY=${GLM_API_KEY:-}
           OPENROUTER_HTTP_REFERER=https://github.com/${GITHUB_REPOSITORY}
           OPENROUTER_X_TITLE=QuantVN-CI
           ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}
           EOF
+          echo "ASSISTANT_EVAL_AUTH_TOKEN=${ASSISTANT_EVAL_AUTH_TOKEN:-ci-eval-token}" >> "$GITHUB_ENV"
 
       - name: Start app container
         env:
@@ -311,7 +325,7 @@ jobs:
 
       - name: Wait for app health
         env:
-          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&includeFundamentals=false
+          HEALTH_URL: http://localhost:3010/api/health/data?probe=true&canary=true&includeFundamentals=false
           HEALTH_MAX_ATTEMPTS: "40"
           HEALTH_RETRY_INTERVAL_SECONDS: "3"
           HEALTH_REQUEST_TIMEOUT_MS: "10000"

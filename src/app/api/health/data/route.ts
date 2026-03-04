@@ -21,10 +21,10 @@ import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/r
 import { isLowMemoryModeEnabled } from "@/lib/runtimeMode";
 
 const MIN_DATA_QUALITY_RATIO = 0.95;
-const RATE_LIMIT_WINDOW_MS = 60000;
-const RATE_LIMIT_MAX_FULL = 20;
-const RATE_LIMIT_MAX_PROBE = 60;
-const RATE_LIMIT_MAX_REFRESH = 10;
+const RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.HEALTH_DATA_RATE_LIMIT_WINDOW_MS, 60_000);
+const RATE_LIMIT_MAX_FULL = parsePositiveInt(process.env.HEALTH_DATA_RATE_LIMIT_MAX_FULL, 20);
+const RATE_LIMIT_MAX_PROBE = parsePositiveInt(process.env.HEALTH_DATA_RATE_LIMIT_MAX_PROBE, 600);
+const RATE_LIMIT_MAX_REFRESH = parsePositiveInt(process.env.HEALTH_DATA_RATE_LIMIT_MAX_REFRESH, 10);
 const REFRESH_AUTH_HEADER = "x-health-refresh-token";
 const FUNDAMENTALS_CSV_FILES = [
   "HOSE_VERIFIED_BalanceSheet_Quarterly_2018_2025.csv",
@@ -68,6 +68,12 @@ function parseBoolean(rawValue: string | null, fallback: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return fallback;
+}
+
+function parsePositiveInt(rawValue: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(String(rawValue ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
 }
 
 function hasAuthorizedRefreshToken(request: Request): boolean {
@@ -516,13 +522,15 @@ export async function GET(request: Request) {
     );
   }
 
+  const fullModeChecks = await runProbeChecks(resolvedBackendStatus, includeFundamentals);
+
   const lowMemoryMode = isLowMemoryModeEnabled();
   if (lowMemoryMode) {
     const [stockMetadata, indexData] = await Promise.all([
       loadStockMetadata(),
       loadIndexData(),
     ]);
-    const checks = await runProbeChecks(resolvedBackendStatus, includeFundamentals);
+    const checks = fullModeChecks;
     const checksOk = checks.every((check) => check.ok);
     const datasets = {
       stockMetadata: buildDatasetHealth("stockMetadata", stockMetadata.length),
@@ -569,11 +577,12 @@ export async function GET(request: Request) {
   const fallbackOhlcvTotalRows = Number.isFinite(manifestOhlcvRows) ? Number(manifestOhlcvRows) : 0;
   let ohlcvLoadedRows = 0;
   let ohlcvFallback: DatasetHealth | null = null;
+  const duckdbOhlcvProbeOk = fullModeChecks.some((check) => check.name === "duckdb:ohlcv" && check.ok);
 
   if (resolvedBackendStatus.active === "duckdb") {
     ohlcvLoadedRows = fallbackOhlcvTotalRows;
     ohlcvFallback = {
-      ok: true,
+      ok: duckdbOhlcvProbeOk,
       loadedRows: ohlcvLoadedRows,
       totalRows: fallbackOhlcvTotalRows,
       acceptedRows: fallbackOhlcvTotalRows,
@@ -625,7 +634,8 @@ export async function GET(request: Request) {
   }
 
   const coreOk = datasets.stockMetadata.ok && datasets.ohlcv.ok && datasets.index.ok;
-  const ok = coreOk && fundamentals.ok;
+  const checksOk = fullModeChecks.every((check) => check.ok);
+  const ok = coreOk && checksOk && fundamentals.ok;
 
   return NextResponse.json(
     {
@@ -637,6 +647,7 @@ export async function GET(request: Request) {
         ok: true,
         ...resolvedBackendStatus,
       },
+      checks: fullModeChecks,
       dataDir,
       manifest: buildManifestSnapshot(manifest),
       datasets,

@@ -61,8 +61,25 @@ const edgeColorBySource: Record<string, string> = {
   backtest: "#059669",   // emerald-600
 };
 
+const edgeSignature = (connection: {
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}): string =>
+  `${connection.source}::${connection.sourceHandle ?? ""}=>${connection.target}::${connection.targetHandle ?? ""}`;
+
+const generateEdgeId = (connection: {
+  source: string;
+  target: string;
+}): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? `e-${connection.source}-${connection.target}-${crypto.randomUUID().slice(0, 8)}`
+    : `e-${connection.source}-${connection.target}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
 interface StrategyCanvasProps {
   className?: string;
+  onBeforeMutate?: () => void;
 }
 
 // Context menu categories for right-click "Add Node"
@@ -112,7 +129,7 @@ const contextMenuStripeColors: Record<string, string> = {
   backtest: "bg-emerald-600",
 };
 
-const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
+const StrategyCanvasInner = ({ className, onBeforeMutate }: StrategyCanvasProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { fitView, screenToFlowPosition, getNode } = useReactFlow<StrategyNode, StrategyEdge>();
 
@@ -141,7 +158,32 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
   const [nodes, setLocalNodes] = useNodesState<StrategyNode>(initialNodes);
   const [edges, setLocalEdges] = useEdgesState<StrategyEdge>(initialEdges);
+  const edgeSignatures = useMemo(() => {
+    const signatures = new Set<string>();
+    for (const edge of edges) {
+      signatures.add(
+        edgeSignature({
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle ?? null,
+          targetHandle: edge.targetHandle ?? null,
+        })
+      );
+    }
+    for (const edge of currentStrategy?.edges ?? []) {
+      signatures.add(
+        edgeSignature({
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle ?? null,
+          targetHandle: edge.targetHandle ?? null,
+        })
+      );
+    }
+    return signatures;
+  }, [currentStrategy?.edges, edges]);
   const previousNodeCountRef = useRef(nodes.length);
+  const dragSnapshotTakenRef = useRef<Set<string>>(new Set());
 
   // Keep React Flow local state aligned with persisted store changes.
   useEffect(() => {
@@ -154,11 +196,17 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
   // Fix for React Flow v12 + Next.js SSR: force edge re-render after init
   const onInitHandler = useCallback(() => {
-    // Give React Flow time to complete internal measurement pass
-    setTimeout(() => {
-      setLocalEdges([...initialEdges]);
-    }, 100);
-  }, [initialEdges, setLocalEdges]);
+    const scheduleNextFrame = (callback: () => void): void => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => callback());
+        return;
+      }
+      setTimeout(callback, 0);
+    };
+    scheduleNextFrame(() => {
+      setLocalEdges((currentEdges) => [...currentEdges]);
+    });
+  }, [setLocalEdges]);
 
   useEffect(() => {
     const previousCount = previousNodeCountRef.current;
@@ -173,6 +221,28 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
   // Sync local state with store
   const handleNodesChange = useCallback(
     (changes: NodeChange<StrategyNode>[]) => {
+      const shouldCaptureSnapshot = changes.some((change) => {
+        if (change.type === "position") {
+          if (change.dragging) {
+            if (!dragSnapshotTakenRef.current.has(change.id)) {
+              dragSnapshotTakenRef.current.add(change.id);
+              return true;
+            }
+            return false;
+          }
+          dragSnapshotTakenRef.current.delete(change.id);
+          return false;
+        }
+
+        return (
+          change.type === "remove" || change.type === "add" || change.type === "replace"
+        );
+      });
+
+      if (shouldCaptureSnapshot) {
+        onBeforeMutate?.();
+      }
+
       setLocalNodes((currentNodes) => {
         const nextNodes = applyNodeChanges(changes, currentNodes) as StrategyNode[];
 
@@ -191,23 +261,32 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
         return nextNodes;
       });
     },
-    [setLocalNodes, setNodes]
+    [onBeforeMutate, setLocalNodes, setNodes]
   );
 
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<StrategyEdge>[]) => {
+      const shouldCaptureSnapshot = changes.some(
+        (change) =>
+          change.type === "remove" || change.type === "add" || change.type === "replace"
+      );
+      if (shouldCaptureSnapshot) {
+        onBeforeMutate?.();
+      }
+
       setLocalEdges((currentEdges) => {
         const nextEdges = applyEdgeChanges(changes, currentEdges);
         setEdges(nextEdges);
         return nextEdges;
       });
     },
-    [setEdges, setLocalEdges]
+    [onBeforeMutate, setEdges, setLocalEdges]
   );
 
   // Validate connections
   const isValidConnection = useCallback(
     (connection: Connection | { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => {
+      if (!connection.source || !connection.target) return false;
       const sourceNode = getNode(connection.source);
       const targetNode = getNode(connection.target);
       if (!sourceNode || !targetNode) return false;
@@ -215,11 +294,8 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
       // Prevent self-connections
       if (connection.source === connection.target) return false;
 
-      // Prevent duplicate edges between same source and target
-      const existingEdge = edges.find(
-        (e) => e.source === connection.source && e.target === connection.target
-      );
-      if (existingEdge) return false;
+      const signature = edgeSignature(connection);
+      if (edgeSignatures.has(signature)) return false;
 
       const sourceType = sourceNode.type || "";
       const targetType = targetNode.type || "";
@@ -229,12 +305,27 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
       return allowedTargets.includes(targetType);
     },
-    [getNode, edges]
+    [getNode, edgeSignatures]
   );
 
   // Handle new connections
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      if (connection.source === connection.target) {
+        toast.error("Cannot connect a node to itself.");
+        return;
+      }
+      const signature = edgeSignature({
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: connection.sourceHandle ?? null,
+        targetHandle: connection.targetHandle ?? null,
+      });
+      if (edgeSignatures.has(signature)) {
+        toast.message("Connection already exists.");
+        return;
+      }
       const sourceNode = getNode(connection.source);
       const targetNode = getNode(connection.target);
 
@@ -249,9 +340,14 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
         return;
       }
 
+      onBeforeMutate?.();
+
       const edgeColor = edgeColorBySource[sourceType] || "#a8a29e";
       const newEdge: StrategyEdge = {
-        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+        id: generateEdgeId({
+          source: connection.source,
+          target: connection.target,
+        }),
         source: connection.source,
         target: connection.target,
         sourceHandle: connection.sourceHandle ?? undefined,
@@ -262,7 +358,7 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
 
       addEdgeToStore(newEdge);
     },
-    [addEdgeToStore, getNode]
+    [addEdgeToStore, edgeSignatures, getNode, onBeforeMutate]
   );
 
   // Handle node selection
@@ -303,10 +399,11 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
       if (!contextMenu) return;
       const newNode = createStrategyNodeFromPaletteType(type, { x: contextMenu.flowX, y: contextMenu.flowY });
       if (!newNode) return;
+      onBeforeMutate?.();
       addNode(newNode);
       setContextMenu(null);
     },
-    [addNode, contextMenu]
+    [addNode, contextMenu, onBeforeMutate]
   );
 
   // Close context menu on Escape
@@ -340,9 +437,10 @@ const StrategyCanvasInner = ({ className }: StrategyCanvasProps) => {
           };
       const newNode = createStrategyNodeFromPaletteType(type, position);
       if (!newNode) return;
+      onBeforeMutate?.();
       addNode(newNode);
     },
-    [addNode, screenToFlowPosition]
+    [addNode, onBeforeMutate, screenToFlowPosition]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -610,3 +708,4 @@ export const StrategyCanvas = (props: StrategyCanvasProps) => {
     </ReactFlowProvider>
   );
 };
+

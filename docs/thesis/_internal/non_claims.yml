@@ -1,0 +1,24 @@
+version: 1
+purpose: "Explicit do-not-claim list to prevent overstatement in thesis writing."
+
+items:
+  - id: live_broker_connectivity
+    statement: "Do not claim live broker connectivity or order execution."
+    rationale: "UI includes a 'Connect Broker' call-to-action, but production brokerage integration is not verified as implemented."
+    scope: ["thesis", "demo"]
+
+  - id: community_is_production_network
+    statement: "Do not claim the community marketplace is backed by a production community backend."
+    rationale: "Current marketplace uses mock strategy generation in the implementation."
+    scope: ["thesis"]
+
+  - id: ml_lab_deployed_models
+    statement: "Do not claim ML Lab provides deployed forecasting models or validated predictive performance."
+    rationale: "ML Lab is presented as a sandbox/preview with roadmap language."
+    scope: ["thesis"]
+
+  - id: guaranteed_returns
+    statement: "Do not imply guaranteed returns or real-world profitability."
+    rationale: "Backtests are conditional estimates; costs, slippage, and regime changes can invalidate historical patterns."
+    scope: ["thesis", "marketing"]
+

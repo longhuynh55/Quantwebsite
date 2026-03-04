@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Editorial Backtest Performance Report</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            700: "#047857",
+                            800: "#065f46",
+                            900: "#064e3b",
+                        },
+                        stone: {
+                            800: "#292524",
+                            900: "#1c1917",
+                            950: "#0c0a09", // Warm dark background
+                        },
+                        neutral: {
+                            800: "#262626",
+                            900: "#171717",
+                            950: "#0a0a0a",
+                        },
+                        "text-primary": "#e7e5e4", // Stone-200
+                        "text-secondary": "#a8a29e", // Stone-400
+                        "text-muted": "#57534e", // Stone-600
+                        "profit": "#047857",
+                        "loss": "#be123c",
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                        serif: ["Playfair Display", "Georgia", "serif"],
+                    },
+                    letterSpacing: {
+                        'editorial': '0.15em',
+                        'tight-heading': '-0.025em',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+        }::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0c0a09;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #292524;
+            border-radius: 0px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #44403c;
+        }
+    </style>
+</head>
+<body class="bg-stone-950 font-sans text-text-primary h-screen w-screen overflow-hidden flex flex-col antialiased selection:bg-emerald-700 selection:text-white">
+<header class="flex-none border-b border-stone-800 bg-stone-950 px-8 py-6">
+<div class="flex items-end justify-between">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<div class="h-px w-8 bg-stone-600"></div>
+<span class="text-[10px] font-bold text-text-secondary uppercase tracking-editorial">Strategy Report</span>
+</div>
+<h1 class="font-serif text-3xl font-bold text-white tracking-tight-heading">Backtest Performance: <span class="text-text-secondary font-normal italic">RSI Reversal</span></h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="group flex items-center gap-2 border border-stone-800 bg-stone-900/50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-editorial text-text-secondary transition hover:border-text-secondary hover:text-white rounded-sm">
+<span class="material-symbols-outlined text-[16px]">ios_share</span>
+                    Share
+                </button>
+<button class="group flex items-center gap-2 bg-emerald-700/10 border border-emerald-900/50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-editorial text-emerald-500 transition hover:bg-emerald-700 hover:text-white hover:border-emerald-700 rounded-sm">
+<span class="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+                    Export PDF
+                </button>
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto px-8 py-8">
+<div class="mx-auto max-w-7xl space-y-8">
+<div class="grid grid-cols-4 gap-px bg-stone-800 border border-stone-800 rounded-sm overflow-hidden">
+<div class="bg-stone-900/50 p-6 group hover:bg-stone-900 transition-colors">
+<span class="block text-[10px] font-bold uppercase tracking-editorial text-text-muted mb-3 group-hover:text-text-secondary">Net Profit</span>
+<div class="flex items-baseline gap-2">
+<span class="font-serif text-4xl font-bold text-emerald-500 tracking-tight">+14.2%</span>
+<span class="text-[10px] font-mono text-emerald-700">+$14,200</span>
+</div>
+</div>
+<div class="bg-stone-900/50 p-6 group hover:bg-stone-900 transition-colors">
+<span class="block text-[10px] font-bold uppercase tracking-editorial text-text-muted mb-3 group-hover:text-text-secondary">Sharpe Ratio</span>
+<div class="flex items-baseline gap-2">
+<span class="font-serif text-4xl font-bold text-white tracking-tight">2.14</span>
+<span class="text-[10px] font-mono text-text-secondary">Top 5%</span>
+</div>
+</div>
+<div class="bg-stone-900/50 p-6 group hover:bg-stone-900 transition-colors">
+<span class="block text-[10px] font-bold uppercase tracking-editorial text-text-muted mb-3 group-hover:text-text-secondary">Max Drawdown</span>
+<div class="flex items-baseline gap-2">
+<span class="font-serif text-4xl font-bold text-rose-500 tracking-tight">-4.5%</span>
+<span class="text-[10px] font-mono text-rose-800">Low Risk</span>
+</div>
+</div>
+<div class="bg-stone-900/50 p-6 group hover:bg-stone-900 transition-colors">
+<span class="block text-[10px] font-bold uppercase tracking-editorial text-text-muted mb-3 group-hover:text-text-secondary">Win Rate</span>
+<div class="flex items-baseline gap-2">
+<span class="font-serif text-4xl font-bold text-white tracking-tight">68%</span>
+<span class="text-[10px] font-mono text-text-secondary">42 Trades</span>
+</div>
+</div>
+</div>
+<section class="border border-stone-800 bg-stone-900/30 rounded-sm p-1">
+<div class="bg-stone-950 p-6 relative">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-4">
+<h3 class="font-serif text-xl text-white font-medium">Equity Curve</h3>
+<div class="h-4 w-px bg-stone-800"></div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<div class="w-3 h-0.5 bg-emerald-600"></div>
+<span class="text-[10px] text-text-secondary uppercase tracking-wider">Equity</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-0.5 bg-stone-600 border border-stone-600 border-dashed"></div>
+<span class="text-[10px] text-text-secondary uppercase tracking-wider">Benchmark</span>
+</div>
+</div>
+</div>
+<div class="flex bg-stone-900 border border-stone-800 rounded-sm overflow-hidden">
+<button class="px-3 py-1 text-[10px] font-bold text-white bg-stone-800">1D</button>
+<button class="px-3 py-1 text-[10px] font-bold text-text-secondary hover:text-white">1W</button>
+<button class="px-3 py-1 text-[10px] font-bold text-text-secondary hover:text-white">1M</button>
+<button class="px-3 py-1 text-[10px] font-bold text-text-secondary hover:text-white">ALL</button>
+</div>
+</div>
+<div class="relative h-[300px] w-full mb-2">
+<svg class="absolute inset-0 h-full w-full pointer-events-none opacity-20" preserveAspectRatio="none">
+<line stroke="#78716c" stroke-dasharray="4" x1="0" x2="100%" y1="20%" y2="20%"></line>
+<line stroke="#78716c" stroke-dasharray="4" x1="0" x2="100%" y1="40%" y2="40%"></line>
+<line stroke="#78716c" stroke-dasharray="4" x1="0" x2="100%" y1="60%" y2="60%"></line>
+<line stroke="#78716c" stroke-dasharray="4" x1="0" x2="100%" y1="80%" y2="80%"></line>
+</svg>
+<svg class="absolute inset-0 h-full w-full pointer-events-none overflow-visible">
+<defs>
+<linearGradient id="equityGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#047857" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#047857" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path d="M0,250 C50,240 100,245 150,220 C200,195 250,210 300,180 C350,150 400,160 450,130 C500,100 550,110 600,80 C650,50 700,60 750,40 C800,20 850,30 900,10 L900,300 L0,300 Z" fill="url(#equityGradient)"></path>
+<path d="M0,250 C50,240 100,245 150,220 C200,195 250,210 300,180 C350,150 400,160 450,130 C500,100 550,110 600,80 C650,50 700,60 750,40 C800,20 850,30 900,10" fill="none" stroke="#047857" stroke-width="2"></path>
+<rect fill="#be123c" fill-opacity="0.1" height="120" width="40" x="230" y="180"></rect>
+<path d="M0,250 C100,240 200,230 300,220 C400,210 500,200 600,190 C700,180 800,170 900,160" fill="none" stroke="#57534e" stroke-dasharray="4 4" stroke-width="1"></path>
+</svg>
+<div class="absolute left-[66%] top-[8%] bg-stone-900 border border-stone-700 p-2 shadow-xl rounded-sm">
+<div class="text-[10px] text-text-secondary uppercase tracking-wider mb-1">Nov 14, 2023</div>
+<div class="font-mono text-sm font-bold text-white">$114,230.50</div>
+<div class="text-[10px] text-emerald-500 font-medium">+2.4%</div>
+</div>
+</div>
+<div class="relative h-[100px] w-full border-t border-stone-800 pt-4 mt-2">
+<div class="flex items-center gap-2 mb-2 absolute top-4 left-0">
+<h4 class="font-serif text-sm text-text-secondary italic">Signal Analysis</h4>
+</div>
+<svg class="w-full h-full overflow-visible">
+<g stroke="#262626" stroke-width="1">
+<line x1="10%" x2="10%" y1="20" y2="80"></line>
+<rect fill="#be123c" height="40" stroke="none" width="1%" x="9.5%" y="30"></rect>
+<line x1="15%" x2="15%" y1="40" y2="70"></line>
+<rect fill="#047857" height="20" stroke="none" width="1%" x="14.5%" y="45"></rect>
+<circle cx="15%" cy="85" fill="#047857" r="3"></circle>
+<text fill="#047857" font-family="Inter" font-size="8" font-weight="bold" text-anchor="middle" x="15%" y="95">B</text>
+<line x1="20%" x2="20%" y1="30" y2="80"></line>
+<rect fill="#047857" height="40" stroke="none" width="1%" x="19.5%" y="35"></rect>
+<line x1="25%" x2="25%" y1="10" y2="60"></line>
+<rect fill="#047857" height="30" stroke="none" width="1%" x="24.5%" y="15"></rect>
+<circle cx="25%" cy="5" fill="#be123c" r="3"></circle>
+<text fill="#be123c" font-family="Inter" font-size="8" font-weight="bold" text-anchor="middle" x="25%" y="-2">S</text>
+<line x1="30%" x2="30%" y1="20" y2="50"></line>
+<rect fill="#be123c" height="15" stroke="none" width="1%" x="29.5%" y="25"></rect>
+<rect fill="#047857" height="20" stroke="none" width="1%" x="34.5%" y="40"></rect>
+<rect fill="#047857" height="40" stroke="none" width="1%" x="39.5%" y="30"></rect>
+<rect fill="#be123c" height="10" stroke="none" width="1%" x="44.5%" y="50"></rect>
+<rect fill="#047857" height="25" stroke="none" width="1%" x="49.5%" y="45"></rect>
+<rect fill="#047857" height="40" stroke="none" width="1%" x="54.5%" y="35"></rect>
+</g>
+</svg>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-3 gap-8">
+<div class="col-span-2 space-y-4">
+<div class="flex items-center justify-between border-b border-stone-800 pb-2">
+<h3 class="font-serif text-lg text-white font-medium">Trade History</h3>
+<button class="text-[10px] font-bold uppercase tracking-editorial text-text-secondary hover:text-white transition-colors">View All</button>
+</div>
+<div class="bg-stone-900 border border-stone-800 rounded-sm overflow-hidden">
+<table class="w-full text-left">
+<thead class="bg-stone-950 border-b border-stone-800 text-[10px] uppercase tracking-editorial font-bold text-text-secondary">
+<tr>
+<th class="px-6 py-4 font-medium">Time</th>
+<th class="px-6 py-4 font-medium">Symbol</th>
+<th class="px-6 py-4 font-medium">Side</th>
+<th class="px-6 py-4 font-medium text-right">Price</th>
+<th class="px-6 py-4 font-medium text-right">P/L</th>
+<th class="px-6 py-4 font-medium text-center">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-stone-800/50 text-sm font-mono">
+<tr class="group hover:bg-stone-800/30 transition-colors">
+<td class="px-6 py-3 text-text-secondary">2023-11-14 14:30</td>
+<td class="px-6 py-3 text-white">BTC/USD</td>
+<td class="px-6 py-3"><span class="text-rose-400 font-bold">SELL</span></td>
+<td class="px-6 py-3 text-right text-text-secondary">36,450.00</td>
+<td class="px-6 py-3 text-right text-emerald-500 font-bold">+$450.00</td>
+<td class="px-6 py-3 text-center"><span class="inline-block size-1.5 rounded-full bg-emerald-500"></span></td>
+</tr>
+<tr class="group hover:bg-stone-800/30 transition-colors">
+<td class="px-6 py-3 text-text-secondary">2023-11-13 09:15</td>
+<td class="px-6 py-3 text-white">ETH/USD</td>
+<td class="px-6 py-3"><span class="text-emerald-500 font-bold">BUY</span></td>
+<td class="px-6 py-3 text-right text-text-secondary">2,050.00</td>
+<td class="px-6 py-3 text-right text-rose-500 font-bold">-$120.00</td>
+<td class="px-6 py-3 text-center"><span class="inline-block size-1.5 rounded-full bg-emerald-500"></span></td>
+</tr>
+<tr class="group hover:bg-stone-800/30 transition-colors">
+<td class="px-6 py-3 text-text-secondary">2023-11-12 16:45</td>
+<td class="px-6 py-3 text-white">SOL/USD</td>
+<td class="px-6 py-3"><span class="text-emerald-500 font-bold">BUY</span></td>
+<td class="px-6 py-3 text-right text-text-secondary">58.40</td>
+<td class="px-6 py-3 text-right text-emerald-500 font-bold">+$85.20</td>
+<td class="px-6 py-3 text-center"><span class="inline-block size-1.5 rounded-full bg-emerald-500"></span></td>
+</tr>
+<tr class="group hover:bg-stone-800/30 transition-colors">
+<td class="px-6 py-3 text-text-secondary">2023-11-11 11:20</td>
+<td class="px-6 py-3 text-white">BTC/USD</td>
+<td class="px-6 py-3"><span class="text-rose-400 font-bold">SELL</span></td>
+<td class="px-6 py-3 text-right text-text-secondary">36,100.00</td>
+<td class="px-6 py-3 text-right text-emerald-500 font-bold">+$1,200.00</td>
+<td class="px-6 py-3 text-center"><span class="inline-block size-1.5 rounded-full bg-emerald-500"></span></td>
+</tr>
+<tr class="group hover:bg-stone-800/30 transition-colors">
+<td class="px-6 py-3 text-text-secondary">2023-11-10 08:00</td>
+<td class="px-6 py-3 text-white">BTC/USD</td>
+<td class="px-6 py-3"><span class="text-emerald-500 font-bold">BUY</span></td>
+<td class="px-6 py-3 text-right text-text-secondary">35,800.00</td>
+<td class="px-6 py-3 text-right text-emerald-500 font-bold">+$320.00</td>
+<td class="px-6 py-3 text-center"><span class="inline-block size-1.5 rounded-full bg-emerald-500"></span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="space-y-8">
+<div>
+<div class="flex items-center justify-between border-b border-stone-800 pb-2 mb-4">
+<h3 class="font-serif text-lg text-white font-medium">Risk Profile</h3>
+<span class="material-symbols-outlined text-text-muted text-[18px]">info</span>
+</div>
+<div class="bg-stone-900 border border-stone-800 p-5 rounded-sm">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="text-xs text-text-secondary uppercase tracking-wide">Sortino Ratio</span>
+<span class="font-mono text-sm font-bold text-white">3.2</span>
+</div>
+<div class="h-px w-full bg-stone-800"></div>
+<div class="flex items-center justify-between">
+<span class="text-xs text-text-secondary uppercase tracking-wide">Beta</span>
+<span class="font-mono text-sm font-bold text-white">0.85</span>
+</div>
+<div class="h-px w-full bg-stone-800"></div>
+<div class="flex items-center justify-between">
+<span class="text-xs text-text-secondary uppercase tracking-wide">Avg Win/Loss</span>
+<span class="font-mono text-sm font-bold text-emerald-500">1.8</span>
+</div>
+<div class="h-px w-full bg-stone-800"></div>
+<div class="flex items-center justify-between">
+<span class="text-xs text-text-secondary uppercase tracking-wide">Exposure Time</span>
+<span class="font-mono text-sm font-bold text-white">42%</span>
+</div>
+</div>
+</div>
+</div>
+<div>
+<div class="flex items-center justify-between border-b border-stone-800 pb-2 mb-4">
+<h3 class="font-serif text-lg text-white font-medium">Returns Distribution</h3>
+</div>
+<div class="bg-stone-900 border border-stone-800 p-5 rounded-sm h-[200px] flex items-end justify-between gap-1">
+<div class="w-full bg-rose-900/30 h-[10%] rounded-sm hover:bg-rose-800/50 transition-colors relative group">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-white bg-black px-1">-4%</div>
+</div>
+<div class="w-full bg-rose-900/40 h-[15%] rounded-sm hover:bg-rose-800/50 transition-colors relative group"></div>
+<div class="w-full bg-rose-900/60 h-[25%] rounded-sm hover:bg-rose-800/50 transition-colors relative group"></div>
+<div class="w-full bg-stone-700/30 h-[40%] rounded-sm hover:bg-stone-600/50 transition-colors relative group"></div>
+<div class="w-full bg-emerald-900/40 h-[65%] rounded-sm hover:bg-emerald-800/50 transition-colors relative group"></div>
+<div class="w-full bg-emerald-900/60 h-[85%] rounded-sm hover:bg-emerald-800/50 transition-colors relative group">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-white bg-black px-1">+2%</div>
+</div>
+<div class="w-full bg-emerald-900/50 h-[50%] rounded-sm hover:bg-emerald-800/50 transition-colors relative group"></div>
+<div class="w-full bg-emerald-900/30 h-[20%] rounded-sm hover:bg-emerald-800/50 transition-colors relative group"></div>
+</div>
+<div class="flex justify-between text-[10px] text-text-secondary mt-2 font-mono uppercase">
+<span>Loss</span>
+<span>Neutral</span>
+<span>Profit</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<footer class="flex-none border-t border-stone-800 bg-stone-950 px-8 py-4">
+<div class="flex items-center justify-between text-[10px] text-text-secondary font-mono">
+<div class="flex items-center gap-6">
+<span>GENERATED: NOV 14, 2023 14:35 UTC</span>
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-emerald-500"></span>LIVE TRADING ACTIVE</span>
+</div>
+<div class="flex items-center gap-4">
+<span>QUANTVN ANALYTICS ENGINE V2.4</span>
+<span>CONFIDENTIAL</span>
+</div>
+</div>
+</footer>
+
+</body></html>

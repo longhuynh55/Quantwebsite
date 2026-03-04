@@ -1,0 +1,23 @@
+{
+    "THESIS_TYPE": "GRADUATION THESIS",
+    "THESIS_TITLE": "QuantVN Strategy Forge: An Accessible Quantitative Analysis Platform for Trading Strategy Design and Backtesting on Vietnamese Equities (HOSE)",
+    "DEPARTMENT": "Faculty of Finance and Banking",
+    "UNIVERSITY": "University of Economics and Law",
+    "UNIVERSITY_PARENT": "Vietnam National University Ho Chi Minh City",
+    "STUDENT_NAME": "Lieu Hoai Phuc",
+    "STUDENT_ID": "K224141735",
+    "STUDENT_CLASS": "K22414C",
+    "SUPERVISOR_NAME": "Assoc. Prof. Dr. Nguyen Anh Phong",
+    "SUPERVISOR_NAME_VN": "PGS.TS. Nguyễn Anh Phong",
+    "CITY": "Ho Chi Minh City",
+    "YEAR": "2026",
+    "DECLARATION_TITLE": "DECLARATION",
+    "DECLARATION_TEXT": "I hereby declare that this graduation thesis is my own original work, conducted under the supervision of Assoc. Prof. Dr. Nguyen Anh Phong. The data, results, and findings presented in this thesis are truthful and have not been previously published in any other work.\nI take full responsibility for the accuracy and integrity of the content presented herein.",
+    "ACKNOWLEDGEMENT_TITLE": "ACKNOWLEDGEMENTS",
+    "ACKNOWLEDGEMENT_TEXT": "I would like to express my sincere gratitude to my supervisor, Assoc. Prof. Dr. Nguyen Anh Phong, for his invaluable guidance, insightful feedback, and continuous support throughout my graduation thesis.\nI also extend my thanks to the faculty members of the School of Finance and Banking, University of Economics and Law (UEL), Vietnam National University Ho Chi Minh City, for equipping me with the foundational knowledge in finance and banking that enabled this research.\nI am grateful to my peers for their constructive feedback, which improved both the platform design and the quality of this thesis.\nFinally, I would like to thank my family for their unwavering encouragement and support throughout this journey.\nAny remaining limitations in this thesis are solely my own responsibility.",
+    "ABSTRACT_TITLE": "ABSTRACT",
+    "ABSTRACT_TEXT": "This thesis designs, implements, and evaluates QuantVN Strategy Forge, a web-based quantitative analysis platform for Vietnamese equities listed on the Ho Chi Minh Stock Exchange (HOSE). The platform addresses the gap in accessible quantitative tools for Vietnamese retail investors by integrating stock screening, strategy backtesting with five strategy types, portfolio optimisation using four methods (Mean-Variance, Risk Parity, Minimum Variance, Maximum Sharpe), risk management metrics (VaR, CVaR, drawdown), factor analysis, and an AI assistant grounded in the platform's own computations. The system covers approximately 500 HOSE-listed stocks with daily data from 2018 to 2025. The AI assistant employs retrieval-augmented generation with policy-gated abstention to prevent unsupported financial claims. Results demonstrate the platform successfully provides integrated quantitative analysis capabilities comparable to international tools while supporting Vietnamese market conventions including transaction costs, daily price limits, and settlement cycles.",
+    "ABSTRACT_KEYWORDS": "quantitative analysis, HOSE, backtesting, portfolio optimisation, AI assistant, Vietnamese equities, fintech",
+    "INSTRUCTOR_COMMENT_TITLE": "INSTRUCTOR'S COMMENTS",
+    "INSTRUCTOR_COMMENT_TEXT": "[This page is reserved for the supervisor's evaluation and comments.]"
+}

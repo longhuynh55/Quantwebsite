@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createLogger, toErrorMeta } from "@/lib/logger";
+import { checkRateLimitAsync, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
 import {
   buildAssistantExecutePlan,
   validateAssistantExecuteRequest,
@@ -14,6 +15,10 @@ const TRUSTED_BASE_URL_ENV_KEYS = [
   "NEXT_PUBLIC_APP_URL",
 ] as const;
 const DEFAULT_EXECUTE_TIMEOUT_MS = 15_000;
+const DEFAULT_EXECUTE_MAX_ATTEMPTS = 2;
+const DEFAULT_EXECUTE_RETRY_BACKOFF_MS = 300;
+const EXECUTE_RATE_LIMIT_MAX = resolveExecuteRateLimitMax();
+const EXECUTE_RATE_LIMIT_WINDOW_MS = resolveExecuteRateLimitWindowMs();
 
 const assistantExecuteLogger = createLogger("api.assistant.execute");
 
@@ -29,14 +34,15 @@ type DownstreamContext = {
 type ErrorPayload = {
   requestId: string;
   toolName: string;
-  error: string;
+  error: {
+    code: string;
+    message: string;
+  };
   downstream: {
-    url: string;
     method: string;
     path: string;
     status: number;
     statusText?: string | null;
-    bodyPreview?: string;
   };
 };
 
@@ -69,7 +75,8 @@ function resolveTrustedInternalBaseUrl(): string | null {
   }
 
   if (process.env.NODE_ENV !== "production") {
-    return "http://127.0.0.1:3000";
+    const port = normalizePort(process.env.PORT);
+    return `http://127.0.0.1:${port ?? "3000"}`;
   }
 
   return null;
@@ -82,6 +89,59 @@ function resolveExecuteTimeoutMs(): number {
   if (normalized < 1_000) return 1_000;
   if (normalized > 120_000) return 120_000;
   return normalized;
+}
+
+function resolveExecuteMaxAttempts(): number {
+  const parsed = Number.parseInt(String(process.env.ASSISTANT_EXECUTE_FETCH_MAX_ATTEMPTS ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_EXECUTE_MAX_ATTEMPTS;
+  return Math.max(1, Math.min(parsed, 5));
+}
+
+function resolveExecuteRetryBackoffMs(): number {
+  const parsed = Number.parseInt(String(process.env.ASSISTANT_EXECUTE_FETCH_RETRY_BACKOFF_MS ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_EXECUTE_RETRY_BACKOFF_MS;
+  return Math.max(50, Math.min(parsed, 5_000));
+}
+
+function isRetryableDownstreamStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, Math.max(0, ms));
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function normalizePort(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) return undefined;
+  return String(parsed);
+}
+
+function resolveExecuteRateLimitMax(): number {
+  const parsed = Number.parseInt(String(process.env.ASSISTANT_EXECUTE_RATE_LIMIT_MAX ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 30;
+  return Math.max(1, Math.min(parsed, 300));
+}
+
+function resolveExecuteRateLimitWindowMs(): number {
+  const parsed = Number.parseInt(String(process.env.ASSISTANT_EXECUTE_RATE_LIMIT_WINDOW_MS ?? "").trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 60_000;
+  return Math.max(1_000, Math.min(parsed, 15 * 60_000));
 }
 
 function createRequestId(): string {
@@ -103,6 +163,23 @@ function isAbortError(error: unknown): boolean {
 
 export async function POST(request: Request) {
   const requestId = createRequestId();
+  const clientId = getClientIdentifier(request);
+  const rateLimit = await checkRateLimitAsync(
+    createRateLimitKey("api/assistant/execute", clientId),
+    EXECUTE_RATE_LIMIT_MAX,
+    EXECUTE_RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many execution requests. Please try again later.", requestId },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(1, Math.ceil((rateLimit.resetTime - Date.now()) / 1000))),
+        },
+      }
+    );
+  }
   const contentType = request.headers.get("content-type");
   if (!contentType?.includes("application/json")) {
     return NextResponse.json({ error: "Content-Type must be application/json", requestId }, { status: 415 });
@@ -167,7 +244,11 @@ export async function POST(request: Request) {
 
   const timeoutMs = resolveExecuteTimeoutMs();
   const abortController = new AbortController();
+  const onClientAbort = () => abortController.abort();
+  request.signal.addEventListener("abort", onClientAbort, { once: true });
   const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+  const maxAttempts = resolveExecuteMaxAttempts();
+  const retryBackoffMs = resolveExecuteRetryBackoffMs();
 
   const fetchInit: RequestInit = {
     method: plan.method,
@@ -179,7 +260,18 @@ export async function POST(request: Request) {
 
   let downstreamResponse: Response;
   try {
-    downstreamResponse = await fetch(endpoint.toString(), fetchInit);
+    let response: Response | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (abortController.signal.aborted) {
+        throw createAbortError();
+      }
+      response = await fetch(endpoint.toString(), fetchInit);
+      if (!isRetryableDownstreamStatus(response.status) || attempt >= maxAttempts) {
+        break;
+      }
+      await sleep(retryBackoffMs * attempt, abortController.signal);
+    }
+    downstreamResponse = response as Response;
   } catch (error) {
     const timedOut = isAbortError(error);
     assistantExecuteLogger.error("downstream.fetch_failure", {
@@ -193,11 +285,13 @@ export async function POST(request: Request) {
         : "Downstream tool request failed to reach the internal API.",
       downstreamContext,
       timedOut ? 504 : 502,
+      timedOut ? "downstream_timeout" : "downstream_unreachable",
       null
     );
     return NextResponse.json(payload, { status: timedOut ? 504 : 502 });
   } finally {
     clearTimeout(timeoutId);
+    request.signal.removeEventListener("abort", onClientAbort);
   }
 
   const responseClone = downstreamResponse.clone();
@@ -218,6 +312,7 @@ export async function POST(request: Request) {
       "Downstream service returned an invalid JSON payload.",
       downstreamContext,
       downstreamResponse.status,
+      "downstream_invalid_json",
       downstreamResponse.statusText,
       bodyPreview
     );
@@ -254,15 +349,18 @@ function buildErrorPayload(
   message: string,
   context: DownstreamContext,
   status: number,
+  code: string,
   statusText?: string | null,
   bodyPreview?: string
 ): ErrorPayload {
   const payload: ErrorPayload = {
     requestId: context.requestId,
     toolName: context.toolName,
-    error: message,
+    error: {
+      code,
+      message,
+    },
     downstream: {
-      url: context.endpoint,
       method: context.method,
       path: context.path,
       status,
@@ -271,7 +369,13 @@ function buildErrorPayload(
 
   payload.downstream.statusText = statusText ?? null;
   if (bodyPreview) {
-    payload.downstream.bodyPreview = bodyPreview;
+    assistantExecuteLogger.warn("downstream.error_body_preview", {
+      requestId: context.requestId,
+      toolName: context.toolName,
+      path: context.path,
+      status,
+      bodyPreview,
+    });
   }
 
   return payload;
@@ -281,4 +385,10 @@ function previewBody(value: string, maxLength = 1024): string {
   if (!value) return "";
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength)}...`;
+}
+
+function createAbortError(): Error {
+  const error = new Error("aborted");
+  error.name = "AbortError";
+  return error;
 }

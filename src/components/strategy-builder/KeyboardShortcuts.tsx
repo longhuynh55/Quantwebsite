@@ -7,11 +7,9 @@ import { cn } from "@/lib/utils";
 const shortcuts = [
     { keys: ["Delete"], action: "Delete selected node" },
     { keys: ["Ctrl", "Z"], action: "Undo" },
-    { keys: ["Ctrl", "S"], action: "Save strategy" },
-    { keys: ["Ctrl", "K"], action: "Search stocks / tools" },
-    { keys: ["Ctrl", "+"], action: "Zoom in" },
-    { keys: ["Ctrl", "−"], action: "Zoom out" },
-    { keys: ["Ctrl", "0"], action: "Fit view" },
+    { keys: ["Ctrl", "Shift", "Z"], action: "Redo" },
+    { keys: ["Ctrl", "Y"], action: "Redo (alternative)" },
+    { keys: ["Right click"], action: "Open Add Node menu" },
 ];
 
 export const KeyboardShortcuts = memo(() => {
@@ -94,3 +92,4 @@ export const KeyboardShortcuts = memo(() => {
 });
 
 KeyboardShortcuts.displayName = "KeyboardShortcuts";
+

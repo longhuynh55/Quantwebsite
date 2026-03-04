@@ -117,7 +117,9 @@ export function createStrategyLabRepositoryFromEnv(): StrategyLabRepository {
         schema: process.env.STRATEGY_LAB_REPOSITORY_SCHEMA,
       });
     }
-    console.warn("[strategy-lab/repository] STRATEGY_LAB_REPOSITORY_BACKEND=postgres but no client is configured; fallback to memory.");
+    throw new Error(
+      "[strategy-lab/repository] STRATEGY_LAB_REPOSITORY_BACKEND=postgres but no client is configured."
+    );
   }
   return createInMemoryStrategyLabRepository();
 }

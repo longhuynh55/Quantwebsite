@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/strategy-lab/worker/tick/route.js")
+R.c("server/chunks/[root-of-the-server]__2c24db32._.js")
+R.c("server/chunks/6fb61_next_dist_esm_build_templates_app-route_b550863f.js")
+R.c("server/chunks/[root-of-the-server]__6227ba04._.js")
+R.c("server/chunks/[root-of-the-server]__c8b1f1cf._.js")
+R.c("server/chunks/[root-of-the-server]__301a6c3e._.js")
+R.c("server/chunks/[root-of-the-server]__37e40bd1._.js")
+R.c("server/chunks/_next-internal_server_app_api_strategy-lab_worker_tick_route_actions_b0352c65.js")
+R.m(78700)
+module.exports=R.m(78700).exports

@@ -86,3 +86,6 @@ next-env.d.ts
 /.pnpm-store/
 /.pw-browsers/
 lint-report*.json
+
+.next-ci-postguard*/
+.cleanup_backup_*/

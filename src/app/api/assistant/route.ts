@@ -10,7 +10,7 @@ import type {
   AssistantToolUsage,
 } from '@/types/assistant';
 import { SYSTEM_PROMPT } from '@/types/assistant';
-import { checkRateLimit, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
+import { checkRateLimitAsync, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { generateWithProviderFallback, type LlmMessage } from '@/lib/assistant/providers';
 import { runGroundingTools, type GroundingResult } from '@/lib/assistant/tools';
 import { evaluateAssistantPolicy, type PolicyEvaluationResult } from '@/lib/assistant/policy';
@@ -45,12 +45,18 @@ const TRUSTED_TOOL_BASE_URL_ENV_KEYS = [
 const RATE_LIMIT = 30;
 const RATE_LIMIT_WINDOW = 60 * 1000;
 const EVAL_RATE_LIMIT = resolveEvalRateLimit();
+const ASSISTANT_REQUEST_TIMEOUT_MS = resolveAssistantRequestTimeoutMs();
 const assistantRouteLogger = createLogger('api.assistant');
 
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
-  let requestId = createRequestId();
-  let logger = assistantRouteLogger.child({ requestId });
+  const requestTimeoutMs = ASSISTANT_REQUEST_TIMEOUT_MS;
+  const requestAbortController = new AbortController();
+  const timeoutId = setTimeout(() => requestAbortController.abort(), requestTimeoutMs);
+  const onClientAbort = () => requestAbortController.abort();
+  request.signal.addEventListener("abort", onClientAbort, { once: true });
+  const requestId = createRequestId();
+  const logger = assistantRouteLogger.child({ requestId });
   try {
     const evalAuth = evaluateEvalAuthorization(request);
     const isEvalRequest = evalAuth.authorized;
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
     const rateLimitLimit = isEvalRequest ? EVAL_RATE_LIMIT : RATE_LIMIT;
     const clientId = getClientIdentifier(request);
     const rateLimitKey = createRateLimitKey(rateLimitScope, clientId);
-    const rateLimitResult = checkRateLimit(rateLimitKey, rateLimitLimit, RATE_LIMIT_WINDOW);
+    const rateLimitResult = await checkRateLimitAsync(rateLimitKey, rateLimitLimit, RATE_LIMIT_WINDOW);
 
     if (!rateLimitResult.allowed) {
       logger.warn('rate_limit.blocked', {
@@ -113,6 +119,7 @@ export async function POST(request: NextRequest) {
       groundingMode: toolBaseResolution.baseUrl ? ('enabled' as const) : ('disabled' as const),
       toolBaseUrlSource: toolBaseResolution.source,
       featureFlags: resolveAssistantFeatureFlags(),
+      requestTimeoutMs,
     };
 
     let body: Partial<AssistantRequest>;
@@ -164,11 +171,6 @@ export async function POST(request: NextRequest) {
     const contextSnapshot = sanitizeContextSnapshot(body.contextSnapshot ?? legacyContextToSnapshot(body.context));
     const preferences = sanitizePreferences(body.preferences);
     const executionMode = sanitizeExecutionMode(body.executionMode);
-    const requestedRequestId = normalizeText(body.requestId, 80);
-    if (requestedRequestId && requestedRequestId !== requestId) {
-      requestId = requestedRequestId;
-      logger = assistantRouteLogger.child({ requestId });
-    }
     metaBase.requestId = requestId;
     logger.info('request.received', {
       isEvalRequest,
@@ -299,6 +301,7 @@ export async function POST(request: NextRequest) {
       contextSnapshot,
       queryPlan,
       requestId,
+      abortSignal: requestAbortController.signal,
     });
     const symbolTelemetryWithGrounding = mergeGroundingSymbolTelemetry(symbolTelemetry, grounding);
     const responseCitations = selectResponseCitations(grounding.citations, MAX_RESPONSE_CITATIONS);
@@ -377,6 +380,13 @@ export async function POST(request: NextRequest) {
       queryPlanSummary: queryPlan.summary,
       plannedToolCount: queryPlan.steps.length,
       plannedTools: queryPlan.steps.map((step) => step.tool),
+      groundingTaskBudget: grounding.executionBudget
+        ? {
+            planned: grounding.executionBudget.plannedCalls,
+            executed: grounding.executionBudget.executedCalls,
+            skipped: grounding.executionBudget.skippedCalls,
+          }
+        : undefined,
       ...symbolTelemetryWithGrounding,
     };
 
@@ -508,7 +518,10 @@ export async function POST(request: NextRequest) {
 
     llmMessages.push({ role: 'user', content: message });
 
-    const generation = await generateWithProviderFallback(llmMessages, { requestId });
+    const generation = await generateWithProviderFallback(llmMessages, {
+      requestId,
+      abortSignal: requestAbortController.signal,
+    });
     if (!generation.success) {
       const providerErrorSummary = generation.providerErrors.map((item) => ({
         provider: item.provider,
@@ -541,6 +554,8 @@ export async function POST(request: NextRequest) {
             providerUsed: 'grounded-fallback',
             fallbackUsed: true,
             latencyMs: generation.latencyMs,
+            responseFormatApplied: undefined,
+            responseFormatFallbackUsed: undefined,
             ...policyMeta,
           },
         });
@@ -561,6 +576,8 @@ export async function POST(request: NextRequest) {
             providerUsed: 'none',
             fallbackUsed: false,
             latencyMs: generation.latencyMs,
+            responseFormatApplied: undefined,
+            responseFormatFallbackUsed: undefined,
             ...policyMeta,
           },
         },
@@ -636,6 +653,26 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (requestAbortController.signal.aborted) {
+      logger.warn("request.timeout_or_aborted", {
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json<AssistantResponse>(
+        {
+          message: "",
+          success: false,
+          error: "Assistant request timed out. Please retry with a narrower query.",
+          meta: {
+            providerUsed: "none",
+            fallbackUsed: false,
+            latencyMs: 0,
+            requestId,
+            requestTimeoutMs,
+          },
+        },
+        { status: 504 }
+      );
+    }
     logger.error('request.exception', {
       ...toErrorMeta(error),
       durationMs: Date.now() - startedAt,
@@ -654,6 +691,9 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    clearTimeout(timeoutId);
+    request.signal.removeEventListener("abort", onClientAbort);
   }
 }
 
@@ -975,7 +1015,8 @@ function evaluatePostResponseNumericGuard(input: PostResponseNumericGuardInput):
     };
   }
 
-  const groundedNumericTokens = extractComparableNumericTokens(input.grounding.facts.join("\n"));
+  const numericEvidenceFacts = input.grounding.fullFacts ?? input.grounding.facts;
+  const groundedNumericTokens = extractComparableNumericTokens(numericEvidenceFacts.join("\n"));
   if (groundedNumericTokens.size === 0) {
     return {
       blocked: true,
@@ -1745,6 +1786,13 @@ function resolveEvalRateLimit(): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 240;
   return Math.max(RATE_LIMIT, Math.min(parsed, 2_000));
+}
+
+function resolveAssistantRequestTimeoutMs(): number {
+  const raw = String(process.env.ASSISTANT_REQUEST_TIMEOUT_MS ?? "").trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 45_000;
+  return Math.max(5_000, Math.min(parsed, 180_000));
 }
 
 function selectResponseCitations(citations: AssistantCitation[], limit: number): AssistantCitation[] {

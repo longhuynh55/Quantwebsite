@@ -1,0 +1,203 @@
+version: 1
+product: QuantVN Strategy Forge
+scope_note: "Internal-only functional map for thesis support; not a committee-facing artifact."
+
+modules:
+  - id: home
+    name: "Home / Market Overview"
+    routes: ["/"]
+    status: prod
+    primary_goal: "Entry point for launching the research workflow and viewing high-level market overview signals."
+    core_outputs:
+      - "Navigation launch points to research workspaces"
+      - "Market overview snapshot tiles/cards"
+    thesis_alignment:
+      - "Ch3: system context and workflow entry"
+      - "Ch4: UI evidence (landing navigation)"
+
+  - id: dashboard
+    name: "Dashboard"
+    routes: ["/dashboard"]
+    status: prod
+    primary_goal: "Configurable overview for repeated monitoring using a widget grid."
+    core_outputs:
+      - "Widget grid layouts"
+      - "Portfolio/watchlist/market overview widgets (as configured)"
+    thesis_alignment:
+      - "Ch4: optional evidence of monitoring use-case"
+
+  - id: screener
+    name: "Stock Screener"
+    routes: ["/screener"]
+    status: prod
+    primary_goal: "Filter, sort, and export a tradable universe for downstream analysis."
+    core_outputs:
+      - "Screened universe table (paged)"
+      - "CSV export of screened universe"
+    thesis_alignment:
+      - "Ch3: workflow A (universe discovery)"
+      - "Ch4: UI evidence (screener filters + results)"
+
+  - id: charts
+    name: "Charts & Analysis"
+    routes: ["/charts"]
+    status: prod
+    primary_goal: "Inspect price history, compare symbols, and browse fundamentals snapshots."
+    core_outputs:
+      - "Candlestick chart"
+      - "Multi-symbol comparison series"
+      - "Fundamentals tables (Income Statement, Balance Sheet, Cash Flow)"
+    thesis_alignment:
+      - "Ch3: workflow A (single-symbol validation)"
+      - "Ch4: optional UI evidence (chart + fundamentals)"
+
+  - id: backtesting
+    name: "Backtesting Workspace"
+    routes: ["/backtesting"]
+    status: prod
+    primary_goal: "Validate predefined strategy hypotheses on historical HOSE-oriented data."
+    core_outputs:
+      - "Performance summary metrics"
+      - "Analysis charts"
+      - "Trade log"
+      - "Diagnostics and detailed stats"
+      - "Report export action (PDF UI control)"
+    thesis_alignment:
+      - "Ch3: evaluation methodology and evidence artifacts"
+      - "Ch4: UI evidence (backtesting run + diagnostics)"
+
+  - id: strategy_builder
+    name: "Strategy Builder"
+    routes: ["/strategy-builder"]
+    status: prod
+    primary_goal: "Construct a strategy artifact and submit a Strategy Lab run."
+    core_outputs:
+      - "Strategy artifact (nodes + properties)"
+      - "Run preview and warnings"
+      - "Run identifiers and status progression"
+      - "Latest backtest result summary"
+    thesis_alignment:
+      - "Ch3: workflow B (artifact -> run lifecycle)"
+      - "Ch4: UI evidence (builder canvas + run result)"
+
+  - id: strategy_lab
+    name: "Strategy Lab (Run Execution Service)"
+    routes: ["(service)"]
+    status: prod
+    primary_goal: "Execute submitted runs asynchronously and surface run status/events/results."
+    core_outputs:
+      - "Run status (queued/running/terminal)"
+      - "Run events stream"
+      - "Run result artifact for summarisation in the UI"
+    thesis_alignment:
+      - "Ch3: Figure 3.7 run lifecycle and reliability constraints"
+      - "Ch4: evidence of asynchronous execution and cancellation"
+
+  - id: portfolio
+    name: "Portfolio Optimisation"
+    routes: ["/portfolio"]
+    status: prod
+    primary_goal: "Compute portfolio weights and diversification diagnostics from a symbol basket."
+    core_outputs:
+      - "Allocation weights"
+      - "Expected return/volatility/Sharpe ratio outputs"
+      - "Correlation matrix and per-asset stats"
+      - "Exclusion diagnostics (unsupported/unavailable symbols)"
+    thesis_alignment:
+      - "Ch3: workflow C (basket -> optimisation -> risk cross-check)"
+      - "Ch4: optional UI evidence (optimisation outputs)"
+
+  - id: factors
+    name: "Factor Analytics"
+    routes: ["/factors"]
+    status: prod
+    primary_goal: "Rank equities by factor proxies and visualise distribution."
+    core_outputs:
+      - "Top/bottom ranked tables"
+      - "Factor distribution bar chart"
+      - "Theory text (explanatory placeholder)"
+    thesis_alignment:
+      - "Ch4: optional UI evidence (factor ranking)"
+
+  - id: risk
+    name: "Risk Management"
+    routes: ["/risk"]
+    status: prod
+    primary_goal: "Quantify risk metrics and benchmark-relative analytics for a selected symbol."
+    core_outputs:
+      - "VaR/CVaR and downside-risk metrics"
+      - "Drawdown series"
+      - "Rolling volatility series"
+      - "Benchmark-relative metrics"
+    thesis_alignment:
+      - "Ch3: risk interpretation as decision support"
+      - "Ch4: optional UI evidence (risk report)"
+
+  - id: assistant
+    name: "AI Assistant Panel"
+    routes: ["(global)"]
+    status: prod
+    primary_goal: "Provide context-aware assistance and quick actions across modules."
+    core_outputs:
+      - "Chat responses with grounded scope constraints"
+      - "Quick actions (module navigation and tool execution)"
+      - "Context snapshot derived from the current page"
+    thesis_alignment:
+      - "Ch3: assistant pipeline and evidence gating"
+      - "Ch4: UI evidence (assistant panel)"
+
+  - id: alerts
+    name: "Alert Center"
+    routes: ["(global)"]
+    status: prod
+    primary_goal: "Poll and display alerts with severity and acknowledgement state."
+    core_outputs:
+      - "Alert list with severity"
+      - "Unread count and last-updated timestamp"
+    thesis_alignment:
+      - "Ch4: optional evidence of operational monitoring"
+
+  - id: command_palette
+    name: "Command Palette"
+    routes: ["(global)"]
+    status: prod
+    primary_goal: "Provide fast navigation and symbol search."
+    core_outputs:
+      - "Suggested navigation actions"
+      - "Symbol search results"
+    thesis_alignment:
+      - "Ch4: optional evidence of usability support"
+
+  - id: learn
+    name: "Learning Hub"
+    routes: ["/learn", "/learn/[topic]"]
+    status: prod
+    primary_goal: "Offer structured learning topics aligned to the quant workflow."
+    core_outputs:
+      - "Level-based topic index"
+      - "Topic article rendering"
+      - "Calls-to-action to tools (e.g., screener)"
+    thesis_alignment:
+      - "Ch4: optional evidence of onboarding support"
+
+  - id: community
+    name: "Community / Strategy Marketplace"
+    routes: ["/community"]
+    status: mock
+    primary_goal: "Browse and copy shared strategies into the personal builder workflow."
+    core_outputs:
+      - "Strategy cards + detail dialog"
+      - "Copy/import into builder flow"
+    thesis_alignment:
+      - "Ch5: future work (production community backend)"
+
+  - id: ml_lab
+    name: "ML Lab (Preview)"
+    routes: ["/ml-lab"]
+    status: preview
+    primary_goal: "Communicate the roadmap for ML experimentation on HOSE data."
+    core_outputs:
+      - "Roadmap-style workspace preview"
+    thesis_alignment:
+      - "Ch5: future work (model training and evaluation pipelines)"
+

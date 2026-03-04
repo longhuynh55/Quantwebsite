@@ -1,6 +1,7 @@
 name: quant-website
 services:
   app:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -101,6 +102,7 @@ services:
 
   app-prod:
     profiles: ["prod"]
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
@@ -132,8 +134,8 @@ services:
       OPENROUTER_TERTIARY_MAX_TOKENS: ${OPENROUTER_TERTIARY_MAX_TOKENS:-1536}
       STRATEGY_PARSE_REPAIR_RETRIES: ${STRATEGY_PARSE_REPAIR_RETRIES:-1}
       ASSISTANT_EVAL_RATE_LIMIT_MAX: "240"
-      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-dev-eval-token}
-      ASSISTANT_EXECUTE_APPROVAL_TOKEN: ${ASSISTANT_EXECUTE_APPROVAL_TOKEN:-dev-execute-token}
+      ASSISTANT_EVAL_AUTH_TOKEN: ${ASSISTANT_EVAL_AUTH_TOKEN:-}
+      ASSISTANT_EXECUTE_APPROVAL_TOKEN: ${ASSISTANT_EXECUTE_APPROVAL_TOKEN:-}
       ASSISTANT_TOOL_BASE_URL: http://127.0.0.1:3000
       GLM_REQUEST_TIMEOUT_MS: ${GLM_REQUEST_TIMEOUT_MS:-90000}
       OPENROUTER_TIMEOUT_MS: ${OPENROUTER_TIMEOUT_MS:-90000}

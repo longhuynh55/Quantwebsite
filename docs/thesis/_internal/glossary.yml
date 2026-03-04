@@ -1,0 +1,21 @@
+version: 1
+terms:
+  - term: "Strategy Artifact"
+    definition: "A user-authored representation of a trading strategy (nodes, parameters, and metadata) that can be submitted for execution."
+    notes:
+      - "Thesis usage: emphasise that the artifact is an input to an execution/evaluation workflow, not a guarantee of profitability."
+
+  - term: "Strategy Lab Run"
+    definition: "An execution request submitted to the Strategy Lab service, progressing through queued/running/terminal states and producing a result artifact."
+
+  - term: "Diagnostics"
+    definition: "Auxiliary signals and checks that help interpret reliability of results (e.g., coverage, validation warnings, empty states)."
+
+  - term: "Coverage"
+    definition: "A proxy for data completeness or usable periods within a run/evaluation. Coverage is surfaced as a diagnostic cue rather than a performance metric."
+
+  - term: "Universe"
+    definition: "A set of symbols that satisfies screening filters and is used for downstream analysis (charts, backtesting, portfolio construction)."
+
+  - term: "Guardrail"
+    definition: "A constraint or UI pattern that reduces the chance of user error (input limits, abortable requests, explicit empty/error states)."

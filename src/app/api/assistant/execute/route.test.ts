@@ -1,5 +1,15 @@
 /** @jest-environment node */
 
+const mockCheckRateLimitAsync = jest.fn();
+const mockCreateRateLimitKey = jest.fn();
+const mockGetClientIdentifier = jest.fn();
+
+jest.mock("@/lib/rateLimit", () => ({
+  checkRateLimitAsync: (...args: unknown[]) => mockCheckRateLimitAsync(...args),
+  createRateLimitKey: (...args: unknown[]) => mockCreateRateLimitKey(...args),
+  getClientIdentifier: (...args: unknown[]) => mockGetClientIdentifier(...args),
+}));
+
 import { POST } from "./route";
 
 type JsonRecord = Record<string, unknown>;
@@ -35,7 +45,15 @@ describe("POST /api/assistant/execute", () => {
     process.env = { ...ORIGINAL_ENV };
     clearExecutionEnv();
     process.env = { ...process.env, NODE_ENV: "test" };
+    process.env.ASSISTANT_EXECUTE_FETCH_MAX_ATTEMPTS = "1";
     global.fetch = jest.fn() as unknown as typeof fetch;
+    mockGetClientIdentifier.mockReturnValue("client-test");
+    mockCreateRateLimitKey.mockImplementation((scope: string, id: string) => `${scope}:${id}`);
+    mockCheckRateLimitAsync.mockResolvedValue({
+      allowed: true,
+      remaining: 29,
+      resetTime: Date.now() + 60_000,
+    });
   });
 
   afterAll(() => {
@@ -179,7 +197,9 @@ describe("POST /api/assistant/execute", () => {
     const json = await readJson(response);
 
     expect(response.status).toBe(502);
-    expect(json.error).toContain("failed");
+    const error = json.error as Record<string, unknown>;
+    expect(error.message).toContain("failed");
+    expect(error.code).toBe("downstream_unreachable");
     expect(json.requestId).toEqual(expect.any(String));
   });
 
@@ -200,7 +220,9 @@ describe("POST /api/assistant/execute", () => {
     const json = await readJson(response);
 
     expect(response.status).toBe(504);
-    expect(json.error).toContain("timed out");
+    const error = json.error as Record<string, unknown>;
+    expect(error.message).toContain("timed out");
+    expect(error.code).toBe("downstream_timeout");
     expect(json.requestId).toEqual(expect.any(String));
   });
 
@@ -320,10 +342,13 @@ describe("POST /api/assistant/execute", () => {
     const json = await readJson(response);
 
     expect(response.status).toBe(502);
-    expect(json.error).toBe("Downstream tool request failed to reach the internal API.");
+    expect(json.error).toEqual({
+      code: "downstream_unreachable",
+      message: "Downstream tool request failed to reach the internal API.",
+    });
     const networkDownstream = json.downstream as Record<string, unknown> | undefined;
-    expect(networkDownstream?.url).toContain("/api/risk");
     expect(networkDownstream?.method).toBe("GET");
+    expect(networkDownstream?.path).toBe("/api/risk");
     expect(networkDownstream?.status).toBe(502);
   });
 
@@ -347,10 +372,13 @@ describe("POST /api/assistant/execute", () => {
     const json = await readJson(response);
 
     expect(response.status).toBe(502);
-    expect(json.error).toBe("Downstream service returned an invalid JSON payload.");
+    expect(json.error).toEqual({
+      code: "downstream_invalid_json",
+      message: "Downstream service returned an invalid JSON payload.",
+    });
     const invalidDownstream = json.downstream as Record<string, unknown> | undefined;
     expect(invalidDownstream?.status).toBe(200);
     expect(invalidDownstream?.path).toBe("/api/risk");
-    expect(invalidDownstream?.bodyPreview).toBe("not-json");
+    expect(invalidDownstream?.bodyPreview).toBeUndefined();
   });
 });

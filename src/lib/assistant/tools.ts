@@ -39,14 +39,21 @@ interface GroundingInput {
   contextSnapshot?: AssistantContextSnapshot;
   queryPlan?: AssistantQueryPlan;
   requestId?: string;
+  abortSignal?: AbortSignal;
 }
 
 export interface GroundingResult {
   facts: string[];
+  fullFacts?: string[];
   citations: AssistantCitation[];
   usedTools: AssistantToolUsage[];
   messageBlocks: AssistantMessageBlock[];
   groundingSource?: string;
+  executionBudget?: {
+    plannedCalls: number;
+    executedCalls: number;
+    skippedCalls: number;
+  };
   symbolDiagnostics?: {
     requestedSymbols: string[];
     symbolTargets: string[];
@@ -98,6 +105,28 @@ interface ToolExecutionBudget {
 export async function runGroundingTools(input: GroundingInput): Promise<GroundingResult> {
   const startedAt = Date.now();
   const logger = groundingToolsLogger.child({ requestId: input.requestId ?? '' });
+  if (input.abortSignal?.aborted) {
+    return {
+      facts: ["Grounding aborted before execution started."],
+      fullFacts: ["Grounding aborted before execution started."],
+      citations: [],
+      usedTools: [],
+      messageBlocks: [],
+      groundingSource: "none",
+      executionBudget: {
+        plannedCalls: 0,
+        executedCalls: 0,
+        skippedCalls: 0,
+      },
+      symbolDiagnostics: {
+        requestedSymbols: [],
+        symbolTargets: [],
+        groundedSymbols: [],
+        droppedSymbols: [],
+        requestsUniverseStockRanking: false,
+      },
+    };
+  }
   const planSymbols = Array.isArray(input.queryPlan?.symbols)
     ? input.queryPlan.symbols
         .map((symbol) => String(symbol ?? "").trim().toUpperCase())
@@ -136,6 +165,9 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
       facts: [
         `Grounding requires explicit symbol for intent=${input.queryPlan?.intent}. Please provide a valid HOSE ticker.`,
       ],
+      fullFacts: [
+        `Grounding requires explicit symbol for intent=${input.queryPlan?.intent}. Please provide a valid HOSE ticker.`,
+      ],
       citations: [],
       usedTools: [
         {
@@ -156,6 +188,11 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         },
       ],
       groundingSource: "none",
+      executionBudget: {
+        plannedCalls: 0,
+        executedCalls: 0,
+        skippedCalls: 0,
+      },
       symbolDiagnostics: {
         requestedSymbols: symbolScope.requestedSymbols,
         symbolTargets: symbolScope.symbolTargets,
@@ -165,7 +202,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
       },
     };
   }
-  const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan);
+  const plannedTasks = buildToolTasks('', input.message, symbols, input.contextSnapshot, input.queryPlan, input.abortSignal);
   logger.debug('grounding.started', {
     hasToolBaseUrl: Boolean(input.baseUrl),
     plannedTaskCount: plannedTasks.length,
@@ -185,6 +222,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     });
     return {
       facts: ["Grounding is unavailable because ASSISTANT_TOOL_BASE_URL is not configured."],
+      fullFacts: ["Grounding is unavailable because ASSISTANT_TOOL_BASE_URL is not configured."],
       citations: [],
       usedTools:
         plannedTasks.length > 0
@@ -214,6 +252,11 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
         }),
       ],
       groundingSource: "none",
+      executionBudget: {
+        plannedCalls: plannedTasks.length,
+        executedCalls: 0,
+        skippedCalls: plannedTasks.length,
+      },
       symbolDiagnostics: {
         requestedSymbols: symbolScope.requestedSymbols,
         symbolTargets: symbolScope.symbolTargets,
@@ -224,7 +267,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
     };
   }
 
-  const tasks = buildToolTasks(input.baseUrl, input.message, symbols, input.contextSnapshot, input.queryPlan);
+  const tasks = buildToolTasks(input.baseUrl, input.message, symbols, input.contextSnapshot, input.queryPlan, input.abortSignal);
   const budget = applyToolExecutionBudget(tasks, TOOL_MAX_CALLS_PER_TURN);
 
   const facts: string[] = [];
@@ -234,6 +277,7 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
   const errorSummaries: string[] = [];
   const executed = await runTasksWithConcurrency(budget.tasks, MAX_TOOL_CONCURRENCY, {
     transientFailureCircuitThreshold: TOOL_TRANSIENT_FAILURE_CIRCUIT_THRESHOLD,
+    abortSignal: input.abortSignal,
   });
   for (const item of executed) {
     if (item.status === 'success') {
@@ -393,10 +437,16 @@ export async function runGroundingTools(input: GroundingInput): Promise<Groundin
 
   return {
     facts: facts.slice(0, MAX_FACTS),
+    fullFacts: facts,
     citations: dedupeCitations(citations),
     usedTools,
     messageBlocks: messageBlocks.slice(0, MAX_MESSAGE_BLOCKS),
     groundingSource: deriveGroundingSource(citations, usedTools),
+    executionBudget: {
+      plannedCalls: budget.plannedCalls,
+      executedCalls: budget.tasks.length,
+      skippedCalls: budget.skippedTasks.length,
+    },
     symbolDiagnostics: {
       requestedSymbols: symbolScope.requestedSymbols,
       symbolTargets: symbolScope.symbolTargets,
@@ -414,6 +464,7 @@ type TaskExecutionResult =
 
 interface TaskExecutionOptions {
   transientFailureCircuitThreshold?: number;
+  abortSignal?: AbortSignal;
 }
 
 function applyToolExecutionBudget(tasks: ToolTask[], maxCallsPerTurn: number): ToolExecutionBudget {
@@ -456,6 +507,15 @@ async function runTasksWithConcurrency(
       if (index >= tasks.length) return;
 
       const task = tasks[index];
+      if (options?.abortSignal?.aborted) {
+        results[index] = {
+          task,
+          status: 'skipped',
+          skipReason: 'circuit_open',
+          latencyMs: 0,
+        };
+        continue;
+      }
       if (circuitOpen) {
         results[index] = {
           task,
@@ -527,7 +587,8 @@ function buildToolTasks(
   message: string,
   symbols: string[],
   contextSnapshot?: AssistantContextSnapshot,
-  queryPlan?: AssistantQueryPlan
+  queryPlan?: AssistantQueryPlan,
+  abortSignal?: AbortSignal
 ): ToolTask[] {
   const symbolScope = buildSymbolGroundingScope(message, symbols, contextSnapshot);
   const requestsUniverseStockRanking = symbolScope.requestsUniverseStockRanking;
@@ -592,7 +653,7 @@ function buildToolTasks(
 
   const addTaskByName = (name: AssistantToolName) => {
     if (name === "dataHealth") {
-      addTask(name, () => fetchDataHealth(baseUrl));
+      addTask(name, () => fetchDataHealth(baseUrl, abortSignal));
       return;
     }
     if (name === "stockSnapshot") {
@@ -606,7 +667,8 @@ function buildToolTasks(
               contextSnapshot?.timeframe,
               message,
               contextSnapshot,
-              queryPlanFilters
+              queryPlanFilters,
+              abortSignal
             )
         );
         return;
@@ -614,42 +676,42 @@ function buildToolTasks(
       if (!requestsUniverseStockRanking && queryPlan?.intent !== "stock_snapshot" && !requiresStockSnapshotSignal) {
         return;
       }
-      addTask(name, () => fetchStockUniverseSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters));
+      addTask(name, () => fetchStockUniverseSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters, abortSignal));
       return;
     }
     if (name === "fundamentalSnapshot") {
       if (!hasSymbolTargets) return;
-      addTaskForSymbols(name, (symbol) => fetchFundamentalSnapshot(baseUrl, symbol, message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFundamentalSnapshot(baseUrl, symbol, message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "fundamentalAnalysis") {
       if (!hasSymbolTargets) return;
-      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "fundamental", message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "fundamental", message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "financialHealthScore") {
       if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
-      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "health", message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "health", message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "valuationDcf") {
       if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
-      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "valuation", message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "valuation", message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "peerMultiples") {
       if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
-      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "peer", message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "peer", message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "scenarioSensitivity") {
       if (!hasSymbolTargets || BASELINE_ONLY_MODE) return;
-      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "sensitivity", message, contextSnapshot));
+      addTaskForSymbols(name, (symbol) => fetchFinanceAnalysis(baseUrl, symbol, "sensitivity", message, contextSnapshot, abortSignal));
       return;
     }
     if (name === "riskSnapshot") {
       if (!hasSymbolTargets) return;
-      addTaskForSymbols(name, (symbol) => fetchRiskSnapshot(baseUrl, symbol));
+      addTaskForSymbols(name, (symbol) => fetchRiskSnapshot(baseUrl, symbol, abortSignal));
       return;
     }
     if (name === "backtestSummary") {
@@ -657,14 +719,14 @@ function buildToolTasks(
         if (queryPlan?.intent !== "backtesting") return;
         const fallbackSymbol = resolveBacktestFallbackSymbol(contextSnapshot);
         if (!fallbackSymbol) return;
-        addTask(name, () => fetchBacktestSummary(baseUrl, fallbackSymbol));
+        addTask(name, () => fetchBacktestSummary(baseUrl, fallbackSymbol, abortSignal));
         return;
       }
-      addTaskForSymbols(name, (symbol) => fetchBacktestSummary(baseUrl, symbol));
+      addTaskForSymbols(name, (symbol) => fetchBacktestSummary(baseUrl, symbol, abortSignal));
       return;
     }
     if (name === "factorSnapshot") {
-      addTask(name, () => fetchFactorSnapshot(baseUrl));
+      addTask(name, () => fetchFactorSnapshot(baseUrl, abortSignal));
       return;
     }
     if (name === "marketSnapshot") {
@@ -682,16 +744,16 @@ function buildToolTasks(
       ) {
         return;
       }
-      addTask(name, () => fetchMarketSnapshot(baseUrl));
+      addTask(name, () => fetchMarketSnapshot(baseUrl, abortSignal));
       return;
     }
     if (name === "icbSnapshot") {
-      addTask(name, () => fetchIcbSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters));
+      addTask(name, () => fetchIcbSnapshot(baseUrl, message, contextSnapshot, queryPlanFilters, abortSignal));
       return;
     }
     if (name === "valuationRanking") {
       if (BASELINE_ONLY_MODE) return;
-      addTask(name, () => fetchValuationRanking(baseUrl, message, contextSnapshot, queryPlanFilters));
+      addTask(name, () => fetchValuationRanking(baseUrl, message, contextSnapshot, queryPlanFilters, abortSignal));
     }
   };
 
@@ -807,7 +869,7 @@ function buildToolTasks(
   return tasks;
 }
 
-async function fetchDataHealth(baseUrl: string): Promise<ToolRunOutput> {
+async function fetchDataHealth(baseUrl: string, abortSignal?: AbortSignal): Promise<ToolRunOutput> {
   const endpoint = "/api/health/data?probe=true&includeFundamentals=true";
   const payload = await fetchJson<{
     ok?: boolean;
@@ -815,7 +877,7 @@ async function fetchDataHealth(baseUrl: string): Promise<ToolRunOutput> {
     dataDir?: { path?: string; source?: string };
     manifest?: { available?: boolean; schemaVersion?: number; generatedAt?: string | null };
     checks?: Array<{ name?: string; ok?: boolean; detail?: string | null }>;
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
 
   const checks = Array.isArray(payload.checks) ? payload.checks : [];
   const failing = checks.filter((check) => check && check.ok === false);
@@ -865,7 +927,8 @@ async function fetchStockSnapshot(
   timeframe?: string,
   message?: string,
   contextSnapshot?: AssistantContextSnapshot,
-  queryPlanFilters?: AssistantQueryPlan["filters"]
+  queryPlanFilters?: AssistantQueryPlan["filters"],
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   await ensureResolvableHoseSymbol(symbol);
   const limit = resolveStockSnapshotLimit(timeframe, message, contextSnapshot);
@@ -883,7 +946,7 @@ async function fetchStockSnapshot(
     requestedDate?: string;
     asOfDate?: string;
     exactDateMatch?: boolean;
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
   const series = Array.isArray(payload.data) ? payload.data : [];
   if (series.length === 0) {
     return {
@@ -940,7 +1003,8 @@ async function fetchStockUniverseSnapshot(
   baseUrl: string,
   message: string,
   contextSnapshot?: AssistantContextSnapshot,
-  queryPlanFilters?: AssistantQueryPlan["filters"]
+  queryPlanFilters?: AssistantQueryPlan["filters"],
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   const plannedDate = normalizeDateLike(queryPlanFilters?.date);
   const requestedDate = plannedDate ?? extractRequestedDate(message, contextSnapshot);
@@ -1030,7 +1094,7 @@ async function fetchStockUniverseSnapshot(
       volume?: number;
       exactDateMatch?: boolean;
     }>;
-  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 30_000));
+  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 30_000), abortSignal);
 
   const candidates = Array.isArray(payload.stocks)
     ? payload.stocks
@@ -1128,7 +1192,8 @@ async function fetchFundamentalSnapshot(
   baseUrl: string,
   symbol: string,
   message: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   const statement = extractFundamentalStatement(message, contextSnapshot);
   const periodIntent = extractFinancialPeriodIntent(message, contextSnapshot);
@@ -1146,7 +1211,7 @@ async function fetchFundamentalSnapshot(
       missingRequestedStatements?: string[];
       coverageRatio?: number;
     };
-  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 45_000));
+  }>(baseUrl, endpoint, Math.max(TOOL_TIMEOUT_MS, 45_000), abortSignal);
 
   const incomeSnapshot = extractStatementSnapshot(payload.incomeStatement);
   const balanceSnapshot = extractStatementSnapshot(payload.balanceSheet);
@@ -1332,7 +1397,7 @@ async function fetchFundamentalSnapshot(
   };
 }
 
-async function fetchRiskSnapshot(baseUrl: string, symbol: string): Promise<ToolRunOutput> {
+async function fetchRiskSnapshot(baseUrl: string, symbol: string, abortSignal?: AbortSignal): Promise<ToolRunOutput> {
   const endpoint = `/api/risk?symbol=${encodeURIComponent(symbol)}&benchmark=VNINDEX`;
   const payload = await fetchJson<{
     metrics?: {
@@ -1341,7 +1406,7 @@ async function fetchRiskSnapshot(baseUrl: string, symbol: string): Promise<ToolR
       var95?: number;
       maxDrawdown?: number;
     };
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
   const metrics = payload.metrics ?? {};
 
   const facts = [
@@ -1360,7 +1425,7 @@ async function fetchRiskSnapshot(baseUrl: string, symbol: string): Promise<ToolR
   };
 }
 
-async function fetchBacktestSummary(baseUrl: string, symbol: string): Promise<ToolRunOutput> {
+async function fetchBacktestSummary(baseUrl: string, symbol: string, abortSignal?: AbortSignal): Promise<ToolRunOutput> {
   const endpoint = `/api/backtesting?symbol=${encodeURIComponent(symbol)}&strategy=sma_crossover&capital=100000`;
   const payload = await fetchJson<{
     metrics?: {
@@ -1370,7 +1435,7 @@ async function fetchBacktestSummary(baseUrl: string, symbol: string): Promise<To
       totalTrades?: number;
     };
     configApplied?: { executionModel?: string };
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
 
   const metrics = payload.metrics ?? {};
   const facts = [
@@ -1389,12 +1454,12 @@ async function fetchBacktestSummary(baseUrl: string, symbol: string): Promise<To
   };
 }
 
-async function fetchFactorSnapshot(baseUrl: string): Promise<ToolRunOutput> {
+async function fetchFactorSnapshot(baseUrl: string, abortSignal?: AbortSignal): Promise<ToolRunOutput> {
   const endpoint = '/api/factors?factor=momentum&limit=10';
   const payload = await fetchJson<{
     topStocks?: Array<{ symbol?: string }>;
     bottomStocks?: Array<{ symbol?: string }>;
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
   const top = (payload.topStocks ?? []).map((item) => item.symbol).filter(Boolean).slice(0, 5);
   const bottom = (payload.bottomStocks ?? []).map((item) => item.symbol).filter(Boolean).slice(0, 5);
 
@@ -1407,7 +1472,7 @@ async function fetchFactorSnapshot(baseUrl: string): Promise<ToolRunOutput> {
   };
 }
 
-async function fetchMarketSnapshot(baseUrl: string): Promise<ToolRunOutput> {
+async function fetchMarketSnapshot(baseUrl: string, abortSignal?: AbortSignal): Promise<ToolRunOutput> {
   const endpoint = '/api/market-overview';
   const payload = await fetchJson<{
     benchmark?: string;
@@ -1415,7 +1480,7 @@ async function fetchMarketSnapshot(baseUrl: string): Promise<ToolRunOutput> {
     mtdReturn?: number;
     topGainers?: Array<{ symbol?: string; change?: number }>;
     topLosers?: Array<{ symbol?: string; change?: number }>;
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
   const topGainer = payload.topGainers?.[0];
   const topLoser = payload.topLosers?.[0];
 
@@ -1437,7 +1502,8 @@ async function fetchIcbSnapshot(
   baseUrl: string,
   message: string,
   contextSnapshot?: AssistantContextSnapshot,
-  queryPlanFilters?: AssistantQueryPlan["filters"]
+  queryPlanFilters?: AssistantQueryPlan["filters"],
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   const plannedDate = normalizeDateLike(queryPlanFilters?.date);
   const plannedIcbLevel =
@@ -1487,7 +1553,7 @@ async function fetchIcbSnapshot(
     pricedSymbols?: number;
     exactDateMatchCount?: number;
     warnings?: string[];
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
 
   const groups = Array.isArray(payload.groups) ? payload.groups : [];
   const warnings = normalizeWarnings(payload.warnings);
@@ -1577,7 +1643,8 @@ async function fetchValuationRanking(
   baseUrl: string,
   message: string,
   contextSnapshot?: AssistantContextSnapshot,
-  queryPlanFilters?: AssistantQueryPlan["filters"]
+  queryPlanFilters?: AssistantQueryPlan["filters"],
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   const plannedDate = normalizeDateLike(queryPlanFilters?.date);
   const plannedIcbLevel =
@@ -1673,7 +1740,7 @@ async function fetchValuationRanking(
     }>;
     eligibleRanked?: number;
     warnings?: string[];
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
 
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const warnings = normalizeWarnings(payload.warnings);
@@ -1756,7 +1823,8 @@ async function fetchFinanceAnalysis(
   symbol: string,
   analysisType: FinanceAnalysisType,
   message?: string,
-  contextSnapshot?: AssistantContextSnapshot
+  contextSnapshot?: AssistantContextSnapshot,
+  abortSignal?: AbortSignal
 ): Promise<ToolRunOutput> {
   const periodIntent = extractFinancialPeriodIntent(message ?? "", contextSnapshot);
   const params = new URLSearchParams({
@@ -1786,7 +1854,7 @@ async function fetchFinanceAnalysis(
       selectedPeriods?: string[];
       missingStatements?: Array<{ period?: string; statement?: string }>;
     };
-  }>(baseUrl, endpoint);
+  }>(baseUrl, endpoint, TOOL_TIMEOUT_MS, abortSignal);
 
   const citations = normalizeCitations(payload.citations, symbol, analysisType, endpoint);
   const data = payload.data as Record<string, unknown> | undefined;
@@ -2156,10 +2224,22 @@ function normalizeCitations(
   }));
 }
 
-async function fetchJson<T>(baseUrl: string, endpoint: string, timeoutMs: number = TOOL_TIMEOUT_MS): Promise<T> {
+async function fetchJson<T>(
+  baseUrl: string,
+  endpoint: string,
+  timeoutMs: number = TOOL_TIMEOUT_MS,
+  abortSignal?: AbortSignal
+): Promise<T> {
   const url = `${trimTrailingSlash(baseUrl)}${endpoint}`;
   for (let attempt = 0; attempt < TOOL_FETCH_MAX_ATTEMPTS; attempt += 1) {
+    if (abortSignal?.aborted) {
+      throw { message: "Tool request aborted" } satisfies HttpErrorShape;
+    }
     const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    if (abortSignal) {
+      abortSignal.addEventListener("abort", onAbort, { once: true });
+    }
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
@@ -2175,7 +2255,7 @@ async function fetchJson<T>(baseUrl: string, endpoint: string, timeoutMs: number
         const message = await response.text();
         if (shouldRetryToolHttpStatus(response.status) && attempt < TOOL_FETCH_MAX_ATTEMPTS - 1) {
           const delayMs = Math.max(retryAfterMs, TOOL_FETCH_RETRY_BACKOFF_MS * (attempt + 1));
-          await sleep(delayMs);
+          await sleep(delayMs, abortSignal);
           continue;
         }
         throw {
@@ -2188,15 +2268,18 @@ async function fetchJson<T>(baseUrl: string, endpoint: string, timeoutMs: number
       const isAbort = error instanceof Error && error.name === 'AbortError';
       const isRetryableNetwork = isRetryableToolFetchError(error);
       if ((isAbort || isRetryableNetwork) && attempt < TOOL_FETCH_MAX_ATTEMPTS - 1) {
-        await sleep(TOOL_FETCH_RETRY_BACKOFF_MS * (attempt + 1));
+        await sleep(TOOL_FETCH_RETRY_BACKOFF_MS * (attempt + 1), abortSignal);
         continue;
       }
       if (isAbort) {
-        throw { message: 'Tool request timed out' } satisfies HttpErrorShape;
+        throw { message: abortSignal?.aborted ? "Tool request aborted" : "Tool request timed out" } satisfies HttpErrorShape;
       }
       throw error;
     } finally {
       clearTimeout(timeoutId);
+      if (abortSignal) {
+        abortSignal.removeEventListener("abort", onAbort);
+      }
     }
   }
   throw { message: 'Tool request failed after retries' } satisfies HttpErrorShape;
@@ -3430,6 +3513,22 @@ function isTransientToolExecutionError(error: unknown): boolean {
   );
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+function sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  if (abortSignal?.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, Math.max(0, ms));
+
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+  });
 }

@@ -197,6 +197,14 @@ export interface AssistantResponseMeta {
   groundingSource?: string;
   featureFlags?: AssistantFeatureFlagSnapshot;
   semantic?: AssistantSemanticMeta;
+  responseFormatApplied?: boolean;
+  responseFormatFallbackUsed?: boolean;
+  requestTimeoutMs?: number;
+  groundingTaskBudget?: {
+    planned: number;
+    executed: number;
+    skipped: number;
+  };
 }
 
 export interface AssistantFeatureFlagSnapshot {

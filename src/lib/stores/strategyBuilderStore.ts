@@ -153,6 +153,22 @@ const dedupeEdges = (edges: StrategyEdge[]): StrategyEdge[] => {
   return uniqueEdges;
 };
 
+const edgePersistenceSignature = (
+  edge: Pick<StrategyEdge, "id" | "source" | "target" | "sourceHandle" | "targetHandle">
+): string => `${edge.id}|${edgeSignature(edge)}`;
+
+const arePersistedEdgesEqual = (left: StrategyEdge[], right: StrategyEdge[]): boolean => {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (edgePersistenceSignature(left[index]) !== edgePersistenceSignature(right[index])) {
+      return false;
+    }
+  }
+  return true;
+};
+
+let latestSaveOperationToken = 0;
+
 export const useStrategyBuilderStore = create<StrategyBuilderState>()(
   persist(
     (set, get) => ({
@@ -200,19 +216,36 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
       saveStrategy: async () => {
         const { currentStrategy } = get();
         if (!currentStrategy) return;
+        const strategyAtSaveStart = currentStrategy;
+        const saveToken = ++latestSaveOperationToken;
 
         set({ isSaving: true });
 
         // Simulate save operation (replace with actual API call)
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        set({
-          currentStrategy: {
-            ...currentStrategy,
-            updatedAt: new Date(),
-          },
-          isDirty: false,
-          isSaving: false,
+        set((state) => {
+          if (saveToken !== latestSaveOperationToken) {
+            return state;
+          }
+
+          if (!state.currentStrategy) {
+            return { isSaving: false };
+          }
+
+          // Do not clear dirty state if edits happened while save was in-flight.
+          if (state.currentStrategy !== strategyAtSaveStart) {
+            return { isSaving: false };
+          }
+
+          return {
+            currentStrategy: {
+              ...state.currentStrategy,
+              updatedAt: new Date(),
+            },
+            isDirty: false,
+            isSaving: false,
+          };
         });
       },
 
@@ -307,10 +340,16 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         const { currentStrategy } = get();
         if (!currentStrategy) return;
 
+        const nextNodeIds = new Set(nodes.map((node) => node.id));
+        const nextEdges = currentStrategy.edges.filter(
+          (edge) => nextNodeIds.has(edge.source) && nextNodeIds.has(edge.target)
+        );
+
         set({
           currentStrategy: {
             ...currentStrategy,
             nodes,
+            edges: nextEdges,
           },
           isDirty: true,
         });
@@ -321,6 +360,9 @@ export const useStrategyBuilderStore = create<StrategyBuilderState>()(
         if (!currentStrategy) return;
 
         const nextEdges = dedupeEdges(edges);
+        if (arePersistedEdgesEqual(currentStrategy.edges, nextEdges)) {
+          return;
+        }
 
         set({
           currentStrategy: {

@@ -109,13 +109,13 @@ docker run -d \
 
 ```bash
 # Start production deployment
-docker compose -f docker-compose.prod.yml up -d
+docker compose --profile prod up -d --build app-prod
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f app
+docker compose --profile prod logs -f app-prod
 
 # Stop deployment
-docker compose -f docker-compose.prod.yml down
+docker compose --profile prod down
 ```
 
 ### Multi-stage Build Details

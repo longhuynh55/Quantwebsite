@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KLTN — Liêu Hoài Phúc — QuantVN Strategy Forge</title>
+    <style>
+        /* ═══════════════════════════════════════════════════════
+     EDITORIAL FINTECH DESIGN SYSTEM — Slide Deck
+     Colors: stone palette + emerald accent
+     Typography: Serif headlines, Sans body
+     ═══════════════════════════════════════════════════════ */
+
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --paper: #fafaf9;
+            --paper-alt: #f5f5f4;
+            --ink: #1c1917;
+            --ink-secondary: #57534e;
+            --ink-muted: #78716c;
+            --ink-disabled: #a8a29e;
+            --border-light: #e7e5e4;
+            --border-medium: #d6d3d1;
+            --accent: #047857;
+            --accent-light: #059669;
+            --accent-subtle: #ecfdf5;
+            --accent-bg: #d1fae5;
+            --danger: #dc2626;
+            --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+            --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* ── Slide Container ── */
+        body {
+            font-family: var(--font-body);
+            background: #0a0a0a;
+            color: var(--ink);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .slide-deck {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+            background: var(--paper);
+            padding: 60px 80px;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        /* ── Typography ── */
+        .kicker {
+            font-family: var(--font-body);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--ink-muted);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .kicker::before {
+            content: '';
+            display: block;
+            width: 32px;
+            height: 1px;
+            background: var(--accent);
+        }
+
+        .headline {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 56px;
+            line-height: 1.1;
+            color: var(--ink);
+            letter-spacing: -0.02em;
+            margin-bottom: 24px;
+        }
+
+        .headline .accent {
+            color: var(--accent);
+        }
+
+        .subheadline {
+            font-family: var(--font-body);
+            font-size: 20px;
+            line-height: 1.6;
+            color: var(--ink-secondary);
+            max-width: 720px;
+        }
+
+        .label {
+            font-family: var(--font-body);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--ink-muted);
+        }
+
+        /* ── Layout ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            height: 100%;
+        }
+
+        .two-col-wide {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 60px;
+            align-items: center;
+            height: 100%;
+        }
+
+        .center-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+        }
+
+        .center-content .headline {
+            max-width: 900px;
+        }
+
+        .center-content .subheadline {
+            max-width: 640px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            border: 1px solid var(--border-light);
+            background: white;
+            padding: 28px;
+            margin-bottom: 12px;
+        }
+
+        .card-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            margin-bottom: 8px;
+        }
+
+        .card-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--ink-secondary);
+        }
+
+        /* ── Problem Cards ── */
+        .problem-card {
+            border: 1px solid var(--border-light);
+            background: white;
+            padding: 32px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .problem-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .problem-icon.red {
+            background: #fef2f2;
+            color: var(--danger);
+        }
+
+        .problem-icon.green {
+            background: var(--accent-subtle);
+            color: var(--accent);
+        }
+
+        /* ── Stats ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border-light);
+            border: 1px solid var(--border-light);
+        }
+
+        .stat-item {
+            background: white;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--ink-muted);
+            margin-top: 8px;
+        }
+
+        /* ── Node badges ── */
+        .node-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .node-badge {
+            padding: 12px 16px;
+            border: 1px solid var(--border-light);
+            background: white;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .node-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .node-dot.data {
+            background: #8b5cf6;
+        }
+
+        .node-dot.analysis {
+            background: #0ea5e9;
+        }
+
+        .node-dot.strategy {
+            background: #f43f5e;
+        }
+
+        .node-dot.execution {
+            background: var(--accent);
+        }
+
+        /* ── Flow diagram ── */
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 16px 0;
+            flex-wrap: wrap;
+        }
+
+        .flow-box {
+            padding: 14px 22px;
+            border: 2px solid var(--border-medium);
+            font-size: 14px;
+            font-weight: 600;
+            background: white;
+            white-space: nowrap;
+        }
+
+        .flow-box.highlight {
+            border-color: var(--accent);
+            background: var(--accent-subtle);
+            color: var(--accent);
+        }
+
+        .flow-box.danger {
+            border-color: var(--danger);
+            background: #fef2f2;
+            color: var(--danger);
+        }
+
+        .flow-arrow {
+            font-size: 18px;
+            color: var(--ink-disabled);
+        }
+
+        /* ── Table ── */
+        .metric-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-table th {
+            text-align: left;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--ink-muted);
+            padding: 10px 16px;
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .metric-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-light);
+            color: var(--ink-secondary);
+        }
+
+        .metric-table td:first-child {
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .metric-table .pass {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .metric-table .value {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--ink);
+        }
+
+        /* ── Quote ── */
+        .quote-block {
+            border-left: 4px solid var(--accent);
+            padding: 28px 32px;
+            background: var(--accent-subtle);
+            margin: 32px 0;
+        }
+
+        .quote-text {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-style: italic;
+            color: var(--ink);
+            line-height: 1.5;
+        }
+
+        /* ── Tag ── */
+        .tag {
+            display: inline-block;
+            padding: 4px 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border: 1px solid;
+            margin-right: 6px;
+        }
+
+        .tag.emerald {
+            border-color: var(--accent-light);
+            color: var(--accent);
+            background: var(--accent-subtle);
+        }
+
+        .tag.stone {
+            border-color: var(--border-medium);
+            color: var(--ink-muted);
+            background: white;
+        }
+
+        /* ── List ── */
+        .check-list {
+            list-style: none;
+        }
+
+        .check-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-light);
+            font-size: 16px;
+            color: var(--ink-secondary);
+            display: flex;
+            gap: 12px;
+            align-items: baseline;
+        }
+
+        .check-list .icon {
+            color: var(--accent);
+            font-size: 16px;
+        }
+
+        /* ── Divider ── */
+        .divider {
+            width: 100%;
+            height: 1px;
+            background: var(--border-light);
+            margin: 24px 0;
+        }
+
+        .accent-bar {
+            width: 48px;
+            height: 3px;
+            background: var(--accent);
+            margin-bottom: 20px;
+        }
+
+        /* ── Slide nav ── */
+        .slide-nav {
+            position: fixed;
+            bottom: 24px;
+            right: 32px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .slide-nav button {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--border-medium);
+            background: white;
+            cursor: pointer;
+            font-size: 16px;
+            color: var(--ink-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .slide-nav button:hover {
+            background: var(--ink);
+            color: white;
+            border-color: var(--ink);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 28px;
+            left: 32px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            color: var(--ink-muted);
+            z-index: 100;
+        }
+
+        /* ── Accent top bar ── */
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--accent);
+        }
+
+        /* ── Dark slide ── */
+        .slide.dark {
+            background: #0a0a0a;
+            color: white;
+        }
+
+        .slide.dark::before {
+            background: #34d399;
+        }
+
+        .slide.dark .headline {
+            color: white;
+        }
+
+        .slide.dark .headline .accent {
+            color: #34d399;
+        }
+
+        .slide.dark .subheadline {
+            color: #a3a3a3;
+        }
+
+        .slide.dark .kicker {
+            color: #737373;
+        }
+
+        .slide.dark .kicker::before {
+            background: #34d399;
+        }
+
+        .slide.dark .quote-block {
+            background: #171717;
+            border-color: #34d399;
+        }
+
+        .slide.dark .quote-text {
+            color: white;
+        }
+
+        .slide.dark .check-list li {
+            border-color: #262626;
+            color: #a3a3a3;
+        }
+
+        .slide.dark .check-list .icon {
+            color: #34d399;
+        }
+
+        .slide.dark .tag.emerald {
+            border-color: #059669;
+            color: #34d399;
+            background: #022c22;
+        }
+
+        /* ── Demo slide ── */
+        .slide.demo-slide {
+            background: var(--ink);
+            color: white;
+        }
+
+        .slide.demo-slide::before {
+            background: #34d399;
+        }
+
+        .slide.demo-slide .kicker {
+            color: #737373;
+        }
+
+        .slide.demo-slide .kicker::before {
+            background: #34d399;
+        }
+
+        .slide.demo-slide .headline {
+            color: white;
+        }
+
+        .slide.demo-slide .headline .accent {
+            color: #34d399;
+        }
+
+        .slide.demo-slide .subheadline {
+            color: #a3a3a3;
+        }
+
+        /* ── Comparison columns ── */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border-light);
+            border: 1px solid var(--border-light);
+            margin-top: 24px;
+        }
+
+        .comparison-col {
+            background: white;
+            padding: 32px;
+        }
+
+        .comparison-col.highlight-col {
+            background: var(--accent-subtle);
+        }
+
+        .vs-badge {
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 12px;
+        }
+
+        /* ── Screenshot placeholder ── */
+        .screenshot-placeholder {
+            border: 2px dashed var(--border-medium);
+            background: var(--paper-alt);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            margin-top: 16px;
+            position: relative;
+        }
+
+        .screenshot-placeholder .ph-label {
+            font-family: var(--font-body);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--ink-disabled);
+        }
+
+        .screenshot-placeholder .ph-hint {
+            font-family: var(--font-body);
+            font-size: 10px;
+            color: var(--ink-disabled);
+            margin-top: 4px;
+        }
+
+        .screenshot-placeholder img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* ── Numbered circle ── */
+        .num-circle {
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--border-medium);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink-muted);
+            flex-shrink: 0;
+        }
+
+        .num-circle.accent {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-subtle);
+        }
+
+        /* ── Print ── */
+        @media print {
+
+            .slide-nav,
+            .slide-counter {
+                display: none;
+            }
+
+            .slide {
+                page-break-after: always;
+                display: flex !important;
+                position: relative;
+                height: auto;
+                min-height: 100vh;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="slide-deck" id="deck">
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 1: Title
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide active">
+            <div class="center-content">
+                <div class="kicker">Khóa Luận Tốt Nghiệp · 2026</div>
+                <h1 class="headline" style="font-size: 48px;">
+                    QuantVN <span class="accent">Strategy Forge</span>
+                </h1>
+                <p class="subheadline" style="margin-top: 8px; font-size: 18px;">
+                    A Reliability-Gated AI Assistant for Trading Strategy Design<br>and Backtesting on Vietnamese
+                    Equities (HOSE)
+                </p>
+                <div style="margin-top: 48px;">
+                    <div class="label" style="font-size: 13px;">Sinh viên: <strong style="color: var(--ink);">Liêu Hoài
+                            Phúc</strong> &nbsp;·&nbsp; MSSV: <strong style="color: var(--ink);">K224141735</strong>
+                    </div>
+                    <div class="label" style="margin-top: 10px; font-size: 13px;">GVHD: <strong
+                            style="color: var(--accent);">PGS.TS. Nguyễn Anh Phong</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 2: Motivation (NEW)
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col">
+                <div>
+                    <div class="kicker">Xuất Phát Điểm</div>
+                    <h2 class="headline" style="font-size: 40px;">
+                        Ý tưởng<br><span class="accent">từ đâu?</span>
+                    </h2>
+                    <div style="margin-top: 32px;">
+                        <div class="problem-card" style="margin-bottom: 12px;">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">01</div>
+                            <div>
+                                <div class="card-title">Bối cảnh thị trường</div>
+                                <div class="card-text">9,2 triệu tài khoản (2024), NĐT cá nhân chiếm &gt;80% giao dịch
+                                    HOSE — nhu cầu công cụ phân tích rất lớn</div>
+                            </div>
+                        </div>
+                        <div class="problem-card" style="margin-bottom: 12px;">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">02</div>
+                            <div>
+                                <div class="card-title">Rào cản thực tế</div>
+                                <div class="card-text">Muốn backtest chiến lược phải viết Python; hỏi AI giá cổ phiếu VN
+                                    thì nhận con số bịa</div>
+                            </div>
+                        </div>
+                        <div class="problem-card">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">03</div>
+                            <div>
+                                <div class="card-title">Ý tưởng hình thành</div>
+                                <div class="card-text">Xây nền tảng <strong>no-code</strong> + AI <strong>đáng tin
+                                        cậy</strong>, chuyên biệt cho thị trường Việt Nam</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="label" style="margin-bottom: 16px;">Con số nền tảng</div>
+                    <div class="card" style="margin-bottom: 12px; text-align: center;">
+                        <div class="stat-number" style="font-size: 32px;">9,2M</div>
+                        <div class="label">tài khoản giao dịch (2024)</div>
+                    </div>
+                    <div class="card" style="margin-bottom: 12px; text-align: center;">
+                        <div class="stat-number" style="font-size: 32px;">16,9B$</div>
+                        <div class="label">thị trường fintech VN (2024)</div>
+                    </div>
+                    <div class="card" style="margin-bottom: 12px; text-align: center;">
+                        <div class="stat-number" style="font-size: 32px;">84%</div>
+                        <div class="label">tỷ lệ smartphone VN</div>
+                    </div>
+                    <div
+                        style="margin-top: 20px; padding: 12px 16px; background: var(--paper-alt); border-left: 3px solid var(--accent); font-size: 12px; color: var(--ink-muted);">
+                        <strong>Nguồn:</strong> FiinPro 2024, IMARC Group 2024
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 3: Vấn Đề
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col-wide">
+                <div>
+                    <div class="kicker">Bối Cảnh</div>
+                    <h2 class="headline" style="font-size: 44px;">
+                        Hai vấn đề<br><span class="accent">một giải pháp</span>
+                    </h2>
+                    <div class="problem-card">
+                        <div class="problem-icon red"
+                            style="font-family: var(--font-display); font-weight: 700; font-size: 24px;">×</div>
+                        <div>
+                            <div class="card-title">Tạo strategy phải viết code</div>
+                            <div class="card-text">Python, R, QuantConnect — rào cản lớn cho nhà đầu tư cá nhân và sinh
+                                viên</div>
+                        </div>
+                    </div>
+                    <div class="problem-card">
+                        <div class="problem-icon red">✕</div>
+                        <div>
+                            <div class="card-title">AI "bịa" con số tài chính</div>
+                            <div class="card-text">Hỏi Sharpe ratio → nhận số tự tin nhưng SAI. Trong tài chính, sai số
+                                = mất tiền</div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="quote-block">
+                        <div class="quote-text">"Hỏi AI giá cổ phiếu VNM → nhận câu trả lời rất tự tin, nhưng hoàn toàn
+                            bịa đặt."</div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <div class="label" style="margin-bottom: 12px;">Nghiên cứu liên quan</div>
+                        <div class="tag emerald">Lin et al. 2022 · Truthfulness</div>
+                        <div class="tag emerald">Min et al. 2023 · Claim-level eval</div>
+                        <div class="tag emerald">Bailey et al. 2016 · Backtest overfitting</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 3: Khoảng trống nền tảng (NEW)
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div style="padding: 64px 80px;">
+                <div class="kicker">Tổng Quan Tài Liệu</div>
+                <h2 class="headline" style="font-size: 36px;">
+                    Khoảng trống <span class="accent">nền tảng</span>
+                </h2>
+                <p class="subheadline" style="margin-bottom: 24px;">So sánh tính năng các nền tảng cho nhà đầu tư Việt
+                    Nam (Bảng 2, KLTN)</p>
+                <table class="metric-table" style="font-size: 13px; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;">Tính năng</th>
+                            <th>TCBS/SSI</th>
+                            <th>Algotrade</th>
+                            <th>Miquant</th>
+                            <th>TradingView</th>
+                            <th style="color: var(--accent); font-weight: 700;">QuantVN</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Backtest chiến lược</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td>Tự động hóa</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td>Hạn chế</td>
+                            <td class="value" style="color: var(--accent);">5 loại</td>
+                        </tr>
+                        <tr>
+                            <td>Strategy Builder no-code</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td class="value" style="color: var(--accent);">Trực quan</td>
+                        </tr>
+                        <tr>
+                            <td>Tối ưu danh mục</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td class="value" style="color: var(--accent);">4 phương pháp</td>
+                        </tr>
+                        <tr>
+                            <td>Phân tích rủi ro (VaR/CVaR)</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td class="value" style="color: var(--accent);">Có</td>
+                        </tr>
+                        <tr>
+                            <td>AI Assistant (grounded)</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td>Chatbot</td>
+                            <td style="color: var(--danger);">—</td>
+                            <td class="value" style="color: var(--accent);">Tool-grounded</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div style="margin-top: 16px; font-size: 12px; color: var(--ink-muted); font-style: italic;">
+                    Nguồn: Tác giả tổng hợp (truy cập 02/2026)
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 4: Câu hỏi NC & Giả thuyết (NEW)
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col">
+                <div>
+                    <div class="kicker">Phương Pháp</div>
+                    <h2 class="headline" style="font-size: 36px;">
+                        3 câu hỏi,<br><span class="accent">5 giả thuyết</span>
+                    </h2>
+                    <div style="margin-top: 24px;">
+                        <div class="problem-card" style="margin-bottom: 12px;">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">RQ1</div>
+                            <div class="card-text" style="font-size: 14px;">Thiết kế nền tảng tăng khả năng <strong>tiếp
+                                    cận</strong> công cụ định lượng?</div>
+                        </div>
+                        <div class="problem-card" style="margin-bottom: 12px;">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">RQ2</div>
+                            <div class="card-text" style="font-size: 14px;">Hiệu quả trong thiết kế,
+                                <strong>backtest</strong> và đánh giá chiến lược?
+                            </div>
+                        </div>
+                        <div class="problem-card">
+                            <div class="num-circle" style="width: 28px; height: 28px; font-size: 12px;">RQ3</div>
+                            <div class="card-text" style="font-size: 14px;">AI giải thích kết quả <strong>đáng tin
+                                    cậy</strong> mà không bịa đặt?</div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="label" style="margin-bottom: 16px;">Giả thuyết nghiên cứu</div>
+                    <div style="font-size: 13px; line-height: 2.2;">
+                        <div><strong style="color: var(--accent);">H1</strong> &nbsp;Nền tảng web dễ tiếp cận, không cần
+                            code</div>
+                        <div><strong style="color: var(--accent);">H2</strong> &nbsp;Tham số thị trường VN tăng tính
+                            thực tế backtest</div>
+                        <div><strong style="color: var(--accent);">H3</strong> &nbsp;Strategy Builder no-code cho NĐT cá
+                            nhân HOSE</div>
+                        <div><strong style="color: var(--accent);">H4</strong> &nbsp;Pipeline kiểm định dữ liệu mã nguồn
+                            mở</div>
+                        <div><strong style="color: var(--accent);">H5</strong> &nbsp;AI grounding + abstention tránh bịa
+                            con số</div>
+                    </div>
+                    <div
+                        style="margin-top: 20px; padding: 12px 16px; background: var(--paper-alt); border-left: 3px solid var(--accent); font-size: 12px; color: var(--ink-muted);">
+                        <strong>Phương pháp đánh giá:</strong> Triển khai hệ thống + so sánh tính năng (RQ1), trình diễn
+                        backtest trên dữ liệu HOSE (RQ2), đánh giá grounding & abstention (RQ3)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 5: Giải Pháp
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col-wide">
+                <div>
+                    <div class="kicker">Giải Pháp</div>
+                    <h2 class="headline" style="font-size: 44px;">
+                        QuantVN<br><span class="accent">Strategy Forge</span>
+                    </h2>
+                    <p class="subheadline">Nền tảng phân tích định lượng tích hợp AI đáng tin cậy cho cổ phiếu HOSE</p>
+                    <div style="margin-top: 32px;">
+                        <div class="problem-card">
+                            <div class="problem-icon green"
+                                style="font-family: var(--font-display); font-weight: 700; font-size: 24px;">+</div>
+                            <div>
+                                <div class="card-title">Strategy Builder — Kéo-thả, không code</div>
+                                <div class="card-text">12 loại node, connection rules, template gallery, AI Suggest
+                                </div>
+                            </div>
+                        </div>
+                        <div class="problem-card">
+                            <div class="problem-icon green">✓</div>
+                            <div>
+                                <div class="card-title">AI Assistant — Biết khi nào KHÔNG trả lời</div>
+                                <div class="card-text">Grounded vào internal tools, policy-gated abstention, measurable
+                                    evaluation</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: var(--accent);">12</div>
+                            <div class="stat-label">Node Types</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: var(--accent);">5</div>
+                            <div class="stat-label">Templates</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: var(--accent);">5</div>
+                            <div class="stat-label">Reliability Metrics</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">7+</div>
+                            <div class="stat-label">Năm dữ liệu</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">8</div>
+                            <div class="stat-label">Modules</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">10+</div>
+                            <div class="stat-label">Eval Gates</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 4: Kiến Trúc
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div class="kicker">Kiến Trúc Hệ Thống</div>
+                <h2 class="headline" style="font-size: 40px;">
+                    Module <span class="accent">Architecture</span>
+                </h2>
+
+                <div class="flow-row" style="margin-top: 32px;">
+                    <div class="flow-box">User</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">Web UI</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">Service Interface</div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 20px;">
+                    <div class="card" style="border-top: 3px solid #8b5cf6;">
+                        <div class="label" style="margin-bottom: 8px;">Data Layer</div>
+                        <div class="card-text">Runtime contract<br>Quality gates<br>Manifest validation</div>
+                    </div>
+                    <div class="card" style="border-top: 3px solid #0ea5e9;">
+                        <div class="label" style="margin-bottom: 8px;">Quant Engine</div>
+                        <div class="card-text">Indicators, Backtesting<br>Risk, Factors<br>Portfolio optimization</div>
+                    </div>
+                    <div class="card" style="border-top: 3px solid #f43f5e;">
+                        <div class="label" style="margin-bottom: 8px;">Strategy Lab</div>
+                        <div class="card-text">Async runs<br>Comparison<br>Run lifecycle</div>
+                    </div>
+                    <div class="card" style="border-top: 3px solid var(--accent);">
+                        <div class="label" style="margin-bottom: 8px;">AI Assistant</div>
+                        <div class="card-text">Planner → Tools<br>→ Policy Gate<br>→ LLM Provider</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 24px; text-align: center;">
+                    <div class="label">Runtime Data: Prepared datasets + Manifest &nbsp;│&nbsp; Evaluation: Acceptance
+                        gates + Reproducible suites</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 5: Strategy Builder
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col">
+                <div>
+                    <div class="kicker">Tính Năng 1</div>
+                    <h2 class="headline" style="font-size: 44px;">
+                        Strategy<br><span class="accent">Builder</span>
+                    </h2>
+                    <p class="subheadline" style="margin-bottom: 24px;">
+                        No-code quantitative strategy design — kéo-thả khối logic
+                    </p>
+                    <ul class="check-list">
+                        <li><span class="icon" style="font-family: var(--font-display); font-weight: 700;">—</span>
+                            <strong>12 node types</strong> — từ data source đến backtest
+                        </li>
+                        <li><span class="icon" style="font-family: var(--font-display); font-weight: 700;">—</span>
+                            <strong>Connection validation</strong> — ngăn tạo strategy vô nghĩa
+                        </li>
+                        <li><span class="icon" style="font-family: var(--font-display); font-weight: 700;">—</span>
+                            <strong>5 template strategies</strong> — RSI, EMA, Bollinger, SMA, Risk Parity
+                        </li>
+                        <li><span class="icon" style="font-family: var(--font-display); font-weight: 700;">—</span>
+                            <strong>AI Suggest</strong> — mô tả bằng text, AI tạo node flow
+                        </li>
+                    </ul>
+                    <div style="margin-top: 20px;">
+                        <div class="label" style="margin-bottom: 10px;">Pipeline</div>
+                        <div class="flow-row">
+                            <div class="flow-box" style="border-color: #8b5cf6; font-size: 12px;">DataSource</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-box" style="border-color: #0ea5e9; font-size: 12px;">Indicator</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-box" style="border-color: #f43f5e; font-size: 12px;">Signal</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-box" style="border-color: var(--accent); font-size: 12px;">Backtest</div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <!-- Strategy Builder Canvas screenshot -->
+                    <div class="screenshot-placeholder" style="height: 420px;">
+                        <img src="screenshots/strategy-builder.png" alt="Strategy Builder Canvas"
+                            style="border-radius: 4px; border: 1px solid var(--border-light);">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 6: AI Assistant Pipeline
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div class="kicker">Tính Năng 2</div>
+                <h2 class="headline" style="font-size: 44px;">
+                    AI Assistant —<br><span class="accent">Grounded Generation</span>
+                </h2>
+
+                <div class="flow-row" style="margin-top: 32px;">
+                    <div class="flow-box">User Message</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">Planner</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">Grounding Tools</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box highlight">Policy Gate</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">LLM Provider</div>
+                </div>
+
+                <div class="comparison" style="margin-top: 28px;">
+                    <div class="comparison-col">
+                        <div class="vs-badge" style="color: var(--accent);">Đủ Evidence</div>
+                        <div class="card-title" style="font-size: 18px; margin-bottom: 8px;">Grounded Answer</div>
+                        <div class="card-text">
+                            Câu trả lời kèm <strong>citations</strong> từ internal tools.<br>
+                            Mọi con số trace được nguồn gốc.
+                        </div>
+                        <!-- AI Grounded answer screenshot -->
+                        <div class="screenshot-placeholder" style="height: 120px; margin-top: 12px;">
+                            <img src="screenshots/screener.png" alt="Screener with AI"
+                                style="border-radius: 4px; object-position: right;">
+                        </div>
+                    </div>
+                    <div class="comparison-col" style="background: #fef2f2;">
+                        <div class="vs-badge" style="color: var(--danger);">Thiếu Evidence</div>
+                        <div class="card-title" style="font-size: 18px; margin-bottom: 8px;">Abstention</div>
+                        <div class="card-text">
+                            Từ chối trả lời + lý do cụ thể.<br>
+                            <strong>Không bịa con số.</strong>
+                        </div>
+                        <!-- AI Abstention screenshot -->
+                        <div class="screenshot-placeholder" style="height: 120px; margin-top: 12px;">
+                            <img src="screenshots/landing.png" alt="Landing page"
+                                style="border-radius: 4px; object-position: center;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quote-block" style="margin-top: 24px;">
+                    <div class="quote-text" style="font-size: 20px;">"Trong tài chính, AI nói 'tôi không đủ bằng chứng'
+                        đáng tin hơn AI bịa số."</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 7: Live Demo (Transition)
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="center-content">
+                <div class="kicker">Phần Chính</div>
+                <h1 class="headline" style="font-size: 64px;">
+                    Live <span class="accent">Demo</span>
+                </h1>
+                <p class="subheadline" style="margin-top: 12px;">
+                    Strategy Builder → Backtesting → AI Assistant
+                </p>
+                <div style="margin-top: 48px; display: flex; gap: 48px;">
+                    <div style="text-align: center;">
+                        <div class="num-circle accent" style="margin: 0 auto 12px;">01</div>
+                        <div class="label">Strategy Builder</div>
+                        <div style="color: var(--ink-muted); font-size: 13px; margin-top: 4px;">~5 phút</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div class="num-circle accent" style="margin: 0 auto 12px;">02</div>
+                        <div class="label">Backtesting</div>
+                        <div style="color: var(--ink-muted); font-size: 13px; margin-top: 4px;">~2 phút</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div class="num-circle accent" style="margin: 0 auto 12px;">03</div>
+                        <div class="label">AI Assistant</div>
+                        <div style="color: var(--ink-muted); font-size: 13px; margin-top: 4px;">~3 phút</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 8: Evaluation
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div class="kicker">Đánh Giá</div>
+                <h2 class="headline" style="font-size: 40px;">
+                    Đánh giá <span class="accent">giả thuyết</span>
+                </h2>
+
+                <table class="metric-table">
+                    <thead>
+                        <tr>
+                            <th>Giả thuyết</th>
+                            <th>Nội dung</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>H1</strong></td>
+                            <td>Nền tảng web dễ tiếp cận, 8 mô-đun, không cần cài đặt</td>
+                            <td class="value" style="color: var(--accent);">Ủng hộ</td>
+                        </tr>
+                        <tr>
+                            <td><strong>H2</strong></td>
+                            <td>Tham số thị trường VN (lô, phí, thuế, next-open)</td>
+                            <td class="value" style="color: var(--accent);">Ủng hộ</td>
+                        </tr>
+                        <tr>
+                            <td><strong>H3</strong></td>
+                            <td>Strategy Builder no-code, kéo-thả trên canvas</td>
+                            <td class="value" style="color: var(--accent);">Ủng hộ</td>
+                        </tr>
+                        <tr>
+                            <td><strong>H4</strong></td>
+                            <td>Pipeline kiểm định 768K rows, quality gates 95%</td>
+                            <td class="value" style="color: var(--accent);">Ủng hộ</td>
+                        </tr>
+                        <tr>
+                            <td><strong>H5</strong></td>
+                            <td>AI grounding + abstention, chưa có user study</td>
+                            <td class="value" style="color: #d97706;">Một phần</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="margin-top: 20px; display: flex; gap: 24px; font-size: 13px;">
+                    <div class="card" style="flex: 1; text-align: center;">
+                        <div class="stat-number" style="font-size: 28px;">412</div>
+                        <div class="label">mã HOSE</div>
+                    </div>
+                    <div class="card" style="flex: 1; text-align: center;">
+                        <div class="stat-number" style="font-size: 28px;">768K</div>
+                        <div class="label">bản ghi OHLCV</div>
+                    </div>
+                    <div class="card" style="flex: 1; text-align: center;">
+                        <div class="stat-number" style="font-size: 28px;">8</div>
+                        <div class="label">mô-đun tích hợp</div>
+                    </div>
+                    <div class="card" style="flex: 1; text-align: center;">
+                        <div class="stat-number" style="font-size: 28px;">2018–25</div>
+                        <div class="label">giai đoạn dữ liệu</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 9: Contributions
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide">
+            <div class="two-col">
+                <div>
+                    <div class="kicker">Đóng Góp</div>
+                    <h2 class="headline" style="font-size: 40px;">
+                        Ba đóng góp<br><span class="accent">chính</span>
+                    </h2>
+                    <ul class="check-list">
+                        <li>
+                            <div class="num-circle" style="width: 32px; height: 32px; font-size: 14px;">1</div>
+                            <div><strong>No-code Strategy Builder</strong><br>
+                                <span style="color: var(--ink-muted); font-size: 14px;">12 node types, drag-drop,
+                                    connection validation, AI Suggest</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="num-circle" style="width: 32px; height: 32px; font-size: 14px;">2</div>
+                            <div><strong>Reliability-gated AI Assistant</strong><br>
+                                <span style="color: var(--ink-muted); font-size: 14px;">Grounded generation +
+                                    policy-gated abstention</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="num-circle" style="width: 32px; height: 32px; font-size: 14px;">3</div>
+                            <div><strong>Measurable evaluation framework</strong><br>
+                                <span style="color: var(--ink-muted); font-size: 14px;">5-metric gate, acceptance
+                                    suites, reproducible artifacts</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="label" style="margin-bottom: 16px;">Hạn chế & Hướng phát triển</div>
+                    <div class="card" style="margin-bottom: 12px;">
+                        <div class="label" style="margin-bottom: 8px; color: var(--danger);">Hạn chế</div>
+                        <div class="card-text">
+                            Daily frequency · Limited universe · Single instance · LLM provider variability
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="label" style="margin-bottom: 8px; color: var(--accent);">Roadmap</div>
+                        <div class="card-text">
+                            Redis-backed scaling · Persistent strategy lab · Adversarial eval suites · Dataset
+                            snapshotting
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════
+       SLIDE 10: Final
+       ════════════════════════════════════════════════════════ -->
+        <div class="slide" style="background: var(--paper-alt);">
+            <div class="center-content">
+                <div class="kicker">Kết Luận</div>
+                <h1 class="headline" style="font-size: 48px;">
+                    Reliability =<br>Biết khi nào<br><span class="accent">không biết</span>
+                </h1>
+                <div class="quote-block" style="max-width: 640px; margin: 32px auto;">
+                    <div class="quote-text" style="font-size: 20px;">
+                        "Trong tài chính, từ chối trả lời đáng tin hơn đoán sai. Đây là nguyên tắc thiết kế, không phải
+                        hạn chế."
+                    </div>
+                </div>
+                <div style="margin-top: 32px;">
+                    <div class="label">Cảm ơn Hội đồng · Sẵn sàng Q&A</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Navigation -->
+    <div class="slide-counter" id="counter">1 / 10</div>
+    <div class="slide-nav">
+        <button onclick="prevSlide()" title="Previous (←)">←</button>
+        <button onclick="nextSlide()" title="Next (→)">→</button>
+    </div>
+
+    <script>
+        let current = 0;
+        const slides = document.querySelectorAll('.slide');
+        const total = slides.length;
+        const counter = document.getElementById('counter');
+
+        function showSlide(n) {
+            slides[current].classList.remove('active');
+            current = ((n % total) + total) % total;
+            slides[current].classList.add('active');
+            counter.textContent = `${current + 1} / ${total}`;
+        }
+
+        function nextSlide() { showSlide(current + 1); }
+        function prevSlide() { showSlide(current - 1); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); nextSlide(); }
+            if (e.key === 'ArrowLeft' || e.key === 'Backspace') { e.preventDefault(); prevSlide(); }
+            if (e.key === 'Home') { e.preventDefault(); showSlide(0); }
+            if (e.key === 'End') { e.preventDefault(); showSlide(total - 1); }
+            if (e.key === 'f' || e.key === 'F') {
+                if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+                else document.exitFullscreen();
+            }
+        });
+    </script>
+
+</body>
+
+</html>

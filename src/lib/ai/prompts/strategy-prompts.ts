@@ -120,6 +120,12 @@ Schema reminder:
   "explanation": "string"
 }`;
 
+export const STRATEGY_REPAIR_USER_PROMPT = `Regenerate the strategy for this request:
+
+{USER_DESCRIPTION}
+
+Return ONLY one valid JSON object.`;
+
 export const STRATEGY_EXAMPLES = [
   {
     name: "RSI Mean Reversion",
@@ -144,18 +150,11 @@ export const STRATEGY_EXAMPLES = [
 ];
 
 export function buildStrategyPrompt(userDescription: string): string {
-  return STRATEGY_GENERATION_SYSTEM_PROMPT + "\n\n" +
-    STRATEGY_GENERATION_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
+  return STRATEGY_GENERATION_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
 }
 
 export function buildStrategyRepairPrompt(userDescription: string): string {
-  return (
-    STRATEGY_GENERATION_SYSTEM_PROMPT +
-    "\n\n" +
-    STRATEGY_GENERATION_REPAIR_PROMPT +
-    "\n\nUser request:\n" +
-    userDescription
-  );
+  return STRATEGY_REPAIR_USER_PROMPT.replace("{USER_DESCRIPTION}", userDescription);
 }
 
 export function getStrategyExamplesForUI(): Array<{ name: string; description: string; prompt: string }> {

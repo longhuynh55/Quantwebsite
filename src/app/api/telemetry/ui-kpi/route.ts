@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createLogger, toErrorMeta } from "@/lib/logger";
 import { checkRateLimit, createRateLimitKey, getClientIdentifier } from "@/lib/rateLimit";
+import {
+  UI_KPI_METRICS,
+  isUiKpiEventAllowed,
+  isUiKpiMetric,
+} from "@/lib/uiKpiSchema";
 
 const uiKpiLogger = createLogger("api.telemetry.ui_kpi");
 
@@ -12,7 +17,7 @@ const MAX_SYMBOL_LENGTH = 10;
 const MAX_SOURCE_LENGTH = 40;
 const MAX_DETAIL_KEYS = 20;
 
-const ALLOWED_METRICS = new Set(["preset_reuse", "watchlist_interaction", "assistant_contextual_action_ctr"]);
+const ALLOWED_METRICS = new Set(UI_KPI_METRICS);
 
 interface UiKpiPayload {
   metric: string;
@@ -59,7 +64,8 @@ function sanitizePayload(input: unknown): UiKpiPayload | null {
   const metric = normalizeText(input.metric, 40);
   const event = normalizeText(input.event, MAX_EVENT_LENGTH);
   if (!metric || !event) return null;
-  if (!ALLOWED_METRICS.has(metric)) return null;
+  if (!isUiKpiMetric(metric) || !ALLOWED_METRICS.has(metric)) return null;
+  if (!isUiKpiEventAllowed(metric, event)) return null;
 
   return {
     metric,

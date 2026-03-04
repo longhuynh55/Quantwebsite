@@ -1,0 +1,136 @@
+version: 1
+purpose: "Internal-only traceability map from KB claims to implementation evidence."
+
+modules:
+  home:
+    ui:
+      - "src/app/page.tsx"
+    api:
+      - "src/app/api/market-overview/route.ts"
+
+  dashboard:
+    ui:
+      - "src/app/dashboard/page.tsx"
+      - "src/components/dashboard/DashboardLayout.tsx"
+      - "src/components/dashboard/widgets/*"
+    api: []
+
+  screener:
+    ui:
+      - "src/app/screener/page.tsx"
+      - "src/app/screener/ScreenerClient.tsx"
+    api:
+      - "src/app/api/stocks/route.ts"
+
+  charts:
+    ui:
+      - "src/app/charts/page.tsx"
+      - "src/components/charts/*"
+    api:
+      - "src/app/api/stocks/route.ts"
+      - "src/app/api/fundamentals/route.ts"
+
+  backtesting:
+    ui:
+      - "src/app/backtesting/page.tsx"
+      - "src/app/backtesting/hooks/useBacktest.ts"
+      - "src/app/backtesting/components/*"
+    api:
+      - "src/app/api/backtesting/route.ts"
+
+  strategy_builder:
+    ui:
+      - "src/app/strategy-builder/page.tsx"
+      - "src/components/strategy-builder/*"
+      - "src/lib/stores/strategyBuilderStore.ts"
+    api:
+      - "src/app/api/strategy-lab/runs/route.ts"
+      - "src/app/api/strategy-lab/runs/[runId]/route.ts"
+      - "src/app/api/strategy-lab/runs/[runId]/cancel/route.ts"
+      - "src/app/api/strategy-lab/runs/[runId]/result/route.ts"
+
+  strategy_lab:
+    ui: []
+    api:
+      - "src/app/api/strategy-lab/health/route.ts"
+      - "src/app/api/strategy-lab/runs/**/route.ts"
+      - "src/app/api/strategy-lab/worker/tick/route.ts"
+    lib:
+      - "src/lib/strategy-lab/*"
+
+  portfolio:
+    ui:
+      - "src/app/portfolio/page.tsx"
+      - "src/components/charts/CorrelationMatrix.tsx"
+    api:
+      - "src/app/api/optimize/route.ts"
+
+  factors:
+    ui:
+      - "src/app/factors/page.tsx"
+    api:
+      - "src/app/api/factors/route.ts"
+      - "src/app/api/analytics/icb-snapshot/route.ts"
+      - "src/app/api/analytics/valuation-rankings/route.ts"
+
+  risk:
+    ui:
+      - "src/app/risk/page.tsx"
+    api:
+      - "src/app/api/risk/route.ts"
+
+  assistant:
+    ui:
+      - "src/components/assistant/AiAssistantPanel.tsx"
+      - "src/components/assistant/AiAssistantTrigger.tsx"
+      - "src/components/assistant/QuickActions.tsx"
+    api:
+      - "src/app/api/assistant/route.ts"
+      - "src/app/api/assistant/execute/route.ts"
+      - "src/app/api/telemetry/ui-kpi/route.ts"
+
+  alerts:
+    ui:
+      - "src/components/alerts/AlertCenter.tsx"
+      - "src/components/layout/Header.tsx"
+    api:
+      - "src/app/api/alerts/route.ts"
+      - "src/app/api/alerts/rules/route.ts"
+
+  command_palette:
+    ui:
+      - "src/components/CommandPalette.tsx"
+      - "src/components/layout/Header.tsx"
+    api:
+      - "src/app/api/stocks/route.ts"
+
+  learn:
+    ui:
+      - "src/app/learn/page.tsx"
+      - "src/app/learn/[topic]/page.tsx"
+      - "src/lib/learnMdx.ts"
+    api: []
+
+  community:
+    ui:
+      - "src/app/community/page.tsx"
+      - "src/components/community/StrategyMarketplace.tsx"
+      - "src/components/community/StrategyImporter.tsx"
+      - "src/components/community/StrategyDetail.tsx"
+    api:
+      - "src/app/api/strategies/route.ts"
+      - "src/app/api/strategies/[id]/route.ts"
+
+  ml_lab:
+    ui:
+      - "src/app/ml-lab/page.tsx"
+    api: []
+
+globals:
+  layout:
+    ui:
+      - "src/app/layout.tsx"
+      - "src/components/layout/Sidebar.tsx"
+      - "src/components/layout/Navbar.tsx"
+      - "src/components/layout/Footer.tsx"
+

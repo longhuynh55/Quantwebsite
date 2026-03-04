@@ -398,12 +398,17 @@ function cancelScheduledRun(runId: string): void {
 }
 
 function scheduleRun(runId: string, delayMs = 0): void {
+  if (!shouldUseInProcessScheduler()) return;
   if (scheduledRuns.has(runId)) return;
   const timeout = setTimeout(() => {
     scheduledRuns.delete(runId);
     void executeRunLifecycle(runId);
   }, delayMs);
   scheduledRuns.set(runId, timeout);
+}
+
+function shouldUseInProcessScheduler(): boolean {
+  return strategyLabRepository.backend !== "postgres";
 }
 
 export async function createStrategyLabRun(

@@ -209,7 +209,7 @@ WHERE id = $1
     return { status: "cancelled", runId: leased.runId, jobId: leased.jobId };
   }
 
-  await options.client.query(
+  const markRunningResult = await options.client.query(
     `
 UPDATE strategy_lab_jobs
 SET status = 'running',
@@ -220,6 +220,19 @@ WHERE id = $1
     `.trim(),
     [leased.jobId, options.workerId]
   );
+  if ((markRunningResult.rowCount ?? 0) !== 1) {
+    await appendEvent(options.client, {
+      runId: leased.runId,
+      jobId: leased.jobId,
+      eventType: "run_failed",
+      payload: {
+        status: "failed",
+        errorCode: "LEASE_LOST",
+        errorMessage: "Worker lost lease ownership before execution started.",
+      },
+    });
+    return { status: "failed", runId: leased.runId, jobId: leased.jobId };
+  }
   await options.client.query(
     `
 UPDATE strategy_lab_runs
@@ -243,15 +256,28 @@ WHERE id = $1
   });
 
   const abortController = new AbortController();
+  let leaseLost = false;
   const heartbeatTimer = setInterval(() => {
     void (async () => {
-      await internals.heartbeat(options.client, {
-        jobId: leased.jobId,
-        workerId: options.workerId,
-        leaseMs,
-      });
-      const cancelRequested = await isRunCancelRequested(options.client, leased.runId);
-      if (cancelRequested && !abortController.signal.aborted) {
+      try {
+        const heartbeatOk = await internals.heartbeat(options.client, {
+          jobId: leased.jobId,
+          workerId: options.workerId,
+          leaseMs,
+        });
+        if (!heartbeatOk) {
+          leaseLost = true;
+          if (!abortController.signal.aborted) {
+            abortController.abort();
+          }
+          return;
+        }
+        const cancelRequested = await isRunCancelRequested(options.client, leased.runId);
+        if (cancelRequested && !abortController.signal.aborted) {
+          abortController.abort();
+        }
+      } catch {
+        leaseLost = true;
         abortController.abort();
       }
     })();
@@ -262,6 +288,11 @@ WHERE id = $1
     const execution = await executeRunInput(leased.runId, normalizedInput, {
       signal: abortController.signal,
     });
+    if (leaseLost) {
+      const error = new Error("Worker lease lost during execution.");
+      (error as Error & { code?: string }).code = "LEASE_LOST";
+      throw error;
+    }
 
     await options.client.query(
       `

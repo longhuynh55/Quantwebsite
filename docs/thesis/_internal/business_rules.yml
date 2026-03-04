@@ -1,0 +1,99 @@
+version: 1
+purpose: "Business rules, limits, defaults, and guardrails that materially shape user outcomes."
+
+symbol_normalization:
+  allowed_pattern: "^[A-Z0-9]{1,10}$"
+  notes:
+    - "Multiple modules normalise to uppercase and restrict to alphanumeric tokens."
+    - "This reduces prompt/tool injection surface and prevents malformed queries."
+
+ui_limits_and_defaults:
+  screener:
+    page_size: 25
+    filters:
+      sort_by_default: "avgVolume"
+      sort_dir_default: "desc"
+    export:
+      format: "csv"
+      export_mode: "limit=all"
+  charts:
+    compare_symbol_limit: 5
+    time_range_options_days: ["30", "90", "180", "365", "all"]
+  portfolio:
+    max_symbols_in_ui: 10
+    min_symbols_in_ui: 2
+  alerts:
+    poll_interval_ms: 20000
+  assistant_ui:
+    max_in_memory_messages: 50
+    max_persisted_messages: 25
+
+backtesting_and_execution_constraints:
+  backtesting:
+    max_capital: 1000000000000
+    costs:
+      max_cost_bps: 1000
+    execution_presets:
+      - key: "low_cost"
+      - key: "realistic"
+      - key: "stress"
+    notes:
+      - "Execution & costs are explicitly configurable; the UI exposes presets to shape assumptions."
+
+api_rate_limits_and_payload_limits:
+  assistant:
+    rate_limit_per_minute: 30
+    max_text_length_chars: 4000
+    max_history_items: 10
+    max_response_citations: 12
+  ai_generate_strategy:
+    rate_limit_per_minute: 10
+    max_prompt_length_chars: 2000
+  telemetry_ui_kpi:
+    rate_limit_per_minute: 180
+    max_event_length: 80
+    max_page_length: 40
+    max_symbol_length: 10
+    max_source_length: 40
+  stocks:
+    rate_limit_per_minute: 100
+    default_page_size: 50
+    max_page_size: 200
+  strategies:
+    rate_limit_per_minute: 60
+    default_page_size: 12
+    max_page_size: 50
+  optimize:
+    rate_limit_per_minute: 30
+    notes:
+      - "Marked computationally expensive in implementation."
+  factors:
+    rate_limit_per_minute: 30
+    notes:
+      - "Marked computationally expensive in implementation."
+  backtesting:
+    rate_limit_per_minute: 30
+  risk:
+    rate_limit_per_minute: 60
+  fundamentals:
+    rate_limit_per_minute: 60
+  market_overview:
+    rate_limit_per_minute: 100
+  finance_analysis:
+    rate_limit_per_minute: 45
+  finance_analysis_export:
+    rate_limit_per_minute: 30
+  strategy_lab_runs:
+    rate_limit_per_minute: 30
+
+reliability_patterns:
+  abortable_requests:
+    description: "UI cancels in-flight requests when a new request supersedes it to prevent stale UI updates."
+    observed_in_modules: ["screener", "portfolio", "risk", "command_palette"]
+  explicit_states:
+    description: "Each workspace defines empty/no-results/error states and retry actions where appropriate."
+    observed_in_modules: ["screener", "backtesting", "risk", "charts"]
+  error_boundaries:
+    description: "Complex result rendering is wrapped in error boundaries to avoid blank screens."
+    observed_in_modules: ["backtesting", "charts (fundamentals)"]
+

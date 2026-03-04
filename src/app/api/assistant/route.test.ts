@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-const mockCheckRateLimit = jest.fn();
+const mockCheckRateLimitAsync = jest.fn();
 const mockCreateRateLimitKey = jest.fn();
 const mockGetClientIdentifier = jest.fn();
 const mockBuildAssistantQueryPlan = jest.fn();
@@ -9,7 +9,7 @@ const mockEvaluateAssistantPolicy = jest.fn();
 const mockGenerateWithProviderFallback = jest.fn();
 
 jest.mock("@/lib/rateLimit", () => ({
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  checkRateLimitAsync: (...args: unknown[]) => mockCheckRateLimitAsync(...args),
   createRateLimitKey: (...args: unknown[]) => mockCreateRateLimitKey(...args),
   getClientIdentifier: (...args: unknown[]) => mockGetClientIdentifier(...args),
 }));
@@ -43,7 +43,7 @@ describe("POST /api/assistant error traces", () => {
     jest.resetAllMocks();
     mockCreateRateLimitKey.mockReturnValue("assistant:test");
     mockGetClientIdentifier.mockReturnValue("client-test");
-    mockCheckRateLimit.mockReturnValue({
+    mockCheckRateLimitAsync.mockResolvedValue({
       allowed: true,
       remaining: 10,
       resetTime: Date.now() + 30_000,
@@ -84,7 +84,7 @@ describe("POST /api/assistant error traces", () => {
   });
 
   it("returns requestId in 429 rate-limit response meta", async () => {
-    mockCheckRateLimit.mockReturnValue({
+    mockCheckRateLimitAsync.mockResolvedValue({
       allowed: false,
       remaining: 0,
       resetTime: Date.now() + 30_000,

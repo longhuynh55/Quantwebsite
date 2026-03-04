@@ -1,0 +1,17 @@
+flowchart LR
+  U[User / Analyst] --> C[Initiate run (strategy specification + assumptions)]
+  C --> Q[Queued]
+  Q --> R[Running]
+
+  R --> E[Run events\n(progress, intermediate diagnostics)]
+  R --> T{Terminal state}
+  T -->|success| S[Completed]
+  T -->|error| F[Failed]
+  T -->|cancel| K[Canceled]
+
+  S --> O[Run result\n(metrics + diagnostics)]
+  F --> O2[Failure report\n(reason + diagnostics)]
+  K --> O3[Cancellation summary]
+
+  O --> COMP[Compare runs and iterate]
+

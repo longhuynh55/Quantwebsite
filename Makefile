@@ -13,7 +13,7 @@ dev-logs:
 	docker compose logs -f app
 
 prod-up:
-	docker compose --profile prod up -d app-prod
+	docker compose --profile prod up -d --build app-prod
 
 prod-smoke:
 	docker compose --profile prod run --rm smoke-prod

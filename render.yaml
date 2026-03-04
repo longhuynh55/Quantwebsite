@@ -13,7 +13,7 @@ services:
       - key: DATA_DIR
         value: /app/public/data
       - key: DATA_BACKEND
-        value: csv
+        value: auto
       - key: DATA_BACKEND_STRICT
         value: "false"
       - key: DATA_DUCKDB_PATH
@@ -26,4 +26,3 @@ services:
         sync: false
       - key: GLM_API_KEY
         sync: false
-

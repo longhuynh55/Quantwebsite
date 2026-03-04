@@ -270,14 +270,14 @@ Neu muon data loader fail-fast khi parse/quality co van de:
   - `DATA_BACKEND=auto|csv|duckdb` (`auto` se dung DuckDB neu co `quant_data.duckdb` va binding hop le, neu khong fallback CSV)
   - `DATA_DUCKDB_PATH` de override duong dan file DuckDB
   - `DATA_BACKEND_STRICT=true` de fail-fast neu chon `duckdb` nhung thieu artifact/binding
-  - Luu y: profile `prod` trong `docker-compose.yml` hien default `DATA_BACKEND=duckdb` + `DATA_BACKEND_STRICT=true` (can co `public/data/quant_data.duckdb` + Node `duckdb` binding)
+  - Luu y: profile `prod` trong `docker-compose.yml` hien default `DATA_BACKEND=auto` + `DATA_BACKEND_STRICT=false` (se uu tien DuckDB neu artifact/binding san sang, neu khong fallback CSV)
   - `DATA_EXPORT_DUCKDB=true` de auto-export DuckDB artifact khi chay `pnpm run data:prepare:2018_2025`
   - `pnpm run data:export:duckdb` uu tien Node `duckdb` binding, neu khong co se fallback sang Docker image `duckdb/duckdb`
   - `INSTALL_DUCKDB_BINDING=true` (default trong `docker-compose.yml`) de tu dong cai Node `duckdb` binding trong `app` / `app-prod`; dat `false` neu muon bo qua cai binding
   - API check nhanh:
     - `curl http://localhost:3010/api/health/data`
     - `curl "http://localhost:3010/api/health/data?refresh=true"` de clear cache truoc khi check
-  - Docker healthcheck mac dinh dung probe mode (nhanh, khong parse full dataset): `/api/health/data?probe=true&includeFundamentals=false`
+  - Docker healthcheck mac dinh dung probe canary mode: `/api/health/data?probe=true&canary=true&includeFundamentals=false`
 
 Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
 - Dat `DATA_ALLOW_RAW_FALLBACK=true`.

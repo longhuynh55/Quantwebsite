@@ -9,7 +9,7 @@ const makeStrategy = (partial?: Partial<GeneratedStrategy>): GeneratedStrategy =
 });
 
 describe("strategy-builder-adapter", () => {
-  test("sanitizes missing ids/positions and drops invalid edges", () => {
+  test("sanitizes missing ids/positions and drops invalid/self-loop edges", () => {
     const input = makeStrategy({
       nodes: [
         {
@@ -48,10 +48,44 @@ describe("strategy-builder-adapter", () => {
     expect(Number.isFinite(out.strategy.nodes[0].position.x)).toBe(true);
     expect(Number.isFinite(out.strategy.nodes[0].position.y)).toBe(true);
     expect(out.strategy.nodes[1].data.config.period).toBeGreaterThan(0);
-    expect(out.strategy.edges).toHaveLength(1);
-    expect(out.strategy.edges[0].source).toBe(out.strategy.nodes[1].id);
-    expect(out.strategy.edges[0].target).toBe(out.strategy.nodes[1].id);
+    expect(out.strategy.edges).toHaveLength(0);
     expect(out.warnings.length).toBeGreaterThan(0);
+  });
+
+  test("maps duplicate source node ids to the first normalized id for edges", () => {
+    const input = makeStrategy({
+      nodes: [
+        {
+          id: "dup",
+          type: "dataSource",
+          position: { x: 80, y: 100 },
+          data: { type: "dataSource", label: "Source A", config: {} },
+        },
+        {
+          id: "dup",
+          type: "indicator",
+          position: { x: 340, y: 100 },
+          data: { type: "indicator", label: "Indicator B", config: {} },
+        },
+        {
+          id: "out",
+          type: "output",
+          position: { x: 600, y: 100 },
+          data: { type: "output", label: "Output", config: {} },
+        },
+      ],
+      edges: [{ id: "e1", source: "dup", target: "out" }],
+    });
+
+    const out = sanitizeGeneratedStrategyForBuilder(input);
+    const firstNodeId = out.strategy.nodes[0].id;
+    const secondNodeId = out.strategy.nodes[1].id;
+
+    expect(firstNodeId).toBeTruthy();
+    expect(secondNodeId).toBeTruthy();
+    expect(firstNodeId).not.toBe(secondNodeId);
+    expect(out.strategy.edges).toHaveLength(1);
+    expect(out.strategy.edges[0].source).toBe(firstNodeId);
   });
 
   test("converts to builder graph with stable ids and animated edges", () => {
