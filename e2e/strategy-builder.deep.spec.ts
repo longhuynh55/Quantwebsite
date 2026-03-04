@@ -32,8 +32,14 @@ const gotoBuilder = async (page: Page) => {
 };
 
 const applyTemplate = async (page: Page, templateName: string) => {
-  await page.getByRole("button", { name: "Strategy Templates" }).click();
   const templateButton = page.locator("button").filter({ hasText: templateName }).first();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (await templateButton.isVisible().catch(() => false)) {
+      break;
+    }
+    await page.getByRole("button", { name: "Strategy Templates" }).click();
+    await page.waitForTimeout(150);
+  }
   await expect(templateButton).toBeVisible();
   await templateButton.click();
 };

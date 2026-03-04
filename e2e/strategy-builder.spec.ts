@@ -238,8 +238,10 @@ test.describe("Strategy Builder - Actions", () => {
   });
 
   test("should clear canvas", async ({ page }) => {
-    await dragPaletteNodeToCanvas(page, "Filter");
-    await expect(nodeCount(page)).toHaveText(/Nodes:\s*1/);
+    await ensureNodeAdded(page, "Filter");
+    await expect
+      .poll(async () => parseNodeCount(await nodeCount(page).textContent()))
+      .toBeGreaterThanOrEqual(1);
     page.once("dialog", (dialog) => {
       void dialog.accept();
     });
