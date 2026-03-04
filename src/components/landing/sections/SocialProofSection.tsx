@@ -6,8 +6,8 @@ const credentials = [
   {
     icon: GraduationCap,
     label: "Đồ Án Tốt Nghiệp",
-    value: "Khoa học Máy tính",
-    sub: "HCMUS 2025",
+    value: "FinTech",
+    sub: "UEL 2026",
   },
   {
     icon: Database,
@@ -72,7 +72,7 @@ export function SocialProofSection() {
               cho thị trường chứng khoán Việt Nam.&quot;
             </p>
             <p className="mt-4 text-xs font-sans uppercase tracking-wider text-stone-500 dark:text-neutral-500">
-              — Đồ Án Tốt Nghiệp, HCMUS 2025
+              — Đồ Án Tốt Nghiệp, UEL FinTech 2026
             </p>
           </div>
         </div>
