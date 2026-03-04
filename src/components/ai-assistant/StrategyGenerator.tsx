@@ -23,6 +23,22 @@ interface GenerationState {
   strategy: GeneratedStrategy | null;
   rawResponse: string | null;
   latencyMs: number | null;
+  generationMode: "llm" | "template_fallback" | null;
+  degraded: boolean;
+  userNotice: string | null;
+  degradeReason: string | null;
+}
+
+interface StrategyGenerationApiResponse {
+  success: boolean;
+  strategy?: GeneratedStrategy;
+  rawResponse?: string;
+  error?: string;
+  latencyMs?: number;
+  generationMode?: "llm" | "template_fallback";
+  degraded?: boolean;
+  userNotice?: string;
+  degradeReason?: string;
 }
 
 export function StrategyGenerator({
@@ -37,6 +53,10 @@ export function StrategyGenerator({
     strategy: null,
     rawResponse: null,
     latencyMs: null,
+    generationMode: null,
+    degraded: false,
+    userNotice: null,
+    degradeReason: null,
   });
 
   const examples = React.useMemo(() => getStrategyExamplesForUI(), []);
@@ -51,6 +71,10 @@ export function StrategyGenerator({
       strategy: null,
       rawResponse: null,
       latencyMs: null,
+      generationMode: null,
+      degraded: false,
+      userNotice: null,
+      degradeReason: null,
     });
 
     try {
@@ -62,7 +86,7 @@ export function StrategyGenerator({
         body: JSON.stringify({ prompt: trimmedPrompt }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as StrategyGenerationApiResponse;
 
       if (!data.success) {
         setState({
@@ -71,6 +95,10 @@ export function StrategyGenerator({
           strategy: null,
           rawResponse: data.rawResponse || null,
           latencyMs: data.latencyMs || null,
+          generationMode: null,
+          degraded: false,
+          userNotice: null,
+          degradeReason: null,
         });
         return;
       }
@@ -78,12 +106,18 @@ export function StrategyGenerator({
       setState({
         isLoading: false,
         error: null,
-        strategy: data.strategy,
+        strategy: data.strategy ?? null,
         rawResponse: data.rawResponse || null,
         latencyMs: data.latencyMs || null,
+        generationMode: data.generationMode ?? "llm",
+        degraded: data.degraded === true,
+        userNotice: data.userNotice ?? null,
+        degradeReason: data.degradeReason ?? null,
       });
 
-      onStrategyGenerated?.(data.strategy);
+      if (data.strategy) {
+        onStrategyGenerated?.(data.strategy);
+      }
     } catch (error) {
       setState({
         isLoading: false,
@@ -91,6 +125,10 @@ export function StrategyGenerator({
         strategy: null,
         rawResponse: null,
         latencyMs: null,
+        generationMode: null,
+        degraded: false,
+        userNotice: null,
+        degradeReason: null,
       });
     }
   }, [prompt, state.isLoading, onStrategyGenerated]);
@@ -260,20 +298,42 @@ export function StrategyGenerator({
 
       {/* Strategy Preview */}
       {state.strategy && (
-        <StrategyPreview
-          strategy={state.strategy}
-          latencyMs={state.latencyMs}
-          onApplyToBuilder={handleApplyToBuilder}
-          onRegenerate={handleRetry}
-        />
+        <div className="space-y-3">
+          {state.degraded && (
+            <Card className="border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20">
+              <CardContent className="pt-4">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  Dang o che do demo availability
+                </p>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  {state.userNotice ?? "Da dung strategy template fallback de dam bao demo khong bi ngat quang."}
+                </p>
+                {state.degradeReason && (
+                  <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-400/90">
+                    Ly do fallback: {state.degradeReason}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <StrategyPreview
+            strategy={state.strategy}
+            latencyMs={state.latencyMs}
+            onApplyToBuilder={handleApplyToBuilder}
+            onRegenerate={handleRetry}
+          />
+        </div>
       )}
 
       {/* AI Response Panel */}
-      {state.strategy && state.rawResponse && (
+      {state.strategy && (
         <AIResponsePanel
           explanation={state.strategy.explanation}
-          rawResponse={state.rawResponse}
+          rawResponse={state.rawResponse ?? undefined}
           latencyMs={state.latencyMs}
+          degraded={state.degraded}
+          generationMode={state.generationMode ?? undefined}
+          notice={state.userNotice ?? undefined}
         />
       )}
     </div>

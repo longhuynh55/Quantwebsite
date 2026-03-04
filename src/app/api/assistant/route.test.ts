@@ -39,8 +39,11 @@ async function readJson(response: Response): Promise<JsonRecord> {
 }
 
 describe("POST /api/assistant error traces", () => {
+  const previousDemoAvailabilityMode = process.env.ASSISTANT_DEMO_AVAILABILITY_MODE;
+
   beforeEach(() => {
     jest.resetAllMocks();
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = previousDemoAvailabilityMode;
     mockCreateRateLimitKey.mockReturnValue("assistant:test");
     mockGetClientIdentifier.mockReturnValue("client-test");
     mockCheckRateLimitAsync.mockResolvedValue({
@@ -81,6 +84,10 @@ describe("POST /api/assistant error traces", () => {
       latencyMs: 10,
       providerErrors: [],
     });
+  });
+
+  afterAll(() => {
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = previousDemoAvailabilityMode;
   });
 
   it("returns requestId in 429 rate-limit response meta", async () => {
@@ -438,5 +445,57 @@ describe("POST /api/assistant error traces", () => {
     expect(json.grounded).toBe(false);
     expect(meta.providerUsed).toBe("grounded-fallback");
     expect(meta.fallbackUsed).toBe(true);
+  });
+
+  it("returns deterministic demo fallback when provider fails without grounded facts", async () => {
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = "true";
+    mockRunGroundingTools.mockResolvedValue({
+      facts: [],
+      citations: [],
+      usedTools: [],
+      messageBlocks: [],
+      groundingSource: "none",
+    });
+    mockEvaluateAssistantPolicy.mockReturnValue({
+      mode: "shadow",
+      status: "ok",
+      dataConfidence: "low",
+      groundingRequired: false,
+      groundingSatisfied: false,
+      shouldBypassLlm: false,
+      shadowBlocked: false,
+    });
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: false,
+      kind: "upstream",
+      message: "provider unavailable",
+      statusCode: 502,
+      latencyMs: 30,
+      providerErrors: [
+        {
+          provider: "openrouter",
+          kind: "upstream",
+          status: 502,
+        },
+      ],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Gia VNM hom nay" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+    const json = await readJson(response);
+    const meta = json.meta as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.policyStatus).toBe("fallback");
+    expect(json.message).toContain("Demo availability mode");
+    expect(meta.providerUsed).toBe("demo-grounded-fallback");
+    expect(meta.fallbackUsed).toBe(true);
+    expect(meta.policyReasonCode).toBe("demo_availability_fallback");
   });
 });

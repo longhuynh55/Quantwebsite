@@ -10,6 +10,9 @@ interface AIResponsePanelProps {
   explanation: string;
   rawResponse?: string;
   latencyMs?: number | null;
+  degraded?: boolean;
+  generationMode?: "llm" | "template_fallback";
+  notice?: string;
   className?: string;
 }
 
@@ -17,6 +20,9 @@ export function AIResponsePanel({
   explanation,
   rawResponse,
   latencyMs,
+  degraded = false,
+  generationMode,
+  notice,
   className,
 }: AIResponsePanelProps) {
   // Format latency for display
@@ -76,6 +82,11 @@ export function AIResponsePanel({
             <CardTitle className="text-sm">Giai Thich Chien Luoc</CardTitle>
           </div>
           <div className="flex items-center gap-2">
+            {degraded && (
+              <Badge variant="outline" className="border-amber-400 text-amber-700 dark:border-amber-500 dark:text-amber-300">
+                {generationMode === "template_fallback" ? "Template Fallback" : "Degraded"}
+              </Badge>
+            )}
             {latencyDisplay && (
               <Badge variant="secondary" className="text-xs">
                 <Clock className="mr-1 h-3 w-3" />
@@ -86,6 +97,12 @@ export function AIResponsePanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {notice && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
+            {notice}
+          </div>
+        )}
+
         {/* Parsed Sections */}
         {sections.length > 0 ? (
           <div className="space-y-3">

@@ -51,6 +51,7 @@ const assistantRouteLogger = createLogger('api.assistant');
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
   const requestTimeoutMs = ASSISTANT_REQUEST_TIMEOUT_MS;
+  const demoAvailabilityMode = isDemoAvailabilityModeEnabled();
   const requestAbortController = new AbortController();
   const timeoutId = setTimeout(() => requestAbortController.abort(), requestTimeoutMs);
   const onClientAbort = () => requestAbortController.abort();
@@ -572,6 +573,37 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+      if (demoAvailabilityMode) {
+        const demoReason = mapProviderFailureKindToDemoReason(generation.kind);
+        logger.warn("response.demo_fallback_used", {
+          reason: demoReason,
+          policyStatus: policy.status,
+          groundedFactsCount: grounding.facts.length,
+          citationCount: responseCitations.length,
+          durationMs: Date.now() - startedAt,
+        });
+        return NextResponse.json<AssistantResponse>({
+          message: buildDemoDeterministicGroundedMessage(queryPlan, grounding, demoReason),
+          success: true,
+          grounded: responseCitations.length > 0,
+          policyStatus: "fallback",
+          policyReason: "demo_availability_mode",
+          dataConfidence: responseCitations.length > 0 ? "medium" : "low",
+          citations: responseCitations,
+          usedTools: grounding.usedTools,
+          messageBlocks: grounding.messageBlocks,
+          meta: {
+            providerUsed: "demo-grounded-fallback",
+            fallbackUsed: true,
+            latencyMs: generation.latencyMs,
+            ...policyMeta,
+            responseFormatApplied: false,
+            responseFormatFallbackUsed: false,
+            policyReasonCode: "demo_availability_fallback",
+            groundingSatisfied: responseCitations.length > 0,
+          },
+        });
+      }
       return NextResponse.json<AssistantResponse>(
         {
           message: '',
@@ -670,6 +702,36 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (requestAbortController.signal.aborted) {
+      if (demoAvailabilityMode && !request.signal.aborted) {
+        logger.warn("response.demo_timeout_fallback", {
+          durationMs: Date.now() - startedAt,
+        });
+        return NextResponse.json<AssistantResponse>({
+          message: [
+            "Demo availability mode: assistant request exceeded timeout budget.",
+            "Returning deterministic fallback response to keep the workflow available.",
+            "Please retry with a narrower query (symbol + metric + timeframe) for grounded details.",
+          ].join("\n"),
+          success: true,
+          grounded: false,
+          policyStatus: "fallback",
+          policyReason: "demo_timeout_fallback",
+          dataConfidence: "low",
+          citations: [],
+          usedTools: [],
+          messageBlocks: [],
+          meta: {
+            providerUsed: "demo-timeout-fallback",
+            fallbackUsed: true,
+            latencyMs: 0,
+            responseFormatApplied: false,
+            responseFormatFallbackUsed: false,
+            requestId,
+            requestTimeoutMs,
+            policyReasonCode: "demo_timeout_fallback",
+          },
+        });
+      }
       logger.warn("request.timeout_or_aborted", {
         durationMs: Date.now() - startedAt,
       });
@@ -886,6 +948,47 @@ function buildStylePrompt(preferences: AssistantPreferences): string {
     'If grounded data includes multi-period trend coverage, do not claim that only one period is available.',
     'Do not contradict grounded facts or table blocks in the same response.',
   ].join(' ');
+}
+
+function isDemoAvailabilityModeEnabled(): boolean {
+  return parseFeatureFlag(process.env.ASSISTANT_DEMO_AVAILABILITY_MODE, false);
+}
+
+function mapProviderFailureKindToDemoReason(kind: string): string {
+  const normalized = String(kind ?? "").trim().toLowerCase();
+  if (!normalized) return "upstream";
+  if (normalized === "configuration") return "schema_unavailable";
+  return normalized;
+}
+
+function buildDemoDeterministicGroundedMessage(
+  queryPlan: AssistantQueryPlan,
+  grounding: GroundingResult,
+  reason: string
+): string {
+  const tools = grounding.usedTools
+    .filter((tool) => tool.status === "success")
+    .map((tool) => tool.name);
+  const facts = grounding.facts.slice(0, 6).map((fact) => `- ${fact}`);
+  const header = `Demo availability mode: LLM synthesis degraded (${reason}). Returning deterministic grounded summary.`;
+  const toolLine = `Successful tools: ${tools.length > 0 ? tools.join(", ") : "none"}.`;
+  if (facts.length === 0) {
+    return [
+      header,
+      `Detected intent: ${queryPlan.intent}.`,
+      toolLine,
+      "INSUFFICIENT_DATA",
+      "Retry with symbol + metric + timeframe to get stronger grounded output.",
+    ].join("\n");
+  }
+  return [
+    header,
+    `Detected intent: ${queryPlan.intent}.`,
+    toolLine,
+    "Facts:",
+    ...facts,
+    "You can continue the demo flow while keeping this output clearly marked as fallback.",
+  ].join("\n");
 }
 
 function buildGroundingPrompt(facts: string[], usedTools: AssistantToolUsage[]): string {

@@ -39,8 +39,11 @@ function buildValidGraph() {
 }
 
 describe("POST /api/ai/generate-strategy", () => {
+  const previousDemoAvailabilityMode = process.env.ASSISTANT_DEMO_AVAILABILITY_MODE;
+
   beforeEach(() => {
     jest.resetAllMocks();
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = previousDemoAvailabilityMode;
     mockCreateRateLimitKey.mockReturnValue("strategy-generation:test");
     mockGetClientIdentifier.mockReturnValue("client-test");
     mockCheckRateLimitAsync.mockResolvedValue({
@@ -48,6 +51,10 @@ describe("POST /api/ai/generate-strategy", () => {
       remaining: 10,
       resetTime: Date.now() + 30_000,
     });
+  });
+
+  afterAll(() => {
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = previousDemoAvailabilityMode;
   });
 
   it("returns 400 when prompt is empty", async () => {
@@ -143,6 +150,44 @@ describe("POST /api/ai/generate-strategy", () => {
     );
 
     expect(response.status).toBe(502);
+  });
+
+  it("returns deterministic template fallback in demo availability mode when provider times out", async () => {
+    process.env.ASSISTANT_DEMO_AVAILABILITY_MODE = "true";
+    mockGenerateStrategyFromPrompt.mockResolvedValue({
+      success: false,
+      error: "AI service timed out. Please try again.",
+      latencyMs: 90,
+      failureKind: "timeout",
+      statusCode: 504,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/ai/generate-strategy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Tao chien luoc RSI mean reversion cho VNM" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as {
+      success: boolean;
+      generationMode?: string;
+      degraded?: boolean;
+      degradeReason?: string;
+      strategy?: { nodes?: unknown[]; edges?: unknown[] };
+      providerUsed?: string;
+      userNotice?: string;
+    };
+    expect(json.success).toBe(true);
+    expect(json.generationMode).toBe("template_fallback");
+    expect(json.degraded).toBe(true);
+    expect(json.degradeReason).toBe("timeout");
+    expect(json.providerUsed).toBe("demo-template-fallback");
+    expect(json.userNotice).toContain("Demo availability mode");
+    expect((json.strategy?.nodes ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((json.strategy?.edges ?? []).length).toBeGreaterThanOrEqual(1);
   });
 
   it("returns 200 and schema flags when generation succeeds", async () => {

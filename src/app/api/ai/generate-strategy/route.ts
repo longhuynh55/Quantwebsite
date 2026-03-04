@@ -3,6 +3,10 @@ import {
   generateStrategyFromPrompt,
   type GeneratedStrategy,
 } from '@/lib/ai/strategy-generator';
+import {
+  buildStrategyTemplateFallback,
+  type StrategyTemplateFallbackReason,
+} from "@/lib/ai/strategy-template-fallback";
 import { checkRateLimitAsync, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { createLogger, toErrorMeta } from '@/lib/logger';
 
@@ -39,6 +43,10 @@ interface StrategyGenerationResponse {
     minimumViable: boolean;
     warnings: string[];
   };
+  generationMode?: "llm" | "template_fallback";
+  degraded?: boolean;
+  degradeReason?: StrategyTemplateFallbackReason;
+  userNotice?: string;
   requestId?: string;
 }
 
@@ -148,6 +156,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
     });
 
     if (!result.success) {
+      const demoFallbackReason = mapFailureKindToTemplateFallbackReason(result.failureKind);
+      if (isDemoAvailabilityModeEnabled() && demoFallbackReason) {
+        const fallbackStrategy = buildStrategyTemplateFallback(prompt, demoFallbackReason);
+        const fallbackValidation = validateGeneratedStrategy(fallbackStrategy);
+        if (fallbackValidation.minimumViable) {
+          logger.warn("generation.demo_fallback_used", {
+            failureKind: result.failureKind,
+            degradeReason: demoFallbackReason,
+            latencyMs: result.latencyMs,
+          });
+          return NextResponse.json<StrategyGenerationResponse>({
+            success: true,
+            strategy: fallbackStrategy,
+            rawResponse: result.rawResponse,
+            latencyMs: result.latencyMs,
+            providerUsed: "demo-template-fallback",
+            schemaApplied: false,
+            responseFormatFallbackUsed: true,
+            validation: fallbackValidation,
+            generationMode: "template_fallback",
+            degraded: true,
+            degradeReason: demoFallbackReason,
+            userNotice:
+              "Demo availability mode: AI output was degraded, so a deterministic strategy template was returned.",
+            requestId,
+          });
+        }
+        logger.warn("generation.demo_fallback_invalid", {
+          failureKind: result.failureKind,
+          degradeReason: demoFallbackReason,
+          warnings: fallbackValidation.warnings,
+        });
+      }
+
       const status =
         result.statusCode ??
         (result.failureKind === "request_aborted"
@@ -211,6 +253,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
       schemaApplied: result.schemaApplied ?? false,
       responseFormatFallbackUsed: result.responseFormatFallbackUsed ?? false,
       validation,
+      generationMode: "llm",
+      degraded: false,
       requestId,
     });
   } catch (error) {
@@ -234,6 +278,31 @@ function generateRequestId(): string {
     return crypto.randomUUID();
   }
   return `strategy-req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isDemoAvailabilityModeEnabled(): boolean {
+  return parseBooleanFlag(process.env.ASSISTANT_DEMO_AVAILABILITY_MODE, false);
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") return false;
+  return fallback;
+}
+
+function mapFailureKindToTemplateFallbackReason(
+  failureKind: "parse" | "timeout" | "request_aborted" | "rate_limit" | "network" | "upstream" | "configuration" | undefined
+): StrategyTemplateFallbackReason | null {
+  if (!failureKind) return "upstream";
+  if (failureKind === "request_aborted") return null;
+  if (failureKind === "configuration") return "schema_unavailable";
+  if (failureKind === "parse") return "parse";
+  if (failureKind === "timeout") return "timeout";
+  if (failureKind === "network") return "network";
+  if (failureKind === "rate_limit") return "rate_limit";
+  return "upstream";
 }
 
 function validateGeneratedStrategy(strategy: GeneratedStrategy | undefined): {
