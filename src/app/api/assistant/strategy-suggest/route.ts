@@ -21,9 +21,7 @@ const MAX_EDGES = 80;
 const MAX_NAME_LENGTH = 120;
 const MAX_LABEL_LENGTH = 120;
 const MAX_CONFIG_PROPERTIES = 32;
-const STRATEGY_SCHEMA_REQUIRED = String(process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED ?? "true")
-  .trim()
-  .toLowerCase() === "true";
+const STRATEGY_SCHEMA_REQUIRED = parseBooleanFlag(process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED, true);
 
 const STRATEGY_NODE_TYPES = [
   "dataSource",
@@ -153,6 +151,27 @@ interface StrategySuggestResponse {
   error?: string;
   details?: string;
   raw?: string;
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "1" || normalized === "true" || normalized === "yes") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no") return false;
+  return fallback;
+}
+
+function isRequestAbortedFailure(
+  result: {
+    success: false;
+    kind: string;
+    providerErrors?: Array<{ details?: string }>;
+  }
+): boolean {
+  if (result.kind !== "timeout") return false;
+  return (result.providerErrors ?? []).some(
+    (providerError) => String(providerError.details ?? "").toLowerCase() === "request_aborted"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -494,8 +513,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
       const systemPrompt = attempt > 1 ? `${SYSTEM_PROMPT}\n\n${REPAIR_PROMPT}` : SYSTEM_PROMPT;
       const messages: LlmMessage[] = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
       ];
+      if (attempt > 1 && latestRaw.trim().length > 0) {
+        messages.push({ role: "assistant", content: latestRaw.slice(0, 12_000) });
+      }
+      messages.push({ role: "user", content: prompt });
 
       const result = await awaitWithDeadline(
         (abortSignal) =>
@@ -511,19 +533,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
       );
 
       if (!result.success) {
+        const requestAborted = isRequestAbortedFailure(result) || request.signal.aborted;
         const status =
-          result.statusCode ??
-          (result.kind === 'timeout'
-            ? 504
-            : result.kind === 'rate_limit'
-              ? 429
-              : result.kind === 'configuration'
-                ? 502
-                : 502);
+          (requestAborted
+            ? 499
+            : result.statusCode ??
+              (result.kind === 'timeout'
+                ? 504
+                : result.kind === 'rate_limit'
+                  ? 429
+                  : result.kind === 'configuration'
+                    ? 502
+                    : 502));
 
         logger.warn('strategy_suggest.provider_failed', {
           status,
           kind: result.kind,
+          details: requestAborted ? "request_aborted" : undefined,
           latencyMs: result.latencyMs,
           attempt,
           totalAttempts,
@@ -531,7 +557,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
 
         return NextResponse.json(
           {
-            error: result.message || 'AI provider unavailable.',
+            error: requestAborted
+              ? "Request was cancelled by client."
+              : result.message || 'AI provider unavailable.',
             requestId,
             latencyMs: Date.now() - startedAt,
           },

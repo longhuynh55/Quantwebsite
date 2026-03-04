@@ -298,4 +298,145 @@ describe("POST /api/assistant error traces", () => {
     expect(meta.responseFormatApplied).toBe(true);
     expect(meta.responseFormatFallbackUsed).toBe(false);
   });
+
+  it("blocks numeric response when only diagnostics/noise contain numbers", async () => {
+    mockBuildAssistantQueryPlan.mockReturnValue({
+      intent: "stock_snapshot",
+      confidence: "high",
+      source: "signal",
+      symbols: ["VNM"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          required: true,
+          reason: "grounded",
+        },
+      ],
+      summary: "intent=stock_snapshot",
+    });
+    const diagnosticFact = [
+      "Symbol grounding coverage notice: requested_symbols=VNM, grounded_symbols=none, target_symbols=VNM, uncovered_symbols=VNM.",
+      "Reason hints: fanout_limit=2, dropped_symbols=FPT.",
+      "Numeric comparisons should be limited to grounded_symbols only.",
+    ].join(" ");
+    mockRunGroundingTools.mockResolvedValue({
+      facts: [diagnosticFact],
+      fullFacts: [diagnosticFact],
+      citations: [
+        {
+          id: "c1",
+          sourceType: "api",
+          title: "stocks",
+          endpoint: "/api/stocks?symbol=VNM",
+          symbol: "VNM",
+        },
+      ],
+      usedTools: [
+        {
+          name: "stockSnapshot",
+          status: "success",
+          evidenceCount: 0,
+          warningCount: 1,
+          requestParams: { symbol: "VNM" },
+        },
+      ],
+      messageBlocks: [],
+      groundingSource: "/api/stocks?symbol=VNM",
+    });
+    mockEvaluateAssistantPolicy.mockReturnValue({
+      mode: "shadow",
+      status: "ok",
+      dataConfidence: "medium",
+      groundingRequired: true,
+      groundingSatisfied: true,
+      shouldBypassLlm: false,
+      shadowBlocked: false,
+    });
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: true,
+      text: "Gia dong 2 va khoi luong 999.",
+      providerUsed: "openrouter",
+      fallbackUsed: false,
+      latencyMs: 20,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
+      providerErrors: [],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Gia dong cua VNM hom nay" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+    const json = await readJson(response);
+    const meta = json.meta as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.policyStatus).toBe("fallback");
+    expect(json.message).toContain("INSUFFICIENT_DATA");
+    expect(meta.providerUsed).toBe("policy-post-guard");
+  });
+
+  it("sets grounded=false in grounded-fallback when citations are empty", async () => {
+    mockRunGroundingTools.mockResolvedValue({
+      facts: ["VNM close=80000 volume=1000000"],
+      citations: [],
+      usedTools: [
+        {
+          name: "stockSnapshot",
+          status: "success",
+          evidenceCount: 2,
+          warningCount: 0,
+          requestParams: { symbol: "VNM" },
+        },
+      ],
+      messageBlocks: [],
+      groundingSource: "tool:stockSnapshot",
+    });
+    mockEvaluateAssistantPolicy.mockReturnValue({
+      mode: "shadow",
+      status: "ok",
+      dataConfidence: "medium",
+      groundingRequired: true,
+      groundingSatisfied: false,
+      shouldBypassLlm: false,
+      shadowBlocked: false,
+    });
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: false,
+      kind: "all_failed",
+      message: "provider failed",
+      statusCode: 503,
+      latencyMs: 15,
+      providerErrors: [
+        {
+          provider: "openrouter",
+          kind: "http_error",
+          status: 503,
+          message: "HTTP 503",
+        },
+      ],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Gia dong cua VNM hom nay" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+    const json = await readJson(response);
+    const meta = json.meta as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.grounded).toBe(false);
+    expect(meta.providerUsed).toBe("grounded-fallback");
+    expect(meta.fallbackUsed).toBe(true);
+  });
 });

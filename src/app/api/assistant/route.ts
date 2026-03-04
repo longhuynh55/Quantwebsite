@@ -555,7 +555,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<AssistantResponse>({
           message: buildGroundedFallbackMessage(grounding.facts, grounding.usedTools),
           success: true,
-          grounded: grounding.facts.length > 0,
+          grounded: responseCitations.length > 0,
           policyStatus: policy.status,
           policyReason: policy.reason,
           dataConfidence: policy.dataConfidence,
@@ -1035,7 +1035,7 @@ function evaluatePostResponseNumericGuard(input: PostResponseNumericGuardInput):
     };
   }
 
-  const numericEvidenceFacts = input.grounding.fullFacts ?? input.grounding.facts;
+  const numericEvidenceFacts = selectNumericEvidenceFactsForPostGuard(input.grounding);
   const groundedNumericTokens = extractComparableNumericTokens(numericEvidenceFacts.join("\n"));
   if (groundedNumericTokens.size === 0) {
     return {
@@ -1075,6 +1075,29 @@ function evaluatePostResponseNumericGuard(input: PostResponseNumericGuardInput):
     groundedNumericCount,
     overlapCount,
   };
+}
+
+function selectNumericEvidenceFactsForPostGuard(grounding: GroundingResult): string[] {
+  const facts = grounding.fullFacts ?? grounding.facts;
+  return facts.filter((fact) => !isDiagnosticFactForPostGuard(fact));
+}
+
+function isDiagnosticFactForPostGuard(fact: string): boolean {
+  const normalized = String(fact ?? "").trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    normalized.includes("symbol grounding coverage notice:")
+    || normalized.includes("reason hints:")
+    || normalized.includes("fanout_limit=")
+    || normalized.includes("dropped_symbols=")
+    || normalized.includes("numeric comparisons should be limited to grounded_symbols only.")
+    || normalized.includes("grounding diagnostics")
+    || normalized.includes("grounding requires explicit symbol")
+    || normalized.includes("grounding is unavailable")
+    || normalized.includes("grounding aborted before execution started")
+    || normalized.includes("tool budget enforced:")
+    || normalized.includes("transient-failure circuit opened:")
+  );
 }
 
 function isFinancialIntentForPostGuard(normalizedMessage: string, queryPlan: AssistantQueryPlan): boolean {

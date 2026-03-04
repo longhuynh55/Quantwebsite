@@ -133,13 +133,13 @@ describe('assistant providers response_format behavior', () => {
     expect(body.response_format).toBeUndefined();
   });
 
-  it('falls back after 422 and caches unsupported schema capability', async () => {
+  it('falls back after 422 and caches unsupported schema capability when response_format is explicitly unsupported', async () => {
     process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE = 'true';
 
     const fetchMock = jest
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: { message: 'unsupported response_format' } }), {
+        new Response(JSON.stringify({ error: { code: 'unsupported_response_format', message: 'The requested response_format is not supported' } }), {
           status: 422,
           headers: { 'content-type': 'application/json' },
         })
@@ -213,13 +213,13 @@ describe('assistant providers response_format behavior', () => {
     expect(forcedRequestBody.response_format).toBeDefined();
   });
 
-  it('falls back on 422 without poisoning capability cache when error is unrelated to response_format', async () => {
+  it('falls back on 422 unsupported_model without poisoning response_format capability cache', async () => {
     process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE = 'true';
 
     const fetchMock = jest
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: { message: 'invalid prompt payload' } }), {
+        new Response(JSON.stringify({ error: { code: 'unsupported_model', message: 'selected model is unsupported' } }), {
           status: 422,
           headers: { 'content-type': 'application/json' },
         })

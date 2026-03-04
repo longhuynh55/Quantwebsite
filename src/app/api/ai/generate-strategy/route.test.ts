@@ -82,6 +82,26 @@ describe("POST /api/ai/generate-strategy", () => {
     expect(response.status).toBe(504);
   });
 
+  it("maps request-aborted failure to 499", async () => {
+    mockGenerateStrategyFromPrompt.mockResolvedValue({
+      success: false,
+      error: "Request was cancelled by client.",
+      latencyMs: 12,
+      failureKind: "request_aborted",
+      statusCode: 499,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/ai/generate-strategy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build RSI strategy" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(499);
+  });
+
   it("maps parse failure to 422", async () => {
     mockGenerateStrategyFromPrompt.mockResolvedValue({
       success: false,

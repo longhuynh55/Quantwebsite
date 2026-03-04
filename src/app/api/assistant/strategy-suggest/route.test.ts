@@ -118,6 +118,35 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(response.status).toBe(429);
   });
 
+  it("maps provider request-aborted timeout failure to 499", async () => {
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: false,
+      kind: "timeout",
+      statusCode: 504,
+      message: "AI service timed out. Please try again.",
+      latencyMs: 10,
+      providerErrors: [
+        {
+          provider: "openrouter",
+          kind: "timeout",
+          details: "request_aborted",
+        },
+      ],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build RSI strategy" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(499);
+    const json = (await response.json()) as { error?: string };
+    expect(json.error).toBe("Request was cancelled by client.");
+  });
+
   it("aborts in-flight provider call when request deadline is exceeded", async () => {
     jest.useFakeTimers();
     let capturedAbortSignal: AbortSignal | undefined;
@@ -201,6 +230,57 @@ describe("POST /api/assistant/strategy-suggest", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  it("sends latest raw response as assistant context on repair attempts", async () => {
+    const invalidRaw = "not valid json";
+    mockGenerateWithProviderFallback
+      .mockResolvedValueOnce({
+        success: true,
+        text: invalidRaw,
+        providerUsed: "openrouter",
+        fallbackUsed: false,
+        latencyMs: 25,
+        responseFormatApplied: true,
+        responseFormatFallbackUsed: false,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        text: JSON.stringify(buildValidSuggestedStrategy()),
+        providerUsed: "openrouter",
+        fallbackUsed: false,
+        latencyMs: 25,
+        responseFormatApplied: true,
+        responseFormatFallbackUsed: false,
+      });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build RSI strategy" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(2);
+    const secondCallMessages = mockGenerateWithProviderFallback.mock.calls[1][0] as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(secondCallMessages[0]).toEqual(
+      expect.objectContaining({
+        role: "system",
+      })
+    );
+    expect(secondCallMessages[1]).toEqual({
+      role: "assistant",
+      content: invalidRaw,
+    });
+    expect(secondCallMessages[2]).toEqual({
+      role: "user",
+      content: "Build RSI strategy",
+    });
   });
 
   it("parses the correct strategy object when response contains multiple JSON blocks", async () => {

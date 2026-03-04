@@ -17,9 +17,7 @@ import {
 import { createLogger, hashText } from '@/lib/logger';
 
 const strategyLogger = createLogger('ai.strategy-generator');
-const STRATEGY_SCHEMA_REQUIRED = String(process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED ?? "true")
-  .trim()
-  .toLowerCase() === "true";
+const STRATEGY_SCHEMA_REQUIRED = parseBooleanFlag(process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED, true);
 
 const STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT: LlmResponseFormat = {
   type: 'json_schema',
@@ -157,7 +155,7 @@ export interface StrategyGenerationResult {
   providerUsed?: string;
   schemaApplied?: boolean;
   responseFormatFallbackUsed?: boolean;
-  failureKind?: 'parse' | 'timeout' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
+  failureKind?: 'parse' | 'timeout' | 'request_aborted' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
   statusCode?: number;
 }
 
@@ -178,6 +176,25 @@ interface StrategyNormalizationResult {
   strategy: GeneratedStrategy;
   warnings: string[];
   hasUnsupportedNodeType: boolean;
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "1" || normalized === "true" || normalized === "yes") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no") return false;
+  return fallback;
+}
+
+function isRequestAbortedProviderFailure(result: {
+  success: false;
+  kind: string;
+  providerErrors?: Array<{ details?: string }>;
+}): boolean {
+  if (result.kind !== "timeout") return false;
+  return (result.providerErrors ?? []).some(
+    (providerError) => String(providerError.details ?? "").toLowerCase() === "request_aborted"
+  );
 }
 
 /**
@@ -258,8 +275,10 @@ export async function generateStrategyFromPrompt(
         options.abortSignal
       );
       if (!result.success) {
+        const requestAborted = isRequestAbortedProviderFailure(result) || Boolean(options.abortSignal?.aborted);
         logger.warn('strategy.generation.provider_failed', {
           kind: result.kind,
+          details: requestAborted ? "request_aborted" : undefined,
           statusCode: result.statusCode,
           latencyMs: result.latencyMs,
           attempt,
@@ -267,10 +286,12 @@ export async function generateStrategyFromPrompt(
         });
         return {
           success: false,
-          error: result.message || 'Failed to generate strategy',
+          error: requestAborted
+            ? 'Request was cancelled by client.'
+            : result.message || 'Failed to generate strategy',
           latencyMs: Date.now() - startedAt,
-          failureKind: result.kind,
-          statusCode: result.statusCode,
+          failureKind: requestAborted ? "request_aborted" : result.kind,
+          statusCode: requestAborted ? 499 : result.statusCode,
         };
       }
 
@@ -358,6 +379,19 @@ export async function generateStrategyFromPrompt(
       responseFormatFallbackUsed: latestResponseFormatFallbackUsed,
     };
   } catch (error) {
+    if (error instanceof StrategyGenerationClientAbortError) {
+      logger.warn("strategy.generation.request_aborted", {
+        latencyMs: Date.now() - startedAt,
+      });
+      return {
+        success: false,
+        error: "Request was cancelled by client.",
+        latencyMs: Date.now() - startedAt,
+        failureKind: "request_aborted",
+        statusCode: 499,
+      };
+    }
+
     if (error instanceof StrategyGenerationTimeoutError) {
       logger.warn('strategy.generation.timeout', {
         latencyMs: Date.now() - startedAt,
@@ -730,6 +764,12 @@ class StrategyGenerationTimeoutError extends Error {
   }
 }
 
+class StrategyGenerationClientAbortError extends Error {
+  constructor() {
+    super("strategy_generation_request_aborted");
+  }
+}
+
 function isAbortError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const name = String((error as { name?: unknown }).name ?? "");
@@ -776,6 +816,9 @@ async function awaitWithDeadline<T>(
       }),
     ]);
   } catch (error) {
+    if (requestAbortSignal?.aborted && isAbortError(error)) {
+      throw new StrategyGenerationClientAbortError();
+    }
     if (deadlineController.signal.aborted && isAbortError(error)) {
       throw new StrategyGenerationTimeoutError();
     }

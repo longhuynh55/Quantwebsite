@@ -127,6 +127,30 @@ describe("strategy-generator", () => {
       expect(result.statusCode).toBe(502);
     });
 
+    it("maps provider request-aborted timeout failure to 499", async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce({
+        success: false,
+        kind: "timeout",
+        statusCode: 504,
+        message: "AI service timed out. Please try again.",
+        latencyMs: 100,
+        providerErrors: [
+          {
+            provider: "test-provider",
+            kind: "timeout",
+            details: "request_aborted",
+          },
+        ],
+      });
+
+      const result = await generateStrategyFromPrompt("Test prompt");
+
+      expect(result.success).toBe(false);
+      expect(result.failureKind).toBe("request_aborted");
+      expect(result.statusCode).toBe(499);
+      expect(result.error).toBe("Request was cancelled by client.");
+    });
+
     it("returns parse failure when response is not JSON", async () => {
       mockGenerateWithProviderFallback.mockResolvedValueOnce(
         providerSuccess("This is not valid JSON")
@@ -298,6 +322,36 @@ describe("strategy-generator", () => {
       expect(result.success).toBe(false);
       expect(result.failureKind).toBe("parse");
       expect(result.statusCode).toBe(422);
+    });
+
+    it("accepts ASSISTANT_STRATEGY_SCHEMA_REQUIRED=yes as schema-required true", async () => {
+      const previousSchemaRequired = process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED;
+      process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED = "yes";
+
+      try {
+        jest.resetModules();
+        const providersModule = await import("@/lib/assistant/providers");
+        const isolatedMock = providersModule.generateWithProviderFallback as jest.MockedFunction<
+          typeof providersModule.generateWithProviderFallback
+        >;
+        isolatedMock.mockResolvedValueOnce(providerSuccess(JSON.stringify(buildValidStrategy())));
+
+        const isolatedGenerator = await import("../strategy-generator");
+        const result = await isolatedGenerator.generateStrategyFromPrompt("Test prompt");
+
+        expect(result.success).toBe(true);
+        expect(isolatedMock.mock.calls[0]?.[1]).toEqual(
+          expect.objectContaining({
+            requireResponseFormatApplied: true,
+          })
+        );
+      } finally {
+        if (previousSchemaRequired === undefined) {
+          delete process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED;
+        } else {
+          process.env.ASSISTANT_STRATEGY_SCHEMA_REQUIRED = previousSchemaRequired;
+        }
+      }
     });
   });
 

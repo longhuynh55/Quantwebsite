@@ -424,7 +424,8 @@ async function callProviderWithRetry(
     lastFailure = result;
 
     if (responseFormat && shouldUseResponseFormat && shouldFallbackWithoutResponseFormat(result)) {
-      if (isResponseFormatUnsupportedFailure(result)) {
+      const responseFormatUnsupported = isResponseFormatUnsupportedFailure(result);
+      if (responseFormatUnsupported) {
         markResponseFormatSupport(provider, false);
       }
       logger.warn('provider.response_format_fallback', {
@@ -433,6 +434,8 @@ async function callProviderWithRetry(
         model: provider.model,
         attempt: attempt + 1,
         status: result.status,
+        reason: responseFormatUnsupported ? 'unsupported_response_format' : 'fallback_status_only',
+        markUnsupportedCapability: responseFormatUnsupported,
       });
 
       const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined, abortSignal);
@@ -771,10 +774,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 const RESPONSE_FORMAT_UNSUPPORTED_STATUSES = new Set<number>([400, 415, 422]);
-const RESPONSE_FORMAT_UNSUPPORTED_SIGNALS = [
+const RESPONSE_FORMAT_TARGET_SIGNALS = [
   "response_format",
   "json_schema",
+];
+const RESPONSE_FORMAT_UNSUPPORTED_CONTEXT_SIGNALS = [
   "unsupported",
+  "not_supported",
+  "not support",
+  "does_not_support",
+  "not_implemented",
+  "not implemented",
 ];
 const RESPONSE_FORMAT_SUPPORT_TTL_MS = parsePositiveInt(
   process.env.ASSISTANT_RESPONSE_FORMAT_SUPPORT_TTL_MS,
@@ -828,7 +838,13 @@ function hasResponseFormatUnsupportedSignal(details: string | undefined): boolea
     return false;
   }
   const normalized = details.toLowerCase();
-  return RESPONSE_FORMAT_UNSUPPORTED_SIGNALS.some((signal) => normalized.includes(signal));
+  const hasResponseFormatTarget = RESPONSE_FORMAT_TARGET_SIGNALS.some((signal) =>
+    normalized.includes(signal)
+  );
+  if (!hasResponseFormatTarget) {
+    return false;
+  }
+  return RESPONSE_FORMAT_UNSUPPORTED_CONTEXT_SIGNALS.some((signal) => normalized.includes(signal));
 }
 
 function createAbortError(): Error {

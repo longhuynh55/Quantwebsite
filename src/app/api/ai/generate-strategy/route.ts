@@ -145,15 +145,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
     if (!result.success) {
       const status =
         result.statusCode ??
-        (result.failureKind === 'timeout'
-          ? 504
-          : result.failureKind === 'rate_limit'
-            ? 429
-            : result.failureKind === 'configuration'
-              ? 502
-              : result.failureKind === 'parse'
-                ? 422
-                : 502);
+        (result.failureKind === "request_aborted"
+          ? 499
+          : result.failureKind === 'timeout'
+            ? 504
+            : result.failureKind === 'rate_limit'
+              ? 429
+              : result.failureKind === 'configuration'
+                ? 502
+                : result.failureKind === 'parse'
+                  ? 422
+                  : 502);
       logger.warn('generation.failed', {
         error: result.error,
         failureKind: result.failureKind,
