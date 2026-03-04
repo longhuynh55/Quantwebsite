@@ -250,6 +250,8 @@ export async function generateStrategyFromPrompt(
           generateWithProviderFallback(messages, {
             requestId,
             responseFormat: STRATEGY_JSON_SCHEMA_RESPONSE_FORMAT,
+            responseFormatMode: "force",
+            requireResponseFormatApplied: STRATEGY_SCHEMA_REQUIRED,
             abortSignal,
           }),
         deadlineAt,

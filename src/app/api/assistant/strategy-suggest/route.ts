@@ -35,6 +35,9 @@ const STRATEGY_NODE_TYPES = [
   "conditional",
   "sort",
   "math",
+  "merge",
+  "risk",
+  "backtest",
 ] as const;
 
 type StrategyNodeType = (typeof STRATEGY_NODE_TYPES)[number];
@@ -96,6 +99,9 @@ Available node types and their configs:
 - "conditional": { condition: string, threshold: number }
 - "sort": { sortBy: "returns"|"sharpe"|"volume"|"momentum", order: "asc"|"desc", limit: number }
 - "math": { operation: "add"|"subtract"|"multiply"|"divide"|"percent_change", operand?: number }
+- "merge": { logic: "and"|"or"|"majority" }
+- "risk": { method: "fixed"|"kelly"|"volatility"|"equal", maxPosition?: number, maxDrawdown?: number }
+- "backtest": { initialCapital?: number, commission?: number, slippage?: number }
 
 Respond ONLY with valid JSON, no markdown, no explanation. Format:
 {
@@ -113,7 +119,8 @@ Respond ONLY with valid JSON, no markdown, no explanation. Format:
 }
 
 edges.from and edges.to are zero-based indices into the nodes array.
-Create a logical flow: DataSource -> Indicators -> Filters/Conditions -> Signals -> Output.
+Create a logical flow: DataSource -> Indicators -> Filters/Conditions -> Signals -> (optional Risk) -> Output.
+Backtest is optional terminal node and should only receive incoming edges (no outgoing edges).
 Use 4-7 nodes for a good strategy.`;
 
 const REPAIR_PROMPT = `Your previous answer could not be parsed.
@@ -333,17 +340,18 @@ function extractBalancedObjectCandidates(text: string): string[] {
 }
 
 function parseStrategyResponse(raw: string): AiStrategyResponse | null {
+  let latestValid: AiStrategyResponse | null = null;
   for (const candidate of extractJsonCandidates(raw)) {
     try {
       const parsed = JSON.parse(candidate) as unknown;
       if (isValidAiStrategyResponse(parsed)) {
-        return parsed;
+        latestValid = parsed;
       }
     } catch {
       // Continue with the next candidate.
     }
   }
-  return null;
+  return latestValid;
 }
 
 function generateRequestId(): string {
@@ -494,6 +502,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
           generateWithProviderFallback(messages, {
             requestId,
             responseFormat: STRATEGY_SUGGEST_RESPONSE_FORMAT,
+            responseFormatMode: "force",
+            requireResponseFormatApplied: STRATEGY_SCHEMA_REQUIRED,
             abortSignal,
           }),
         deadlineAt,
@@ -540,10 +550,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
           attempt,
           totalAttempts,
           providerUsed: result.providerUsed,
+          fallbackUsed: result.fallbackUsed,
+          responseFormatFallbackUsed,
         });
         return NextResponse.json(
           {
             error: "Structured strategy schema enforcement is required but unavailable from provider.",
+            providerUsed: result.providerUsed,
+            fallbackUsed: result.fallbackUsed,
+            responseFormatFallbackUsed,
             requestId,
             latencyMs: Date.now() - startedAt,
           },

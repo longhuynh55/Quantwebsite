@@ -291,6 +291,9 @@ Neu can fallback ve raw `../data` (khong khuyen nghi cho runtime):
   - `OPENROUTER_SECONDARY_MODEL=openai/gpt-oss-120b` (secondary)
   - `OPENROUTER_TERTIARY_MODEL=openai/gpt-oss-20b:free` (tertiary)
   - `ASSISTANT_OPENROUTER_ONLY=true` (dang bat mac dinh trong compose) de chi dung chain OpenRouter.
+- Structured output settings:
+  - `ASSISTANT_ENABLE_JSON_SCHEMA_MODE=true` de bat `response_format` cho provider co ho tro.
+  - `ASSISTANT_STRATEGY_SCHEMA_REQUIRED=true` de fail-closed cho `/api/ai/generate-strategy` va `/api/assistant/strategy-suggest` khi schema khong duoc ap dung.
 - Neu model bi timeout som, tang timeout request:
   - `GLM_REQUEST_TIMEOUT_MS` (GLM primary)
   - `OPENROUTER_TIMEOUT_MS` (OpenRouter)

@@ -56,4 +56,7 @@ When users report the assistant â€œkhÃ´ng truy cáº­p Ä‘Æ°á»£c d
   - `OPENROUTER_TERTIARY_MODEL=stepfun/step-3.5-flash:free`
 - Tool/API grounding timeouts:
   - `ASSISTANT_TOOL_TIMEOUT_MS`
+- Structured output:
+  - `ASSISTANT_ENABLE_JSON_SCHEMA_MODE=true` to enable provider `response_format` payloads.
+  - `ASSISTANT_STRATEGY_SCHEMA_REQUIRED=true` to enforce schema-applied responses for strategy generation endpoints.
 

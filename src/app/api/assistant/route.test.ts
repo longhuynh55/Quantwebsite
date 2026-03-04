@@ -196,6 +196,8 @@ describe("POST /api/assistant error traces", () => {
       providerUsed: "openrouter",
       fallbackUsed: false,
       latencyMs: 22,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
       providerErrors: [],
     });
 
@@ -214,6 +216,8 @@ describe("POST /api/assistant error traces", () => {
     expect(json.policyStatus).toBe("fallback");
     expect(json.message).toContain("INSUFFICIENT_DATA");
     expect(meta.providerUsed).toBe("policy-post-guard");
+    expect(meta.responseFormatApplied).toBe(true);
+    expect(meta.responseFormatFallbackUsed).toBe(false);
   });
 
   it("keeps successful LLM response when numeric tokens align with grounded evidence", async () => {
@@ -271,6 +275,8 @@ describe("POST /api/assistant error traces", () => {
       providerUsed: "openrouter",
       fallbackUsed: false,
       latencyMs: 25,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
       providerErrors: [],
     });
 
@@ -289,5 +295,7 @@ describe("POST /api/assistant error traces", () => {
     expect(json.policyStatus).toBe("ok");
     expect(json.message).toContain("80,000");
     expect(meta.providerUsed).toBe("openrouter");
+    expect(meta.responseFormatApplied).toBe(true);
+    expect(meta.responseFormatFallbackUsed).toBe(false);
   });
 });

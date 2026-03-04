@@ -32,6 +32,29 @@ function buildValidSuggestedStrategy() {
   };
 }
 
+function buildAdvancedSuggestedStrategy() {
+  return {
+    name: "Advanced Graph",
+    nodes: [
+      { type: "dataSource", label: "Source", config: { stocks: ["VNM"], timeframe: "1d" } },
+      { type: "indicator", label: "EMA(20)", config: { indicatorType: "ema", period: 20 } },
+      { type: "merge", label: "Merge", config: { logic: "and" } },
+      { type: "signal", label: "Buy", config: { signalType: "buy", condition: "EMA uptrend" } },
+      { type: "risk", label: "Risk", config: { method: "fixed", maxPosition: 10, maxDrawdown: 20 } },
+      { type: "output", label: "Output", config: { metrics: ["returns", "sharpe"] } },
+      { type: "backtest", label: "Backtest", config: { initialCapital: 100000000, commission: 0.15, slippage: 0.05 } },
+    ],
+    edges: [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 4, to: 5 },
+      { from: 4, to: 6 },
+    ],
+  };
+}
+
 describe("POST /api/assistant/strategy-suggest", () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -146,6 +169,15 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(json.success).toBe(true);
     expect(json.provider).toBe("openrouter");
     expect(json.schemaApplied).toBe(true);
+    expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(1);
+    expect(mockGenerateWithProviderFallback.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        responseFormat: expect.objectContaining({ type: "json_schema" }),
+        responseFormatMode: "force",
+        requireResponseFormatApplied: true,
+        abortSignal: expect.any(Object),
+      })
+    );
   });
 
   it("parses prose-wrapped JSON response", async () => {
@@ -172,10 +204,25 @@ describe("POST /api/assistant/strategy-suggest", () => {
   });
 
   it("parses the correct strategy object when response contains multiple JSON blocks", async () => {
-    const strategy = JSON.stringify(buildValidSuggestedStrategy(), null, 2);
+    const decoy = JSON.stringify(
+      {
+        ...buildValidSuggestedStrategy(),
+        name: "Decoy Strategy",
+      },
+      null,
+      2
+    );
+    const strategy = JSON.stringify(
+      {
+        ...buildValidSuggestedStrategy(),
+        name: "Expected Strategy",
+      },
+      null,
+      2
+    );
     mockGenerateWithProviderFallback.mockResolvedValue({
       success: true,
-      text: `Meta: {"foo":"bar"}\nStrategy:\n${strategy}`,
+      text: `${decoy}\n\n${strategy}`,
       providerUsed: "openrouter",
       fallbackUsed: false,
       latencyMs: 25,
@@ -192,6 +239,35 @@ describe("POST /api/assistant/strategy-suggest", () => {
     );
 
     expect(response.status).toBe(200);
+    const json = (await response.json()) as { strategy?: { name?: string } };
+    expect(json.strategy?.name).toBe("Expected Strategy");
+  });
+
+  it("accepts advanced node types merge/risk/backtest", async () => {
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: true,
+      text: JSON.stringify(buildAdvancedSuggestedStrategy()),
+      providerUsed: "openrouter",
+      fallbackUsed: false,
+      latencyMs: 25,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build advanced strategy with risk and backtest" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { strategy?: { nodes?: Array<{ type?: string }> } };
+    const nodeTypes = (json.strategy?.nodes ?? []).map((node) => node.type);
+    expect(nodeTypes).toContain("merge");
+    expect(nodeTypes).toContain("risk");
+    expect(nodeTypes).toContain("backtest");
   });
 
   it("returns 502 when schema is required but provider did not apply response format", async () => {

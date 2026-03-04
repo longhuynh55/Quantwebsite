@@ -22,6 +22,7 @@ export interface LlmJsonObjectResponseFormat {
 }
 
 export type LlmResponseFormat = LlmJsonSchemaResponseFormat | LlmJsonObjectResponseFormat;
+export type ResponseFormatMode = 'auto' | 'force' | 'off';
 
 type ProviderFailureKind = 'timeout' | 'rate_limit' | 'network' | 'upstream' | 'configuration';
 
@@ -87,9 +88,17 @@ export type AssistantGenerateResult = AssistantGenerateSuccess | AssistantGenera
 
 const providersLogger = createLogger('assistant.providers');
 
+export interface GenerateWithProviderFallbackOptions {
+  requestId?: string;
+  responseFormat?: LlmResponseFormat;
+  responseFormatMode?: ResponseFormatMode;
+  requireResponseFormatApplied?: boolean;
+  abortSignal?: AbortSignal;
+}
+
 export async function generateWithProviderFallback(
   messages: LlmMessage[],
-  options: { requestId?: string; responseFormat?: LlmResponseFormat; abortSignal?: AbortSignal } = {}
+  options: GenerateWithProviderFallbackOptions = {}
 ): Promise<AssistantGenerateResult> {
   const startedAt = Date.now();
   const logger = providersLogger.child({ requestId: options.requestId ?? '' });
@@ -116,6 +125,7 @@ export async function generateWithProviderFallback(
   }
 
   const errors: ProviderErrorInfo[] = [];
+  let schemaRequiredButUnavailable = false;
   for (let index = 0; index < providers.length; index += 1) {
     if (options.abortSignal?.aborted) {
       return {
@@ -135,9 +145,29 @@ export async function generateWithProviderFallback(
       messages,
       logger,
       options.responseFormat,
+      options.responseFormatMode ?? 'auto',
       options.abortSignal
     );
     if (result.success) {
+      const responseFormatApplied = result.responseFormatApplied ?? false;
+      if (options.requireResponseFormatApplied && options.responseFormat && !responseFormatApplied) {
+        schemaRequiredButUnavailable = true;
+        logger.warn('provider.schema_required_not_applied', {
+          provider: provider.name,
+          source: provider.source,
+          model: provider.model,
+          attempts: result.attempts,
+          fallbackUsed: index > 0,
+          responseFormatFallbackUsed: result.responseFormatFallbackUsed ?? false,
+          latencyMs: Date.now() - providerStartedAt,
+        });
+        errors.push({
+          provider: provider.name,
+          kind: 'configuration',
+          details: 'response_format_not_applied',
+        });
+        continue;
+      }
       logger.info('provider.success', {
         provider: provider.name,
         source: provider.source,
@@ -174,6 +204,21 @@ export async function generateWithProviderFallback(
       status: result.status,
       details: result.details,
     });
+  }
+
+  if (schemaRequiredButUnavailable) {
+    logger.error('chain.schema_required_unavailable', {
+      providersTried: providers.length,
+      latencyMs: Date.now() - startedAt,
+    });
+    return {
+      success: false,
+      kind: 'configuration',
+      statusCode: 502,
+      message: 'Structured response schema is required but unavailable from configured providers.',
+      latencyMs: Date.now() - startedAt,
+      providerErrors: errors,
+    };
   }
 
   const finalKind = pickFinalFailureKind(errors);
@@ -340,6 +385,7 @@ async function callProviderWithRetry(
   messages: LlmMessage[],
   logger: AppLogger,
   responseFormat?: LlmResponseFormat,
+  responseFormatMode: ResponseFormatMode = 'auto',
   abortSignal?: AbortSignal
 ): Promise<ProviderCallResult> {
   let lastFailure: ProviderFailure = {
@@ -359,7 +405,11 @@ async function callProviderWithRetry(
       };
     }
 
-    const shouldUseResponseFormat = shouldAttachResponseFormat(provider, responseFormat);
+    const shouldUseResponseFormat = shouldAttachResponseFormat(
+      provider,
+      responseFormat,
+      responseFormatMode
+    );
     const formatForAttempt = shouldUseResponseFormat ? responseFormat : undefined;
     const result = await callProviderOnce(provider, messages, attempt + 1, formatForAttempt, abortSignal);
     if (result.success) {
@@ -463,7 +513,7 @@ async function callProviderOnce(
       temperature: 0.4,
       top_p: 0.9,
     };
-    if (shouldAttachResponseFormat(provider, responseFormat)) {
+    if (responseFormat) {
       requestPayload.response_format = responseFormat;
     }
 
@@ -598,15 +648,23 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 
 function shouldAttachResponseFormat(
   provider: ProviderConfig,
-  responseFormat: LlmResponseFormat | undefined
+  responseFormat: LlmResponseFormat | undefined,
+  responseFormatMode: ResponseFormatMode = 'auto'
 ): boolean {
   if (!responseFormat) return false;
+  if (!isResponseFormatProviderSupported(provider)) return false;
+  if (responseFormatMode === 'off') return false;
+  if (responseFormatMode === 'force') return true;
   const raw = String(process.env.ASSISTANT_ENABLE_JSON_SCHEMA_MODE ?? '').trim().toLowerCase();
   const enabled = raw === '1' || raw === 'true' || raw === 'yes';
   if (!enabled) return false;
   if (getResponseFormatSupport(provider) === 'unsupported') {
     return false;
   }
+  return true;
+}
+
+function isResponseFormatProviderSupported(provider: ProviderConfig): boolean {
   return provider.source === 'openrouter' || provider.source === 'fallback' || provider.source === 'baseten';
 }
 

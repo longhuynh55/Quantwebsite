@@ -96,6 +96,8 @@ describe("strategy-generator", () => {
       const callArgs = mockGenerateWithProviderFallback.mock.calls[0];
       expect(callArgs[1]).toMatchObject({
         responseFormat: { type: "json_schema" },
+        responseFormatMode: "force",
+        requireResponseFormatApplied: true,
       });
       expect(callArgs[1]).toEqual(
         expect.objectContaining({
