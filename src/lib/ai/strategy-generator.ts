@@ -205,6 +205,7 @@ export async function generateStrategyFromPrompt(
   options: {
     requestId?: string;
     timeoutMs?: number;
+    providerTimeoutMs?: number;
     parseRepairRetries?: number;
     abortSignal?: AbortSignal;
   } = {}
@@ -213,6 +214,10 @@ export async function generateStrategyFromPrompt(
   const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
     ? Math.max(1, options.timeoutMs)
     : null;
+  const providerTimeoutMs =
+    typeof options.providerTimeoutMs === "number" && Number.isFinite(options.providerTimeoutMs)
+      ? Math.max(1, options.providerTimeoutMs)
+      : undefined;
   const deadlineAt = timeoutMs ? startedAt + timeoutMs : null;
   const requestId = options.requestId || generateRequestId();
   const logger = strategyLogger.child({ requestId });
@@ -270,6 +275,7 @@ export async function generateStrategyFromPrompt(
             responseFormatMode: "force",
             requireResponseFormatApplied: STRATEGY_SCHEMA_REQUIRED,
             abortSignal,
+            providerTimeoutMs,
           }),
         deadlineAt,
         options.abortSignal

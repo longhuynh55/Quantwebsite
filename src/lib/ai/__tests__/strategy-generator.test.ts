@@ -110,6 +110,21 @@ describe("strategy-generator", () => {
       ]);
     });
 
+    it("forwards provider timeout override to provider fallback", async () => {
+      mockGenerateWithProviderFallback.mockResolvedValueOnce(
+        providerSuccess(JSON.stringify(buildValidStrategy()))
+      );
+
+      await generateStrategyFromPrompt("Test prompt", { providerTimeoutMs: 55_000 });
+
+      const callArgs = mockGenerateWithProviderFallback.mock.calls[0];
+      expect(callArgs[1]).toEqual(
+        expect.objectContaining({
+          providerTimeoutMs: 55_000,
+        })
+      );
+    });
+
     it("returns provider failure when provider call fails", async () => {
       mockGenerateWithProviderFallback.mockResolvedValueOnce({
         success: false,

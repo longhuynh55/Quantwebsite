@@ -39,6 +39,18 @@ function createSuccessResponse(content: string): Response {
   );
 }
 
+function createErrorResponse(status: number, message: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: { message },
+    }),
+    {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }
+  );
+}
+
 async function importProviders() {
   jest.resetModules();
   return import('@/lib/assistant/providers');
@@ -330,5 +342,62 @@ describe('assistant providers response_format behavior', () => {
       expect(result.message).toContain('Structured response schema');
     }
     expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it('uses terminal provider failure kind for mixed rate-limit and upstream chain errors', async () => {
+    process.env.OPENROUTER_SECONDARY_MODEL = 'openai/gpt-oss-120b';
+    process.env.OPENROUTER_TERTIARY_MODEL = 'openai/gpt-oss-120b';
+    process.env.OPENROUTER_MAX_RETRIES = '0';
+    process.env.OPENROUTER_SECONDARY_MAX_RETRIES = '0';
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(createErrorResponse(429, 'rate limited'))
+      .mockResolvedValueOnce(createErrorResponse(429, 'rate limited'))
+      .mockResolvedValueOnce(createErrorResponse(503, 'upstream unavailable'))
+      .mockResolvedValueOnce(createErrorResponse(503, 'upstream unavailable'));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { generateWithProviderFallback } = await importProviders();
+    const result = await generateWithProviderFallback([{ role: 'user', content: 'test' }], {
+      requestId: 'req-mixed-rate-upstream',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.kind).toBe('upstream');
+      expect(result.statusCode).toBe(502);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses terminal provider failure kind for mixed timeout and upstream chain errors', async () => {
+    process.env.OPENROUTER_SECONDARY_MODEL = 'openai/gpt-oss-120b';
+    process.env.OPENROUTER_TERTIARY_MODEL = 'openai/gpt-oss-120b';
+    process.env.OPENROUTER_MAX_RETRIES = '0';
+    process.env.OPENROUTER_SECONDARY_MAX_RETRIES = '0';
+
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+
+    const fetchMock = jest
+      .fn()
+      .mockRejectedValueOnce(abortError)
+      .mockRejectedValueOnce(abortError)
+      .mockResolvedValueOnce(createErrorResponse(503, 'upstream unavailable'))
+      .mockResolvedValueOnce(createErrorResponse(503, 'upstream unavailable'));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { generateWithProviderFallback } = await importProviders();
+    const result = await generateWithProviderFallback([{ role: 'user', content: 'test' }], {
+      requestId: 'req-mixed-timeout-upstream',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.kind).toBe('upstream');
+      expect(result.statusCode).toBe(502);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

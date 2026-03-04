@@ -17,10 +17,14 @@ const parsedParseRepairRetries = Number.parseInt(process.env.STRATEGY_PARSE_REPA
 const PARSE_REPAIR_RETRIES = Number.isFinite(parsedParseRepairRetries)
   ? Math.max(0, parsedParseRepairRetries)
   : 1;
-const parsedRequestTimeoutMs = Number.parseInt(process.env.STRATEGY_GENERATION_TIMEOUT_MS ?? '30000', 10);
+const parsedProviderTimeoutMs = Number.parseInt(process.env.STRATEGY_PROVIDER_TIMEOUT_MS ?? "", 10);
+const PROVIDER_TIMEOUT_MS = Number.isFinite(parsedProviderTimeoutMs)
+  ? Math.max(5_000, parsedProviderTimeoutMs)
+  : 60_000;
+const parsedRequestTimeoutMs = Number.parseInt(process.env.STRATEGY_GENERATION_TIMEOUT_MS ?? "", 10);
 const REQUEST_TIMEOUT_MS = Number.isFinite(parsedRequestTimeoutMs)
-  ? Math.max(5_000, parsedRequestTimeoutMs)
-  : 30_000;
+  ? Math.max(5_000, parsedRequestTimeoutMs, PROVIDER_TIMEOUT_MS + 5_000)
+  : Math.max(75_000, PROVIDER_TIMEOUT_MS + 15_000);
 
 interface StrategyGenerationResponse {
   success: boolean;
@@ -138,6 +142,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyG
     const result = await generateStrategyFromPrompt(prompt, {
       requestId,
       timeoutMs: REQUEST_TIMEOUT_MS,
+      providerTimeoutMs: PROVIDER_TIMEOUT_MS,
       parseRepairRetries: Math.max(0, PARSE_REPAIR_RETRIES),
       abortSignal: request.signal,
     });

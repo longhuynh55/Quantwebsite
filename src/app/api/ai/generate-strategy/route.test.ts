@@ -181,6 +181,7 @@ describe("POST /api/ai/generate-strategy", () => {
         requestId: expect.any(String),
         parseRepairRetries: expect.any(Number),
         timeoutMs: expect.any(Number),
+        providerTimeoutMs: expect.any(Number),
       })
     );
   });

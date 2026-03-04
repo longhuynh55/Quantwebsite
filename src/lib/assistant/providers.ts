@@ -94,6 +94,7 @@ export interface GenerateWithProviderFallbackOptions {
   responseFormatMode?: ResponseFormatMode;
   requireResponseFormatApplied?: boolean;
   abortSignal?: AbortSignal;
+  providerTimeoutMs?: number;
 }
 
 export async function generateWithProviderFallback(
@@ -103,6 +104,7 @@ export async function generateWithProviderFallback(
   const startedAt = Date.now();
   const logger = providersLogger.child({ requestId: options.requestId ?? '' });
   const providers = getProviderChain();
+  const providerTimeoutOverrideMs = resolveProviderTimeoutOverrideMs(options.providerTimeoutMs);
   logger.debug('chain.started', {
     providerCount: providers.length,
     providerNames: providers.map((provider) => provider.name),
@@ -146,7 +148,8 @@ export async function generateWithProviderFallback(
       logger,
       options.responseFormat,
       options.responseFormatMode ?? 'auto',
-      options.abortSignal
+      options.abortSignal,
+      providerTimeoutOverrideMs
     );
     if (result.success) {
       const responseFormatApplied = result.responseFormatApplied ?? false;
@@ -386,8 +389,13 @@ async function callProviderWithRetry(
   logger: AppLogger,
   responseFormat?: LlmResponseFormat,
   responseFormatMode: ResponseFormatMode = 'auto',
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  providerTimeoutOverrideMs?: number
 ): Promise<ProviderCallResult> {
+  const effectiveProvider =
+    typeof providerTimeoutOverrideMs === 'number' && Number.isFinite(providerTimeoutOverrideMs)
+      ? { ...provider, timeoutMs: Math.max(1, providerTimeoutOverrideMs) }
+      : provider;
   let lastFailure: ProviderFailure = {
     success: false,
     kind: 'upstream',
@@ -406,12 +414,12 @@ async function callProviderWithRetry(
     }
 
     const shouldUseResponseFormat = shouldAttachResponseFormat(
-      provider,
+      effectiveProvider,
       responseFormat,
       responseFormatMode
     );
     const formatForAttempt = shouldUseResponseFormat ? responseFormat : undefined;
-    const result = await callProviderOnce(provider, messages, attempt + 1, formatForAttempt, abortSignal);
+    const result = await callProviderOnce(effectiveProvider, messages, attempt + 1, formatForAttempt, abortSignal);
     if (result.success) {
       if (formatForAttempt) {
         markResponseFormatSupport(provider, true);
@@ -438,7 +446,13 @@ async function callProviderWithRetry(
         markUnsupportedCapability: responseFormatUnsupported,
       });
 
-      const fallbackResult = await callProviderOnce(provider, messages, attempt + 1, undefined, abortSignal);
+      const fallbackResult = await callProviderOnce(
+        effectiveProvider,
+        messages,
+        attempt + 1,
+        undefined,
+        abortSignal
+      );
       if (fallbackResult.success) {
         fallbackResult.responseFormatApplied = false;
         fallbackResult.responseFormatFallbackUsed = true;
@@ -447,12 +461,12 @@ async function callProviderWithRetry(
       lastFailure = fallbackResult;
     }
 
-    const shouldRetry = attempt < provider.maxRetries && isRetryableFailure(lastFailure);
+    const shouldRetry = attempt < effectiveProvider.maxRetries && isRetryableFailure(lastFailure);
     if (!shouldRetry) {
       return lastFailure;
     }
 
-    const delayMs = computeRetryDelayMs(attempt, provider.retryBaseDelayMs, lastFailure.retryAfterMs);
+    const delayMs = computeRetryDelayMs(attempt, effectiveProvider.retryBaseDelayMs, lastFailure.retryAfterMs);
     logger.info('provider.retry_scheduled', {
       provider: provider.name,
       source: provider.source,
@@ -649,6 +663,13 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function resolveProviderTimeoutOverrideMs(raw: number | undefined): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return undefined;
+  }
+  return Math.max(1, Math.floor(raw));
+}
+
 function shouldAttachResponseFormat(
   provider: ProviderConfig,
   responseFormat: LlmResponseFormat | undefined,
@@ -740,12 +761,10 @@ function mapFailureKindToMessage(kind: ProviderFailureKind): string {
 }
 
 function pickFinalFailureKind(errors: ProviderErrorInfo[]): ProviderFailureKind {
-  const kinds = new Set(errors.map((error) => error.kind));
-  if (kinds.has('rate_limit')) return 'rate_limit';
-  if (kinds.has('timeout')) return 'timeout';
-  if (kinds.has('network')) return 'network';
-  if (kinds.has('configuration')) return 'configuration';
-  return 'upstream';
+  if (errors.length === 0) return 'upstream';
+  if (errors.every((error) => error.kind === 'rate_limit')) return 'rate_limit';
+  if (errors.every((error) => error.kind === 'timeout')) return 'timeout';
+  return errors[errors.length - 1]?.kind ?? 'upstream';
 }
 
 function trimTrailingSlash(url: string): string {
