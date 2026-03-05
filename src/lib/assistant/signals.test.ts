@@ -57,6 +57,7 @@ describe("assistant signals symbol extraction", () => {
   it("extracts lowercase symbol for Vietnamese statement phrases", () => {
     const symbols1 = getCandidateSymbols("Bang can doi ke toan quy 3 2025 cua vcb", analysisContext);
     expect(symbols1).toContain("VCB");
+    expect(symbols1).not.toContain("BANG");
 
     const symbols2 = getCandidateSymbols("Bao cao tai chinh quy 3 2025 cua vcb", analysisContext);
     expect(symbols2).toContain("VCB");
