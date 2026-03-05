@@ -97,9 +97,20 @@ const SMALL_TALK_FINANCIAL_GUARD_KEYWORDS = [
 
 function isSmallTalkOnly(message: string): boolean {
   const normalized = normalizeForKeywordMatch(message);
-  const hasSmallTalkCue = SMALL_TALK_TRIGGER_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  const containsKeyword = (keyword: string): boolean => {
+    const trimmed = keyword.trim().toLowerCase();
+    if (!trimmed) return false;
+    // Treat multi-word phrases as substring matches.
+    if (trimmed.includes(" ")) return normalized.includes(trimmed);
+    // Single-token keywords must match as a whole word to avoid false positives
+    // (e.g. "hi" inside "chinh").
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(normalized);
+  };
+
+  const hasSmallTalkCue = SMALL_TALK_TRIGGER_KEYWORDS.some((keyword) => containsKeyword(keyword));
   if (!hasSmallTalkCue) return false;
-  const hasFinanceCue = SMALL_TALK_FINANCIAL_GUARD_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  const hasFinanceCue = SMALL_TALK_FINANCIAL_GUARD_KEYWORDS.some((keyword) => containsKeyword(keyword));
   return !hasFinanceCue;
 }
 

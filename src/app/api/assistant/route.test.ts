@@ -148,6 +148,21 @@ describe("POST /api/assistant error traces", () => {
     expect(mockBuildAssistantQueryPlan).not.toHaveBeenCalled();
   });
 
+  it("does not bypass on 'hi' substring inside financial Vietnamese words", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Bao cao tai chinh VCB 2025Q3" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+    const json = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mockBuildAssistantQueryPlan).toHaveBeenCalledTimes(1);
+  });
+
   it("returns requestId in 500 unexpected-error response meta", async () => {
     mockBuildAssistantQueryPlan.mockImplementation(() => {
       throw new Error("planner exploded");
