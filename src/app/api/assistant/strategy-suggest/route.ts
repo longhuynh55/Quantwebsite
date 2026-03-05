@@ -524,26 +524,37 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
     // ─── T0: Template matching (0ms, 100% accuracy) ───
     const enableT0 = parseBooleanFlag(process.env.STRATEGY_SUGGEST_ENABLE_T0, true);
     if (enableT0) {
-      const templateResult = matchTemplate(prompt) as AiStrategyResponse | null;
-      if (templateResult) {
-        const sanitized = sanitizeStrategyResponse(templateResult);
-        const invariantError = validateStrategyInvariants(sanitized.strategy);
-        if (!invariantError) {
-          strategySuggestLogger.info('strategy.t0_template_hit', {
+      try {
+        const templateResult = matchTemplate(prompt) as AiStrategyResponse | null;
+        if (templateResult) {
+          const sanitized = sanitizeStrategyResponse(templateResult);
+          const invariantError = validateStrategyInvariants(sanitized.strategy);
+          if (!invariantError) {
+            strategySuggestLogger.info('strategy.t0_template_hit', {
+              requestId,
+              template: sanitized.strategy.name,
+              latencyMs: Date.now() - startedAt,
+            });
+            return NextResponse.json({
+              success: true,
+              strategy: sanitized.strategy,
+              provider: 'template',
+              schemaApplied: true,
+              sanitizationWarnings: sanitized.warnings.length > 0 ? sanitized.warnings : undefined,
+              requestId,
+              latencyMs: Date.now() - startedAt,
+            } satisfies StrategySuggestResponse);
+          }
+          strategySuggestLogger.warn('strategy.t0_invariant_failed', {
             requestId,
-            template: sanitized.strategy.name,
-            latencyMs: Date.now() - startedAt,
+            error: invariantError,
           });
-          return NextResponse.json({
-            success: true,
-            strategy: sanitized.strategy,
-            provider: 'template',
-            schemaApplied: true,
-            sanitizationWarnings: sanitized.warnings.length > 0 ? sanitized.warnings : undefined,
-            requestId,
-            latencyMs: Date.now() - startedAt,
-          } satisfies StrategySuggestResponse);
         }
+      } catch (t0Error) {
+        strategySuggestLogger.warn('strategy.t0_failed', {
+          requestId,
+          ...toErrorMeta(t0Error),
+        });
       }
     }
 
