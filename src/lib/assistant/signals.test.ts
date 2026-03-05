@@ -3,6 +3,12 @@ import { collectRequiredSignals, getCandidateSymbols } from "@/lib/assistant/sig
 
 describe("assistant signals symbol extraction", () => {
   const analysisContext: AssistantContextSnapshot = { page: "analysis" };
+  const ORIGINAL_ENV = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    jest.resetModules();
+  });
 
   it("extracts lowercase symbol in noisy fundamentals query with quarter + ratios", () => {
     const symbols = getCandidateSymbols("acb 2025q2 d/e voi current ratio bn?", analysisContext);
@@ -36,6 +42,41 @@ describe("assistant signals symbol extraction", () => {
   it("extracts bare lowercase ticker in price-date query", () => {
     const symbols = getCandidateSymbols("gia dong cua vcb ngay 31/12/2025", analysisContext);
     expect(symbols).toContain("VCB");
+  });
+
+  it("does not treat English stopwords as tickers in balance-sheet prompts", () => {
+    const symbols = getCandidateSymbols("Give me the balance sheet of VCB stock in 2025Q3", analysisContext);
+    expect(symbols).toEqual(["VCB"]);
+  });
+
+  it("does not treat English verbs near quarters as tickers", () => {
+    const symbols = getCandidateSymbols("I want to see 2025Q3 balance sheet of VCB", analysisContext);
+    expect(symbols).toEqual(["VCB"]);
+  });
+
+  it("extracts lowercase symbol for Vietnamese statement phrases", () => {
+    const symbols1 = getCandidateSymbols("Bang can doi ke toan quy 3 2025 cua vcb", analysisContext);
+    expect(symbols1).toContain("VCB");
+
+    const symbols2 = getCandidateSymbols("Bao cao tai chinh quy 3 2025 cua vcb", analysisContext);
+    expect(symbols2).toContain("VCB");
+
+    const symbols3 = getCandidateSymbols("vcb bang can doi ke toan 2025q3", analysisContext);
+    expect(symbols3).toContain("VCB");
+  });
+
+  it("filters weak two-letter symbols when stronger symbols exist (configurable)", () => {
+    const prompt = "Compare VCB and AB in 2025Q3";
+
+    const symbolsDefault = getCandidateSymbols(prompt, analysisContext);
+    expect(symbolsDefault).toEqual(["VCB"]);
+
+    process.env = { ...ORIGINAL_ENV, ASSISTANT_FILTER_WEAK_TWO_LETTER_SYMBOLS: "false" };
+    jest.resetModules();
+    const { getCandidateSymbols: getCandidateSymbolsNoFilter } =
+      require("@/lib/assistant/signals") as typeof import("@/lib/assistant/signals");
+    const symbolsNoFilter = getCandidateSymbolsNoFilter(prompt, analysisContext);
+    expect(symbolsNoFilter).toEqual(["VCB", "AB"]);
   });
 
   it("does not infer BAT ticker from 'bat dong san' sector phrase", () => {
@@ -76,6 +117,14 @@ describe("assistant signals symbol extraction", () => {
       "Gia dong cua VNM ngay 31/12/2025"
     );
     expect(withCue).toContain("VNM");
+  });
+
+  it("keeps explicit multi-symbol compare list above 3 symbols", () => {
+    const symbols = getCandidateSymbols(
+      "So sanh VNM, FPT, HPG, MBB va VCB trong 3 nam",
+      { page: "analysis" }
+    );
+    expect(symbols).toEqual(["VNM", "FPT", "HPG", "MBB", "VCB"]);
   });
 });
 
