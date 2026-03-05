@@ -204,6 +204,86 @@ describe("evaluateAssistantPolicy recommendation grounding", () => {
     expect(result.groundingSatisfied).toBe(false);
   });
 
+  it("allows partial multi-symbol response when missing symbols were dropped by fanout", () => {
+    const queryPlan: AssistantQueryPlan = {
+      intent: "stock_snapshot",
+      confidence: "high",
+      source: "signal",
+      symbols: ["HPG", "FPT", "MBB"],
+      filters: {},
+      steps: [
+        {
+          tool: "stockSnapshot",
+          endpoint: "/api/stocks",
+          reason: "grounded",
+          required: true,
+        },
+      ],
+      summary: "intent=stock_snapshot | source=signal | symbols=HPG,FPT,MBB | tools=stockSnapshot",
+    };
+
+    const result = evaluateAssistantPolicy({
+      message: "Compare close price of HPG, FPT, MBB in 2021",
+      contextSnapshot: { page: "home" },
+      queryPlan,
+      grounding: {
+        facts: ["HPG close=30,000", "FPT close=90,000"],
+        citations: [
+          {
+            id: "c1",
+            sourceType: "api",
+            title: "stocks",
+            endpoint: "/api/stocks?symbol=HPG",
+            symbol: "HPG",
+          },
+          {
+            id: "c2",
+            sourceType: "api",
+            title: "stocks",
+            endpoint: "/api/stocks?symbol=FPT",
+            symbol: "FPT",
+          },
+        ],
+        usedTools: [
+          {
+            name: "stockSnapshot",
+            status: "success",
+            evidenceCount: 2,
+            warningCount: 0,
+            requestParams: { symbol: "HPG" },
+          },
+          {
+            name: "stockSnapshot",
+            status: "success",
+            evidenceCount: 2,
+            warningCount: 0,
+            requestParams: { symbol: "FPT" },
+          },
+        ],
+        messageBlocks: [
+          {
+            type: "text",
+            title: "Symbol Coverage Notice",
+            content: "Symbol grounding coverage notice: dropped_symbols=MBB",
+          },
+        ],
+        groundingSource: "/api/stocks?symbol=HPG",
+        symbolDiagnostics: {
+          requestedSymbols: ["HPG", "FPT", "MBB"],
+          symbolTargets: ["HPG", "FPT"],
+          groundedSymbols: ["HPG", "FPT"],
+          droppedSymbols: ["MBB"],
+          requestsUniverseStockRanking: false,
+        },
+      },
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.shouldBypassLlm).toBe(false);
+    expect(result.dataConfidence).toBe("medium");
+    expect(result.reasonCode).toBe("missing_symbol_grounding");
+  });
+
   it("returns shadow_blocked for ambiguous symbols in shadow mode", () => {
     const originalMode = process.env.ASSISTANT_POLICY_MODE;
     process.env.ASSISTANT_POLICY_MODE = "shadow";

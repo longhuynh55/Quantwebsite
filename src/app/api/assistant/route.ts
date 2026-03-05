@@ -47,6 +47,61 @@ const RATE_LIMIT_WINDOW = 60 * 1000;
 const EVAL_RATE_LIMIT = resolveEvalRateLimit();
 const ASSISTANT_REQUEST_TIMEOUT_MS = resolveAssistantRequestTimeoutMs();
 const assistantRouteLogger = createLogger('api.assistant');
+const SMALL_TALK_TRIGGER_KEYWORDS = [
+  "xin chao",
+  "chao",
+  "hello",
+  "hi",
+  "hey",
+  "alo",
+  "ban la ai",
+  "who are you",
+  "what can you do",
+  "ban lam duoc gi",
+  "ban ten gi",
+];
+const SMALL_TALK_FINANCIAL_GUARD_KEYWORDS = [
+  "co phieu",
+  "stock",
+  "symbol",
+  "ticker",
+  "gia",
+  "volume",
+  "backtest",
+  "chien luoc",
+  "strategy",
+  "rsi",
+  "sma",
+  "ema",
+  "macd",
+  "fundamental",
+  "valuation",
+  "dinh gia",
+  "pe",
+  "p/e",
+  "pb",
+  "p/b",
+  "ev/ebitda",
+  "sharpe",
+  "drawdown",
+  "cagr",
+  "risk",
+  "rui ro",
+  "market",
+  "thi truong",
+  "vnindex",
+  "hose",
+  "hnx",
+  "upcom",
+];
+
+function isSmallTalkOnly(message: string): boolean {
+  const normalized = normalizeForKeywordMatch(message);
+  const hasSmallTalkCue = SMALL_TALK_TRIGGER_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  if (!hasSmallTalkCue) return false;
+  const hasFinanceCue = SMALL_TALK_FINANCIAL_GUARD_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return !hasFinanceCue;
+}
 
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
@@ -182,6 +237,47 @@ export async function POST(request: NextRequest) {
     const contextSnapshot = sanitizeContextSnapshot(body.contextSnapshot ?? legacyContextToSnapshot(body.context));
     const preferences = sanitizePreferences(body.preferences);
     const executionMode = sanitizeExecutionMode(body.executionMode);
+
+    if (isSmallTalkOnly(message)) {
+      const responseMessage =
+        "I'm QuantVN Assistant. I can help with grounded stock snapshots, fundamentals, valuation, risk and backtests. " +
+        "Try: `VCB close price 2025-12-31` or `Balance sheet of VCB 2025Q3`.";
+      logger.info("response.small_talk_bypass", {
+        messageChars: message.length,
+        responseChars: responseMessage.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return NextResponse.json<AssistantResponse>({
+        message: responseMessage,
+        success: true,
+        grounded: false,
+        policyStatus: "ok",
+        policyReason: "Small talk bypass: no grounding/tools required.",
+        dataConfidence: "medium",
+        citations: [],
+        usedTools: [],
+        messageBlocks: [
+          {
+            type: "text",
+            title: "About",
+            content: responseMessage,
+          },
+        ],
+        meta: {
+          providerUsed: "policy",
+          fallbackUsed: false,
+          latencyMs: 0,
+          requestId,
+          groundingMode: toolBaseResolution.baseUrl ? ("enabled" as const) : ("disabled" as const),
+          toolBaseUrlSource: toolBaseResolution.source,
+          featureFlags: resolveAssistantFeatureFlags(),
+          requestTimeoutMs,
+          responseFormatApplied: false,
+          responseFormatFallbackUsed: false,
+        },
+      });
+    }
+
     metaBase.requestId = requestId;
     logger.info('request.received', {
       isEvalRequest,

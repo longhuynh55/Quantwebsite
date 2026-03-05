@@ -65,7 +65,7 @@ describe("assistant signals symbol extraction", () => {
     expect(symbols3).toContain("VCB");
   });
 
-  it("filters weak two-letter symbols when stronger symbols exist (configurable)", () => {
+  it("filters weak two-letter symbols when stronger symbols exist (configurable)", async () => {
     const prompt = "Compare VCB and AB in 2025Q3";
 
     const symbolsDefault = getCandidateSymbols(prompt, analysisContext);
@@ -74,7 +74,7 @@ describe("assistant signals symbol extraction", () => {
     process.env = { ...ORIGINAL_ENV, ASSISTANT_FILTER_WEAK_TWO_LETTER_SYMBOLS: "false" };
     jest.resetModules();
     const { getCandidateSymbols: getCandidateSymbolsNoFilter } =
-      require("@/lib/assistant/signals") as typeof import("@/lib/assistant/signals");
+      (await import("@/lib/assistant/signals")) as typeof import("@/lib/assistant/signals");
     const symbolsNoFilter = getCandidateSymbolsNoFilter(prompt, analysisContext);
     expect(symbolsNoFilter).toEqual(["VCB", "AB"]);
   });

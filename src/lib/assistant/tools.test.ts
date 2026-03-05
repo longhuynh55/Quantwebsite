@@ -152,6 +152,45 @@ describe("assistant tools orchestration", () => {
     expect(result.usedTools.some((tool) => tool.name === "fundamentalSnapshot" && tool.status === "skipped")).toBe(true);
   });
 
+  it("parses Vietnamese quarter period into fundamentals endpoint", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          period: "2025Q3",
+          availablePeriods: ["2025Q3"],
+          incomeStatement: {},
+          balanceSheet: {},
+          cashFlow: {},
+          warnings: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    await runGroundingTools({
+      baseUrl: "http://127.0.0.1:3000",
+      message: "Bang can doi ke toan quy 3 2025 cua VCB",
+      queryPlan: buildPlan({
+        intent: "fundamentals",
+        symbols: ["VCB"],
+        steps: [
+          {
+            tool: "fundamentalSnapshot",
+            endpoint: "/api/fundamentals",
+            reason: "test",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    const [rawUrl] = (global.fetch as jest.Mock).mock.calls[0] as [string];
+    const url = new URL(rawUrl);
+    expect(url.pathname).toBe("/api/fundamentals");
+    expect(url.searchParams.get("symbol")).toBe("VCB");
+    expect(url.searchParams.get("period")).toBe("2025Q3");
+  });
+
   it("does not run backtesting with implicit VNM fallback when symbol is missing", async () => {
     const result = await runGroundingTools({
       baseUrl: "http://127.0.0.1:3000",

@@ -101,7 +101,7 @@ describe("POST /api/assistant error traces", () => {
       new Request("http://localhost/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "hello" }),
+        body: JSON.stringify({ message: "Analyze VNM" }),
       }) as unknown as import("next/server").NextRequest
     );
     const json = await readJson(response);
@@ -128,6 +128,26 @@ describe("POST /api/assistant error traces", () => {
     expect(typeof meta.requestId).toBe("string");
   });
 
+  it("bypasses tools and LLM for small-talk prompts", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Who are you?" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+    const json = await readJson(response);
+    const meta = json.meta as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(meta.providerUsed).toBe("policy");
+    expect(mockRunGroundingTools).not.toHaveBeenCalled();
+    expect(mockGenerateWithProviderFallback).not.toHaveBeenCalled();
+    expect(mockEvaluateAssistantPolicy).not.toHaveBeenCalled();
+    expect(mockBuildAssistantQueryPlan).not.toHaveBeenCalled();
+  });
+
   it("returns requestId in 500 unexpected-error response meta", async () => {
     mockBuildAssistantQueryPlan.mockImplementation(() => {
       throw new Error("planner exploded");
@@ -137,7 +157,7 @@ describe("POST /api/assistant error traces", () => {
       new Request("http://localhost/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "hello" }),
+        body: JSON.stringify({ message: "Analyze VNM" }),
       }) as unknown as import("next/server").NextRequest
     );
     const json = await readJson(response);

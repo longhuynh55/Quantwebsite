@@ -2725,17 +2725,35 @@ function normalizeQuarterPeriod(value: unknown): string | null {
 }
 
 function extractQuarterPeriodFromMessage(message: string): string | null {
-  const matchA = /\b(20\d{2})\s*Q([1-4])\b/i.exec(message);
+  const normalized = normalizeForKeywordMatch(message);
+
+  const matchA = /\b(20\d{2})\s*Q([1-4])\b/i.exec(normalized);
   if (matchA) return `${matchA[1]}Q${matchA[2]}`;
 
-  const matchB = /\bQ([1-4])[\s/-]*(20\d{2})\b/i.exec(message);
+  const matchB = /\bQ([1-4])[\s/-]*(20\d{2})\b/i.exec(normalized);
   if (matchB) return `${matchB[2]}Q${matchB[1]}`;
 
-  const fiscalYear = /\b(?:fy|fiscal\s*year)[\s/-]*(20\d{2})\b/i.exec(message);
+  // Vietnamese quarter phrasing, after accent normalization:
+  // - "quy 3 2025", "quy 3/2025", "quy 3 nam 2025"
+  // - "2025 quy 3"
+  const viMatchA = /\bquy\s*([1-4])(?:\s*[/.-]\s*|\s+)(?:nam\s*)?(20\d{2})\b/i.exec(normalized);
+  if (viMatchA) return `${viMatchA[2]}Q${viMatchA[1]}`;
+
+  const viMatchB = /\b(20\d{2})\s*quy\s*([1-4])\b/i.exec(normalized);
+  if (viMatchB) return `${viMatchB[1]}Q${viMatchB[2]}`;
+
+  // Roman numerals: "quy iii 2025", "quy iv/2025"
+  const viRoman = /\bquy\s*(i{1,3}|iv)(?:\s*[/.-]\s*|\s+)(?:nam\s*)?(20\d{2})\b/i.exec(normalized);
+  if (viRoman) {
+    const roman = viRoman[1].toLowerCase();
+    const quarter = roman === "i" ? 1 : roman === "ii" ? 2 : roman === "iii" ? 3 : roman === "iv" ? 4 : null;
+    if (quarter) return `${viRoman[2]}Q${quarter}`;
+  }
+
+  const fiscalYear = /\b(?:fy|fiscal\s*year)[\s/-]*(20\d{2})\b/i.exec(normalized);
   if (fiscalYear) return `${fiscalYear[1]}Q4`;
 
   // Only treat a bare year as a financial period when the user is clearly asking fundamentals.
-  const normalized = normalizeForKeywordMatch(message);
   const hasFundamentalsSignal = [
     "bctc",
     "bctn",
@@ -2764,14 +2782,14 @@ function parseQuarterToken(value: string): number | null {
 }
 
 function extractLookbackQuartersFromMessage(message: string): number | null {
-  const matchA = /\b(\d{1,2})\s*(quy|quarters?|qtrs?)\b/i.exec(message);
+  const normalizedMessage = normalizeForKeywordMatch(message);
+  const matchA = /\b(\d{1,2})\s*(quy|quarters?|qtrs?)\b/i.exec(normalizedMessage);
   if (matchA) {
     const parsed = Number.parseInt(matchA[1], 10);
     if (Number.isFinite(parsed) && parsed > 0) return Math.min(20, parsed);
   }
 
-  const normalized = normalizeForKeywordMatch(message);
-  if (normalized.includes("4 quy")) return 4;
+  if (normalizedMessage.includes("4 quy")) return 4;
   return null;
 }
 

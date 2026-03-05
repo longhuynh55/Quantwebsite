@@ -300,6 +300,37 @@ export function evaluateAssistantPolicy(input: PolicyEvaluationInput): PolicyEva
   }
 
   if (effectiveFailure.reasonCode === "missing_symbol_grounding") {
+    // Demo-safe behavior: if the only missing symbols are those that were dropped due to tool fanout limits,
+    // allow a partial answer for the grounded subset instead of failing hard.
+    const diagnostics = input.grounding.symbolDiagnostics;
+    const droppedSymbols = Array.isArray(diagnostics?.droppedSymbols) ? diagnostics?.droppedSymbols : [];
+    const droppedSet = new Set(droppedSymbols.map((symbol) => normalizeSymbolToken(symbol)).filter(Boolean));
+    const missingSymbols = Array.isArray((effectiveFailure as MultiSymbolCoverageFailure).missingSymbols)
+      ? (effectiveFailure as MultiSymbolCoverageFailure).missingSymbols
+      : [];
+
+    const missingDueToFanout =
+      missingSymbols.length > 0
+      && droppedSet.size > 0
+      && missingSymbols.every((symbol) => droppedSet.has(symbol));
+    const hasAnyGroundedEvidence =
+      input.grounding.citations.length > 0
+      || input.grounding.usedTools.some((tool) => tool.status === "success" && (tool.evidenceCount ?? 0) > 0);
+
+    if (!failure && missingDueToFanout && hasAnyGroundedEvidence) {
+      return {
+        mode,
+        status: "ok",
+        reasonCode: effectiveFailure.reasonCode,
+        reason: effectiveFailure.reason,
+        dataConfidence: "medium",
+        groundingRequired: true,
+        groundingSatisfied: false,
+        shouldBypassLlm: false,
+        shadowBlocked: false,
+      };
+    }
+
     const fallbackMessage = buildFallbackMessage(effectiveFailure.reasonCode, effectiveFailure.reason);
     return {
       mode,
@@ -541,7 +572,7 @@ function evaluateGrounding(requiredSignals: RequiredSignal[], grounding: Groundi
 function evaluateMultiSymbolGrounding(
   requestedSymbols: string[],
   grounding: GroundingResult
-): { reasonCode: PolicyReasonCode; reason: string } | null {
+): MultiSymbolCoverageFailure | null {
   const normalizedRequested = Array.from(
     new Set(
       requestedSymbols
@@ -569,7 +600,14 @@ function evaluateMultiSymbolGrounding(
   return {
     reasonCode: "missing_symbol_grounding",
     reason: `Missing grounded evidence for symbols: ${missing.join(", ")}.`,
+    missingSymbols: missing,
   };
+}
+
+interface MultiSymbolCoverageFailure {
+  reasonCode: "missing_symbol_grounding";
+  reason: string;
+  missingSymbols: string[];
 }
 
 function isSoftNumericFailure(
