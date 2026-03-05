@@ -55,6 +55,8 @@ const BANNED_SYMBOLS = new Set([
   "HTTPS",
   "JSON",
   "CSV",
+  "AI",
+  "LLM",
   "OHLC",
   "OHLCV",
   "LC",
@@ -121,6 +123,45 @@ const COMMON_NON_SYMBOL_TOKENS = new Set([
   "T5",
   "T6",
   "T7",
+  // Common English stopwords that frequently appear next to finance keywords
+  // (e.g. "the balance sheet", "stock in 2025Q3") and would otherwise be misread as tickers.
+  "THE",
+  "IN",
+  "OF",
+  "TO",
+  "FOR",
+  "ON",
+  "AT",
+  "BY",
+  "WITH",
+  "FROM",
+  "INTO",
+  "AS",
+  "IS",
+  "ARE",
+  "BE",
+  "WAS",
+  "WERE",
+  "NOT",
+  // Common finance shorthand that should not be treated as tickers.
+  "BS",
+  "CF",
+  "FY",
+  "Q1",
+  "Q2",
+  "Q3",
+  "Q4",
+  // English verbs that are commonly written in uppercase in short prompts.
+  "SEE",
+  "SHOW",
+  "GIVE",
+  "GET",
+  "TELL",
+  "LIST",
+  "NEED",
+  "WANT",
+  "HELP",
+  "PLEASE",
 ]);
 const COMPARE_INTENT_KEYWORDS = ["so sanh", "compare", "vs", "versus"];
 const COMPARE_NON_SYMBOL_TOKENS = new Set([
@@ -147,15 +188,63 @@ const CONTEXTUAL_SYMBOL_NOISE_TOKENS = new Set([
   "TOI",
   "BAN",
   "GIUP",
+  // Vietnamese statement/header words that appear at the start of fundamentals prompts.
+  "BANG",
+  "BAO",
+  "CAO",
+  "TAI",
+  "CHINH",
+  "CAN",
+  "DOI",
+  "KE",
+  "TOAN",
+  "KET",
+  "QUA",
+  "KINH",
+  "DOANH",
+  "LUU",
+  "CHUYEN",
+  "TIEN",
+  "TE",
   "QUY",
   "NAM",
   "KY",
   "THANG",
   "TUAN",
   "CUA",
+  // English verbs that frequently appear right before quarters/statement keywords
+  // and get misread as tickers (e.g. "see 2025Q3", "show balance sheet").
+  "SEE",
+  "SHOW",
+  "GIVE",
+  "GET",
+  "TELL",
+  "LIST",
+  "NEED",
+  "WANT",
+  "HELP",
+  "PLEASE",
+  // English glue words that can appear right before/after statement keywords.
+  "THE",
+  "IN",
+  "OF",
+  "TO",
+  "FOR",
+  "ON",
+  "AT",
+  "BY",
+  "WITH",
+  "FROM",
+  "INTO",
 ]);
 const SYMBOL_TOKEN_PATTERN = /^[A-Z][A-Z0-9]{1,3}$/;
 const UPPERCASE_SYMBOL_TOKEN_REGEX = /\b[A-Z][A-Z0-9]{1,3}\b/g;
+const MAX_CANDIDATE_SYMBOLS = resolveCandidateSymbolLimit();
+const FILTER_WEAK_TWO_LETTER_SYMBOLS = parseBooleanFlag(
+  process.env.ASSISTANT_FILTER_WEAK_TWO_LETTER_SYMBOLS,
+  true
+);
+const TWO_LETTER_SYMBOL_ALLOWLIST = resolveTwoLetterSymbolAllowlist();
 
 const FUNDAMENTALS_KEYWORDS = [
   "fundamental",
@@ -852,6 +941,9 @@ export function getCandidateSymbols(
       ...messageUppercaseTokens,
     ])
   ).filter((symbol) => isLikelySymbolToken(symbol));
+  const filteredExplicitSymbols = FILTER_WEAK_TWO_LETTER_SYMBOLS
+    ? filterWeakTwoLetterSymbols(explicitCurrentSymbols, message)
+    : explicitCurrentSymbols;
   const normalizedMessage = normalizeForKeywordMatch(message);
   const hasUniverseRankingLikeMessageScope =
     (hasAnyKeyword(normalizedMessage, RANKING_KEYWORDS) || /\btop\s*\d{1,2}\b/.test(normalizedMessage))
@@ -865,15 +957,15 @@ export function getCandidateSymbols(
       looksLikeUniverseStockRanking(message, contextSnapshot)
       || hasUniverseRankingLikeMessageScope
     )
-    && explicitCurrentSymbols.length === 0
+    && filteredExplicitSymbols.length === 0
   ) {
     return [];
   }
 
   // When the current prompt explicitly names symbols, prefer those symbols and
   // avoid leaking stale context/history symbols into multi-symbol fanout.
-  if (explicitCurrentSymbols.length > 0) {
-    return explicitCurrentSymbols.slice(0, 3);
+  if (filteredExplicitSymbols.length > 0) {
+    return filteredExplicitSymbols.slice(0, MAX_CANDIDATE_SYMBOLS);
   }
 
   const unique = Array.from(
@@ -890,12 +982,37 @@ export function getCandidateSymbols(
         : isLikelySymbolToken(symbol)
     );
 
-  return unique.slice(0, 3);
+  return unique.slice(0, MAX_CANDIDATE_SYMBOLS);
 }
 
 export function hasAnyKeyword(value: string, keywords: string[]): boolean {
   const normalizedValue = normalizeForKeywordMatch(value);
   return keywords.some((keyword) => normalizedValue.includes(normalizeForKeywordMatch(keyword)));
+}
+
+function filterWeakTwoLetterSymbols(symbols: string[], message: string): string[] {
+  if (symbols.length <= 1) return symbols;
+  const hasStrongSymbol = symbols.some((symbol) => symbol.length >= 3);
+  if (!hasStrongSymbol) return symbols;
+
+  return symbols.filter((symbol) => {
+    if (symbol.length !== 2) return true;
+    if (TWO_LETTER_SYMBOL_ALLOWLIST.has(symbol)) return true;
+    return hasExplicitTwoLetterSymbolHint(symbol, message);
+  });
+}
+
+function hasExplicitTwoLetterSymbolHint(symbol: string, message: string): boolean {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (!normalizedSymbol || normalizedSymbol.length !== 2) return false;
+  const normalizedMessage = normalizeForKeywordMatch(message);
+  const escaped = normalizedSymbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").toLowerCase();
+
+  if (new RegExp(`\\$${escaped}\\b`, "i").test(normalizedMessage)) return true;
+  if (new RegExp(`\\b(?:ma|mck|ticker|symbol|cp|code)\\b\\s*[:=-]?\\s*${escaped}\\b`, "i").test(normalizedMessage)) {
+    return true;
+  }
+  return false;
 }
 
 function hasValuationRankingSignal(normalized: string): boolean {
@@ -910,6 +1027,24 @@ export function normalizeForKeywordMatch(value: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\u0111/g, "d");
+}
+
+function parseBooleanFlag(raw: string | undefined, fallback: boolean): boolean {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") return false;
+  return fallback;
+}
+
+function resolveTwoLetterSymbolAllowlist(): Set<string> {
+  const raw = String(process.env.ASSISTANT_TWO_LETTER_SYMBOL_ALLOWLIST ?? "").trim();
+  if (!raw) return new Set<string>();
+  const tokens = raw
+    .split(/[,\s;|]+/)
+    .map((token) => token.trim().toUpperCase())
+    .filter((token) => /^[A-Z0-9]{2}$/.test(token));
+  return new Set(tokens);
 }
 
 function normalizeSymbol(value: unknown): string {
@@ -936,12 +1071,14 @@ function extractExplicitSymbolHints(message: string): string[] {
     /\$([a-z0-9]{2,4})\b/g,
   ];
   const contextualBareSymbolPatterns = [
-    /\b(?:bctc|bctn|kqkd|lctt|bcdkt|bank)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
+    /\b(?:bctc|bctn|kqkd|lctt|bcdkt|bank)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{1,2}|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
+    /\b(?:bao\s+cao\s+tai\s+chinh|bao\s+cao\s+ket\s+qua\s+kinh\s+doanh|bao\s+cao\s+luu\s+chuyen\s+tien\s+te|bang\s+can\s+doi\s+ke\s+toan|can\s+doi\s+ke\s+toan)(?:\s+(?:moi|nhat|gan|day|latest|recent|hien|tai|quy|q[1-4]|\d{1,2}|\d{4}))*\s+(?:cua\s+)?([a-z0-9]{2,4})\b/g,
     /\b(?:income\s*statement|balance\s*sheet|cash\s*flow)(?:\s+(?:latest|recent|q[1-4]|\d{4}))*\s+(?:of\s+)?([a-z0-9]{2,4})\b/g,
     /\b(?:gia\s+(?:dong\s+cua|mo\s+cua)|close|open|high|low|volume)\s+(?:co\s+phieu\s+)?([a-z0-9]{2,4})\s+(?:ngay|date|as\s+of)\b/g,
   ];
   const leadingFundamentalSymbolPatterns = [
     /\b([a-z0-9]{2,4})\s+(?:bctc|bctn|kqkd|lctt|bcdkt|income\s*statement|balance\s*sheet|cash\s*flow)\b/g,
+    /\b([a-z0-9]{2,4})\s+(?:bao\s+cao\s+tai\s+chinh|bao\s+cao\s+ket\s+qua\s+kinh\s+doanh|bao\s+cao\s+luu\s+chuyen\s+tien\s+te|bang\s+can\s+doi\s+ke\s+toan|can\s+doi\s+ke\s+toan)\b/g,
     /\b([a-z0-9]{2,4})\s+(?:20\d{2}\s*q[1-4]|q[1-4][\s/-]*20\d{2}|fy[\s/-]*20\d{2})\b/g,
   ];
   for (const pattern of patterns) {
@@ -1108,5 +1245,14 @@ function hasExplicitCarryoverCue(message: string): boolean {
     || normalized.includes("giu nguyen ma")
     || normalized.includes("tiep tuc")
   );
+}
+
+function resolveCandidateSymbolLimit(): number {
+  const fallback = 8;
+  const raw = String(process.env.ASSISTANT_SYMBOL_CANDIDATE_MAX ?? "").trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.max(3, Math.min(parsed, 12));
 }
 
