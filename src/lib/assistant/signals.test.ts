@@ -89,7 +89,7 @@ describe("assistant signals symbol extraction", () => {
 
   it("prioritizes explicit compare symbols over stale context symbol", () => {
     const symbols = getCandidateSymbols(
-      "So sánh VNM và FPT trong giai đoạn 01/01/2024-31/12/2024",
+      "So sanh VNM va FPT trong giai doan 01/01/2024-31/12/2024",
       { page: "analysis", symbol: "VCB" }
     );
     expect(symbols).toEqual(["VNM", "FPT"]);
@@ -210,4 +210,5 @@ describe("assistant signals required tools", () => {
     expect(tools).toContain("valuationRanking");
   });
 });
+
 

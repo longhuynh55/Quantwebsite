@@ -1798,8 +1798,8 @@ function maybeBuildSymbolClarificationMessage(input: {
   if (asksCompare && input.symbolTelemetry.requestedSymbols.length < 2) {
     const contextHint = input.symbolTelemetry.contextSymbols.slice(0, 2).join(", ");
     return contextHint
-      ? `Bạn đang yêu cầu so sánh nhưng chưa đủ mã cổ phiếu trong câu hỏi hiện tại. Vui lòng nêu rõ 2 mã (ví dụ: VNM vs FPT). Context hiện có: ${contextHint}.`
-      : "Bạn đang yêu cầu so sánh nhưng chưa đủ mã cổ phiếu. Vui lòng nêu rõ 2 mã (ví dụ: VNM vs FPT).";
+      ? `Ban dang yeu cau so sanh nhung chua du ma co phieu trong cau hoi hien tai. Vui long neu ro 2 ma (vi du: VNM vs FPT). Context hien co: ${contextHint}.`
+      : "Ban dang yeu cau so sanh nhung chua du ma co phieu. Vui long neu ro 2 ma (vi du: VNM vs FPT).";
   }
 
   const symbolRequiredIntent = (
@@ -1819,8 +1819,8 @@ function maybeBuildSymbolClarificationMessage(input: {
   ) {
     const contextHint = input.symbolTelemetry.resolvedSymbols.slice(0, 2).join(", ");
     return contextHint
-      ? `Mình cần bạn xác nhận mã cổ phiếu cho yêu cầu hiện tại trước khi truy xuất số liệu. Bạn muốn dùng mã nào? (Context gần nhất: ${contextHint})`
-      : "Mình cần bạn xác nhận mã cổ phiếu cho yêu cầu hiện tại trước khi truy xuất số liệu.";
+      ? `Minh can ban xac nhan ma co phieu cho yeu cau hien tai truoc khi truy xuat so lieu. Ban muon dung ma nao? (Context gan nhat: ${contextHint})`
+      : "Minh can ban xac nhan ma co phieu cho yeu cau hien tai truoc khi truy xuat so lieu.";
   }
 
   return null;
@@ -2067,3 +2067,4 @@ function selectResponseCitations(citations: AssistantCitation[], limit: number):
 function citationKey(citation: AssistantCitation): string {
   return `${citation.id}|${citation.endpoint ?? ''}|${citation.symbol ?? ''}|${citation.period ?? ''}`;
 }
+
