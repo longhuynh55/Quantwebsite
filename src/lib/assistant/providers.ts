@@ -689,7 +689,7 @@ function shouldAttachResponseFormat(
 }
 
 function isResponseFormatProviderSupported(provider: ProviderConfig): boolean {
-  return provider.source === 'openrouter' || provider.source === 'fallback' || provider.source === 'baseten';
+  return provider.source === 'openrouter' || provider.source === 'fallback' || provider.source === 'baseten' || provider.source === 'glm';
 }
 
 function sortProvidersByPriority(providers: ProviderConfig[]): ProviderConfig[] {

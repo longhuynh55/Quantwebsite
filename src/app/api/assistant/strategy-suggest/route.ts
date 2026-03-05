@@ -6,6 +6,9 @@ import {
 } from '@/lib/assistant/providers';
 import { checkRateLimitAsync, createRateLimitKey, getClientIdentifier } from '@/lib/rateLimit';
 import { createLogger, hashText, toErrorMeta } from '@/lib/logger';
+import { matchTemplate } from '@/lib/ai/strategy-templates';
+import { INTENT_RESPONSE_FORMAT, INTENT_SYSTEM_PROMPT } from '@/lib/ai/strategy-intent';
+import { buildFromIntent, type StrategyIntent } from '@/lib/ai/strategy-graph-builder';
 
 const strategySuggestLogger = createLogger('api.assistant.strategy-suggest');
 
@@ -252,20 +255,35 @@ function validateStrategyInvariants(strategy: AiStrategyResponse): string | null
   if (!Array.isArray(strategy.nodes) || strategy.nodes.length < 2) {
     return "strategy_requires_at_least_two_nodes";
   }
+  if (strategy.nodes.length > MAX_NODES) {
+    return "strategy_exceeds_max_nodes";
+  }
   if (!Array.isArray(strategy.edges) || strategy.edges.length < 1) {
     return "strategy_requires_at_least_one_edge";
+  }
+  if (strategy.edges.length > MAX_EDGES) {
+    return "strategy_exceeds_max_edges";
   }
   const hasDataSource = strategy.nodes.some((node) => node.type === "dataSource");
   const hasOutput = strategy.nodes.some((node) => node.type === "output");
   if (!hasDataSource) return "strategy_requires_data_source_node";
   if (!hasOutput) return "strategy_requires_output_node";
+  const outgoing = new Map<number, number[]>();
   const adjacency = new Map<number, number[]>();
   for (let i = 0; i < strategy.nodes.length; i += 1) {
     adjacency.set(i, []);
+    outgoing.set(i, []);
   }
   for (const edge of strategy.edges) {
+    const out = outgoing.get(edge.from);
+    if (out) out.push(edge.to);
     const next = adjacency.get(edge.from);
     if (next) next.push(edge.to);
+  }
+  for (let i = 0; i < strategy.nodes.length; i += 1) {
+    if (strategy.nodes[i].type !== "backtest") continue;
+    const out = outgoing.get(i) ?? [];
+    if (out.length > 0) return "strategy_backtest_node_must_be_terminal";
   }
   const queue: number[] = [];
   const visited = new Set<number>();
@@ -405,6 +423,9 @@ async function awaitWithDeadline<T>(
   deadlineAt: number,
   requestSignal?: AbortSignal
 ): Promise<T> {
+  if (requestSignal?.aborted) {
+    throw new StrategySuggestClientAbortError();
+  }
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) {
     throw new StrategySuggestTimeoutError();
@@ -493,7 +514,119 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
         { status: 400 }
       );
     }
+    if (request.signal.aborted) {
+      return NextResponse.json(
+        { error: "Request was cancelled by client.", requestId },
+        { status: 499 }
+      );
+    }
 
+    // ─── T0: Template matching (0ms, 100% accuracy) ───
+    const enableT0 = parseBooleanFlag(process.env.STRATEGY_SUGGEST_ENABLE_T0, true);
+    if (enableT0) {
+      const templateResult = matchTemplate(prompt) as AiStrategyResponse | null;
+      if (templateResult) {
+        const sanitized = sanitizeStrategyResponse(templateResult);
+        const invariantError = validateStrategyInvariants(sanitized.strategy);
+        if (!invariantError) {
+          strategySuggestLogger.info('strategy.t0_template_hit', {
+            requestId,
+            template: sanitized.strategy.name,
+            latencyMs: Date.now() - startedAt,
+          });
+          return NextResponse.json({
+            success: true,
+            strategy: sanitized.strategy,
+            provider: 'template',
+            schemaApplied: true,
+            sanitizationWarnings: sanitized.warnings.length > 0 ? sanitized.warnings : undefined,
+            requestId,
+            latencyMs: Date.now() - startedAt,
+          } satisfies StrategySuggestResponse);
+        }
+      }
+    }
+
+    // ─── T1: Intent → Graph (~1-3s, ~98% accuracy) ───
+    const enableT1 = parseBooleanFlag(process.env.STRATEGY_SUGGEST_ENABLE_T1, true);
+    if (enableT1 && Date.now() + 5000 < deadlineAt) {
+      try {
+        const intentMessages: LlmMessage[] = [
+          { role: 'system', content: INTENT_SYSTEM_PROMPT },
+          { role: 'user', content: prompt },
+        ];
+        const intentResult = await awaitWithDeadline(
+          (abortSignal) =>
+            generateWithProviderFallback(intentMessages, {
+              requestId,
+              responseFormat: INTENT_RESPONSE_FORMAT,
+              responseFormatMode: 'force',
+              abortSignal,
+            }),
+          deadlineAt,
+          request.signal
+        );
+        if (intentResult.success) {
+          if (STRATEGY_SCHEMA_REQUIRED && !(intentResult.responseFormatApplied ?? false)) {
+            strategySuggestLogger.warn("strategy.t1_schema_not_applied", {
+              requestId,
+              provider: intentResult.providerUsed,
+              fallbackUsed: intentResult.fallbackUsed,
+            });
+          } else {
+            try {
+              const intent = JSON.parse(intentResult.text) as StrategyIntent;
+              const graph = buildFromIntent(intent) as unknown as AiStrategyResponse;
+              const sanitized = sanitizeStrategyResponse(graph);
+              const invariantError = validateStrategyInvariants(sanitized.strategy);
+              if (!invariantError) {
+                strategySuggestLogger.info('strategy.t1_intent_hit', {
+                  requestId,
+                  provider: intentResult.providerUsed,
+                  latencyMs: Date.now() - startedAt,
+                });
+                return NextResponse.json({
+                  success: true,
+                  strategy: sanitized.strategy,
+                  provider: intentResult.providerUsed,
+                  schemaApplied: intentResult.responseFormatApplied ?? false,
+                  sanitizationWarnings: sanitized.warnings.length > 0 ? sanitized.warnings : undefined,
+                  requestId,
+                  latencyMs: Date.now() - startedAt,
+                } satisfies StrategySuggestResponse);
+              }
+              strategySuggestLogger.warn('strategy.t1_invariant_failed', {
+                requestId,
+                error: invariantError,
+              });
+            } catch (parseError) {
+              strategySuggestLogger.warn('strategy.t1_parse_failed', {
+                requestId,
+                ...toErrorMeta(parseError),
+              });
+            }
+          }
+        } else {
+          strategySuggestLogger.warn("strategy.t1_provider_failed", {
+            requestId,
+            kind: intentResult.kind,
+            statusCode: intentResult.statusCode,
+            providerErrors: intentResult.providerErrors?.length ?? 0,
+            latencyMs: intentResult.latencyMs,
+          });
+        }
+      } catch (t1Error) {
+        if (t1Error instanceof StrategySuggestTimeoutError || t1Error instanceof StrategySuggestClientAbortError) {
+          throw t1Error;
+        }
+        strategySuggestLogger.warn('strategy.t1_failed', {
+          requestId,
+          ...toErrorMeta(t1Error),
+        });
+      }
+    }
+
+    // ─── T2+T3: Full JSON Schema + Repair (existing code, 100% unchanged) ───
     const totalAttempts = Math.max(1, PARSE_REPAIR_RETRIES + 1);
     let latestRaw = '';
     let latestProvider = '';
@@ -538,13 +671,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<StrategyS
           (requestAborted
             ? 499
             : result.statusCode ??
-              (result.kind === 'timeout'
-                ? 504
-                : result.kind === 'rate_limit'
-                  ? 429
-                  : result.kind === 'configuration'
-                    ? 502
-                    : 502));
+            (result.kind === 'timeout'
+              ? 504
+              : result.kind === 'rate_limit'
+                ? 429
+                : result.kind === 'configuration'
+                  ? 502
+                  : 502));
 
         logger.warn('strategy_suggest.provider_failed', {
           status,

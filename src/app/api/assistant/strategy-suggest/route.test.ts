@@ -58,6 +58,9 @@ function buildAdvancedSuggestedStrategy() {
 describe("POST /api/assistant/strategy-suggest", () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    // Disable T0/T1 so these tests exercise only the T2/T3 path
+    process.env.STRATEGY_SUGGEST_ENABLE_T0 = "false";
+    process.env.STRATEGY_SUGGEST_ENABLE_T1 = "false";
     mockCreateRateLimitKey.mockReturnValue("strategy-suggest:test");
     mockGetClientIdentifier.mockReturnValue("client-test");
     mockCheckRateLimitAsync.mockResolvedValue({
@@ -65,6 +68,11 @@ describe("POST /api/assistant/strategy-suggest", () => {
       remaining: 10,
       resetTime: Date.now() + 30_000,
     });
+  });
+
+  afterEach(() => {
+    delete process.env.STRATEGY_SUGGEST_ENABLE_T0;
+    delete process.env.STRATEGY_SUGGEST_ENABLE_T1;
   });
 
   it("returns 400 when prompt is empty", async () => {
@@ -147,6 +155,25 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(json.error).toBe("Request was cancelled by client.");
   });
 
+  it("returns 499 immediately when request is pre-aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build RSI strategy" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(499);
+    const json = (await response.json()) as { error?: string };
+    expect(json.error).toBe("Request was cancelled by client.");
+    expect(mockGenerateWithProviderFallback).not.toHaveBeenCalled();
+  });
+
   it("aborts in-flight provider call when request deadline is exceeded", async () => {
     jest.useFakeTimers();
     let capturedAbortSignal: AbortSignal | undefined;
@@ -207,6 +234,118 @@ describe("POST /api/assistant/strategy-suggest", () => {
         abortSignal: expect.any(Object),
       })
     );
+  });
+
+  it("returns immediate template response on T0 hit without calling provider", async () => {
+    process.env.STRATEGY_SUGGEST_ENABLE_T0 = "true";
+    process.env.STRATEGY_SUGGEST_ENABLE_T1 = "false";
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "RSI mean reversion quá bán oversold đảo chiều cho VNM" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { success?: boolean; provider?: string; strategy?: { nodes?: Array<{ type?: string }> } };
+    expect(json.success).toBe(true);
+    expect(json.provider).toBe("template");
+    expect((json.strategy?.nodes ?? []).some((node) => node.type === "dataSource")).toBe(true);
+    expect((json.strategy?.nodes ?? []).some((node) => node.type === "output")).toBe(true);
+    expect(mockGenerateWithProviderFallback).not.toHaveBeenCalled();
+  });
+
+  it("uses T1 intent path to build graph when enabled", async () => {
+    process.env.STRATEGY_SUGGEST_ENABLE_T0 = "false";
+    process.env.STRATEGY_SUGGEST_ENABLE_T1 = "true";
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: true,
+      text: JSON.stringify({
+        name: "Intent Strategy",
+        stocks: ["VNM", "FPT"],
+        timeframe: "1d",
+        pipeline: [
+          { type: "indicator", config: { indicatorType: "rsi", period: 14 } },
+          { type: "signal", config: { signalType: "buy", condition: "RSI < 30" } },
+        ],
+      }),
+      providerUsed: "openrouter",
+      fallbackUsed: false,
+      latencyMs: 20,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Tao strategy RSI cho VNM va FPT" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { success?: boolean; strategy?: { nodes?: Array<{ type?: string }> } };
+    expect(json.success).toBe(true);
+    expect((json.strategy?.nodes ?? [])[0]?.type).toBe("dataSource");
+    expect((json.strategy?.nodes ?? []).some((node) => node.type === "output")).toBe(true);
+    expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(1);
+    expect(mockGenerateWithProviderFallback.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        responseFormat: expect.objectContaining({ type: "json_schema" }),
+        responseFormatMode: "force",
+        abortSignal: expect.any(Object),
+      })
+    );
+  });
+
+  it("falls through from T1 to T2 when T1 schema is not applied", async () => {
+    process.env.STRATEGY_SUGGEST_ENABLE_T0 = "false";
+    process.env.STRATEGY_SUGGEST_ENABLE_T1 = "true";
+    mockGenerateWithProviderFallback
+      .mockResolvedValueOnce({
+        success: true,
+        text: JSON.stringify({
+          name: "Intent Strategy",
+          stocks: ["VNM"],
+          timeframe: "1d",
+          pipeline: [
+            { type: "indicator", config: { indicatorType: "rsi", period: 14 } },
+            { type: "signal", config: { signalType: "buy", condition: "RSI < 30" } },
+          ],
+        }),
+        providerUsed: "openrouter",
+        fallbackUsed: false,
+        latencyMs: 20,
+        responseFormatApplied: false,
+        responseFormatFallbackUsed: true,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        text: JSON.stringify(buildValidSuggestedStrategy()),
+        providerUsed: "openrouter-secondary",
+        fallbackUsed: true,
+        latencyMs: 30,
+        responseFormatApplied: true,
+        responseFormatFallbackUsed: false,
+      });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Tao strategy RSI cho VNM" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { success?: boolean; provider?: string; schemaApplied?: boolean };
+    expect(json.success).toBe(true);
+    expect(json.provider).toBe("openrouter-secondary");
+    expect(json.schemaApplied).toBe(true);
+    expect(mockGenerateWithProviderFallback).toHaveBeenCalledTimes(2);
   });
 
   it("parses prose-wrapped JSON response", async () => {
@@ -403,5 +542,41 @@ describe("POST /api/assistant/strategy-suggest", () => {
     expect(response.status).toBe(422);
     const json = (await response.json()) as { details?: string };
     expect(json.details).toBe("strategy_requires_output_node");
+  });
+
+  it("returns 422 when backtest node has outgoing edges", async () => {
+    const invalid = {
+      name: "Invalid Backtest Flow",
+      nodes: [
+        { type: "dataSource", label: "Source", config: {} },
+        { type: "backtest", label: "Backtest", config: {} },
+        { type: "output", label: "Output", config: {} },
+      ],
+      edges: [
+        { from: 0, to: 1 },
+        { from: 1, to: 2 },
+      ],
+    };
+    mockGenerateWithProviderFallback.mockResolvedValue({
+      success: true,
+      text: JSON.stringify(invalid),
+      providerUsed: "openrouter",
+      fallbackUsed: false,
+      latencyMs: 25,
+      responseFormatApplied: true,
+      responseFormatFallbackUsed: false,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/assistant/strategy-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build invalid backtest strategy" }),
+      }) as unknown as import("next/server").NextRequest
+    );
+
+    expect(response.status).toBe(422);
+    const json = (await response.json()) as { details?: string };
+    expect(json.details).toBe("strategy_backtest_node_must_be_terminal");
   });
 });
